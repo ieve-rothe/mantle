@@ -38,9 +38,9 @@ module Mantle
     # Assemble context, send it to client, set model response in class
     def run(input : String)
       @context = build_context(input)
-      @logger.log(@context.not_nil!, "Context Input", output_file)
+      @logger.log(@context.not_nil!, "Context Input")
       @output = @client.execute(@context.not_nil!)
-      @logger.log(@output.not_nil!, "Model Response", output_file)
+      @logger.log(@output.not_nil!, "Model Response")
     end
 
     #---------

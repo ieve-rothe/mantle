@@ -13,7 +13,7 @@ module Mantle
         #
         # - `message`: Content to be logged
         # - `label`: A category label, eg "Context Input", "Model Response", "ERROR"
-        abstract def log(message : String, label : String, file : String)
+        abstract def log(message : String, label : String)
     end
 
     # Concrete logger to write formatted messages to log file

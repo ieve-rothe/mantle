@@ -1,6 +1,8 @@
 require "spec"
 require "../src/mantle"
 
+require "json"
+
 class DummyContextStore < Mantle::ContextStore
   property system_prompt : String = "This is a test system prompt"
 
@@ -20,11 +22,18 @@ class DummyClient < Mantle::Client
 end
 
 class DummyLogger < Mantle::Logger
+    property output_file : String
+    property log_file : String
+
     property last_message : String?
     property targeted_file : String?
 
-    def log(message : String, label : String, file : String)
+    def initialize(@log_file : String)
+        @output_file = @log_file
+    end
+
+    def log(message : String, label : String)
         @last_message = label + "\n" + message
-        @targeted_file = file
+        @targeted_file = @output_file
     end
 end
