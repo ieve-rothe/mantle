@@ -8,6 +8,11 @@ class DummyContextStore < Mantle::ContextStore
     Hash(String, JSON::Any).new
   end
 end
+
+class DummyFlow < Mantle::Flow
+  # Only need base class methods from Mantle::Flow for now
+end
+
 class DummyClient < Mantle::Client
   def execute(prompt : String) : String
     "Simulated response from model"

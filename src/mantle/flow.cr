@@ -1,7 +1,53 @@
+# mantle/flow.cr
 # Represents a generic LLM inference operation
 #
 # Base class for different LLM-based processing flows.
 # Examples include planning steps, command generation, reflection, etc.
-class LMFlow
-  
+
+require "./context_store.cr"
+require "./client.cr"
+require "./logger.cr"
+
+module Mantle
+  # Represents a generic LLM inference operation
+  #
+  # Base class for different LLM-based processing flows.
+  # Examples include flows for planning steps, command generation, reflection, etc.
+  class Flow
+    property workspace : ContextStore
+    property client : Client
+    property model_config : ModelConfig
+    property logger : Logger
+    property output_file : String
+
+    property context : String?
+    property output : String?
+
+    # Custom errors for flow operations
+    class InputError < Exception; end
+
+    def initialize(
+      @workspace : ContextStore,
+      @client : Client,
+      @model_config : ModelConfig,
+      @logger : Logger,
+      @output_file : String,
+    )
+    end
+
+    # Assemble context, send it to client, set model response in class
+    def run(input : String)
+      @context = build_context(input)
+      @logger.log(@context.not_nil!, "Context Input", output_file)
+      @output = @client.execute(@context.not_nil!)
+      @logger.log(@output.not_nil!, "Model Response", output_file)
+    end
+
+    #---------
+
+    # Base class just uses system prompt and input as context.
+    private def build_context(input : String) : String
+        context = @workspace.system_prompt + "\n" + input
+    end
+  end
 end
