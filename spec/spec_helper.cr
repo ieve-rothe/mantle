@@ -1,5 +1,13 @@
 require "spec"
 require "../src/mantle"
+
+class DummyContextStore < Mantle::ContextStore
+  property system_prompt : String = "This is a test system prompt"
+
+  def scratchpad : Hash(String, JSON::Any)
+    Hash(String, JSON::Any).new
+  end
+end
 class DummyClient < Mantle::Client
   def execute(prompt : String) : String
     "Simulated response from model"
