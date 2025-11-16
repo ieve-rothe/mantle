@@ -43,11 +43,11 @@ module Mantle
       @logger.log(@output.not_nil!, "Model Response")
     end
 
-    #---------
+    # ---------
 
     # Base class just uses system prompt and input as context.
     private def build_context(input : String) : String
-        context = @workspace.system_prompt + "\n" + input
+      context = @workspace.system_prompt + "\n" + input
     end
   end
 end

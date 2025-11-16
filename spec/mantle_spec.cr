@@ -25,7 +25,6 @@ def create_test_flow
 end
 
 describe Mantle do
-
   it "initializes with a context store, model config struct and output file" do
     # Arrange
     fixtures = create_test_flow
