@@ -1,5 +1,8 @@
 # mantle/client.cr
 
+require "http/headers"
+require "http/client"
+
 module Mantle
   # Record is a macro that expands to define struct with initializer, getters and a copy_with and clone helper methods.
   # Reminder that it's positional, not named arguments
