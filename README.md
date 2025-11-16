@@ -37,4 +37,8 @@ TODO: Write development instructions here
 
 ## Contributors
 
-- [ieve](https://github.com/CameronCarroll) - creator and maintainer
+- [ieve (Cameron Carroll)](https://github.com/CameronCarroll) - creator and maintainer
+
+## License
+Mantle is licensed under the GNU AGPL-3.0 license.
+See the LICENSE file for details.

@@ -1,4 +1,7 @@
 # mantle/context_store.cr
+# Copyright (C) 2025 Cameron Carroll
+# Licensed under the AGPL-3.0. See LICENSE for details.
+#
 # Abstract class for context store
 
 require "json"

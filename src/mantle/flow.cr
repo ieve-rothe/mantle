@@ -1,4 +1,7 @@
 # mantle/flow.cr
+# Copyright (C) 2025 Cameron Carroll
+# Licensed under the AGPL-3.0. See LICENSE for details.
+#
 # Represents a generic LLM inference operation
 #
 # Base class for different LLM-based processing flows.

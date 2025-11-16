@@ -1,3 +1,7 @@
+# examples/basic_app.cr
+# Copyright (C) 2025 Cameron Carroll
+# Licensed under the AGPL-3.0. See LICENSE for details.
+#
 # Basic example / test harness application
 # (Stub)
 
