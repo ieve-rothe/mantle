@@ -46,7 +46,11 @@ module Mantle
     end
     #---
 
-    def new_context()
+    def clear_log_file()
+      File.write(@log_file, "", mode: "w")
+    end
+
+    private def new_context()
       separator = "\n" + get_ascii_divider(:stars) + "\n"
       File.write(@log_file, separator, mode: "a")
     end
