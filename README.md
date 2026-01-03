@@ -3,6 +3,10 @@ A framework for abstracting LLM interactions into composable Flow objects, where
 
 Intended to be a base layer for building LLM applications.
 
+## Separation of concerns
+Mantle is intended to be pretty low level - if code is related to _how_ to talk to the model or _how_ to structure a loop, it should live here in Mantle.
+If the code is related to _what_ an agent is trying to achieve, it should live at the application layer.
+
 ## Installation
 
 1. Add the dependency to your `shard.yml`:

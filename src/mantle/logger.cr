@@ -29,6 +29,7 @@ module Mantle
     #
     # - `log_file`: Path to file where logs will be appended
     def initialize(@log_file : String)
+      new_context
     end
 
     # Writes a formatted message to log file
@@ -43,12 +44,50 @@ module Mantle
     rescue ex
       puts "Logger failed to write: #{ex.message}"
     end
+    #---
 
-    # -----
+    def new_context()
+      separator = "\n" + get_ascii_divider(:stars) + "\n"
+      File.write(@log_file, separator, mode: "a")
+    end
+    #---
 
     # Formats a log entry with a UTC timestamp and label.
     private def format(message : String, label : String)
-      "[#{Time.utc.to_s("%F")}] -- [#{label}] -- #{message}"
+      "[#{Time.utc.to_s("%F")}] -- [#{label}]" + "\n" + message + "\n" + log_separator + "\n"
     end
+
+    # Helper to draw a separator line in output
+    private def log_separator
+      "#{"-" * 50}"
+    end
+    #---
+
+    # Returns ASCII art dividers for file output
+    # Cycles through multiple divider styles
+    private def get_ascii_divider(divider_type : Symbol = :random) : String
+      dividers = {
+        cat:     "=^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=",
+        stars:   "★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★",
+        hearts:  "♥•*¨*•.¸¸♥•*¨*•.¸¸♥•*¨*•.¸¸♥•*¨*•.¸¸♥•*¨*•.¸¸♥•*¨*•.¸¸♥",
+        flowers: "✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀✿❀",
+        bubbles: "°o○●○o°°o○●○o°°o○●○o°°o○●○o°°o○●○o°°o○●○o°°o○●○o°°o○●○o°",
+      }
+
+      if divider_type == :random
+        # Pick a random divider
+        divider_keys = dividers.keys
+        random_key = divider_keys.sample
+        return dividers[random_key]
+      elsif dividers.has_key?(divider_type)
+        return dividers[divider_type]
+      else
+        # Default to stars if invalid type provided
+        return dividers[:stars]
+      end
+    end
+    #---
+
+    
   end
 end
