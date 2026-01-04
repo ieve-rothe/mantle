@@ -14,6 +14,8 @@ module Mantle
   abstract class ContextStore
     abstract def system_prompt : String
     abstract def system_prompt=(system_prompt : String)
+    abstract def chat_context : String
+    abstract def chat_context=(chat_context : String)
     abstract def scratchpad : Hash(String, JSON::Any)
   end
 end

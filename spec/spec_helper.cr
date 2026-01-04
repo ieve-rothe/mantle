@@ -5,7 +5,7 @@ require "json"
 
 class DummyContextStore < Mantle::ContextStore
   property system_prompt : String = "This is a test system prompt"
-
+  property chat_context : String = ""
   def scratchpad : Hash(String, JSON::Any)
     Hash(String, JSON::Any).new
   end

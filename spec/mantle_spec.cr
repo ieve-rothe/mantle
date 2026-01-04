@@ -64,6 +64,6 @@ describe Mantle do
     flow.run("Test input")
 
     # Assert
-    logger.last_message.should eq("Model Response\n" + "Simulated response from model")
+    logger.last_message.should eq("\n" + "Model Response\n" + "Simulated response from model")
   end
 end
