@@ -15,7 +15,7 @@ module Mantle
     #
     # - `message`: Content to be logged
     # - `label`: A category label, eg "Context Input", "Model Response", "ERROR"
-    abstract def log(message : String, label : String)
+    abstract def log(label : String, message : String)
   end
 
   # Concrete logger to write formatted messages to log file
@@ -38,7 +38,7 @@ module Mantle
     #
     # - `message`: Content to be logged
     # - `label`: A category label, eg "Context Input", "Model Response", "ERROR"
-    def log(message : String, label : String)
+    def log(label : String, message : String)
       formatted_entry = format(message, label)
       File.write(@log_file, formatted_entry, mode: "a")
     rescue ex
@@ -58,7 +58,7 @@ module Mantle
 
     # Formats a log entry with a UTC timestamp and label.
     private def format(message : String, label : String)
-      "[#{Time.utc.to_s("%F")}] -- [#{label}]" + "\n" + message + "\n" + log_separator + "\n"
+      "[#{Time.utc.to_s("%F")}] -- [#{label}] #{message}\n" + log_separator + "\n"
     end
 
     # Helper to draw a separator line in output

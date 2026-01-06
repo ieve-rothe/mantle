@@ -32,7 +32,7 @@ class DummyLogger < Mantle::Logger
     @output_file = @log_file
   end
 
-  def log(message : String, label : String)
+  def log(label : String, message : String)
     @last_message = label + "\n" + message
     @targeted_file = @output_file
   end
