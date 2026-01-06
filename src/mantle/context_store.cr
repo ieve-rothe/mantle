@@ -31,8 +31,8 @@ module Mantle
       @system_prompt = system_prompt
     end
     
-    def add_message(message : String, label : String)
-      msg_with_label = "[#{label}]" + message + "\n"
+    def add_message(label : String, message : String)
+      msg_with_label = "[#{label}] #{message}\n"
       @chat_context += msg_with_label
     end
 
