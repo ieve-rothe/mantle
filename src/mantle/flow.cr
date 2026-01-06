@@ -38,10 +38,13 @@ module Mantle
   end
 
   class ChatFlow < Flow
+    property user_name : String = "User"
+    property bot_name : String = "Assistant"
+
     def run(input : String, on_response : Proc(String,Nil))
-      @context_store.add_message("User", input)
+      @context_store.add_message(user_name, input)
       response = @client.execute(@context_store.chat_context)
-      @context_store.add_message("Assistant", response)
+      @context_store.add_message(bot_name, response)
       on_response.call(response)
     end
   end
