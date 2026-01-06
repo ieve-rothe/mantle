@@ -1,39 +1,30 @@
+# spec/spec_helper.cr
 require "spec"
 require "../src/mantle"
-
 require "json"
 
 class DummyContextStore < Mantle::ContextStore
-  property system_prompt : String = "This is a test system prompt"
-  property chat_context : String = ""
-  def scratchpad : Hash(String, JSON::Any)
-    Hash(String, JSON::Any).new
-  end
-end
+  property system_prompt : String = "System: Initial Prompt"
+  property chat_context : String = "System: Initial Prompt"
 
-class DummyFlow < Mantle::Flow
-  # Only need base class methods from Mantle::Flow for now
+  def add_message(label : String, message : String)
+    @chat_context += "\n[#{label}] #{message}"
+  end
 end
 
 class DummyClient < Mantle::Client
   def execute(prompt : String) : String
-    "Simulated response from model"
+    "Simulated response"
   end
 end
 
 class DummyLogger < Mantle::Logger
-  property output_file : String
-  property log_file : String
+  property last_message : String? = nil
 
-  property last_message : String?
-  property targeted_file : String?
-
-  def initialize(@log_file : String)
-    @output_file = @log_file
+  def initialize(@log_file : String = "test.log")
   end
 
   def log(label : String, message : String)
-    @last_message = label + "\n" + message
-    @targeted_file = @output_file
+    @last_message = "#{label} #{message}"
   end
 end

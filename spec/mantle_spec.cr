@@ -1,69 +1,54 @@
 # spec/mantle_spec.cr
 require "./spec_helper"
 
-# Helper method to create test fixtures
-def create_test_flow
-  store = DummyContextStore.new
-  model_config = Mantle::ModelConfig.new(
-    "test-model",                         # model_name
-    false,                                # stream
-    0.6,                                  # temperature
-    0.7,                                  # top_p
-    700,                                  # max_tokens
-    "http://localhost:11434/api/generate" # api_url
-  )
-  logger = DummyLogger.new("test-log-file.txt")
-  client = DummyClient.new
-  flow = DummyFlow.new(
-    workspace: store,
-    client: client,
-    model_config: model_config,
-    logger: logger,
-    output_file: "test-output-file.txt"
-  )
-  {flow: flow, store: store, model_config: model_config, logger: logger, client: client}
-end
-
-describe Mantle do
-  it "initializes with a context store, model config struct and output file" do
+describe Mantle::ChatFlow do
+  
+  it "updates the context store with both the user input and the assistant response" do
     # Arrange
-    fixtures = create_test_flow
-    flow = fixtures[:flow]
-    store = fixtures[:store]
-    model_config = fixtures[:model_config]
+    store = DummyContextStore.new
+    client = DummyClient.new
+    logger = DummyLogger.new
+    flow = Mantle::ChatFlow.new(store, client, logger)
 
     # Act
-    # We are testing initialize of Flow, which is in the create_test_flow helper
+    flow.run("Hello", ->(msg : String) { })
 
     # Assert
-    flow.workspace.should eq(store)
-    flow.model_config.should eq(model_config)
-    flow.output_file.should eq("test-output-file.txt")
+    store.chat_context.should contain("System: Initial Prompt")
+    store.chat_context.should contain("[User] Hello")
+    store.chat_context.should contain("[Assistant] Simulated response")
   end
 
-  it "can be run, taking an input, assembling context to send to server and returns model output" do
+  it "executes the on_response callback with the model's response" do
     # Arrange
-    fixtures = create_test_flow
-    flow = fixtures[:flow]
+    store = DummyContextStore.new
+    client = DummyClient.new
+    logger = DummyLogger.new
+    flow = Mantle::ChatFlow.new(store, client, logger)
+    captured_message = ""
+    callback = ->(msg : String) { captured_message = msg }
 
     # Act
-    flow.run("Test input")
+    flow.run("What is 2+2?", callback)
 
     # Assert
-    flow.context.should eq("This is a test system prompt\n" + "Test input")
-    flow.output.should eq("Simulated response from model")
+    captured_message.should eq("Simulated response")
   end
 
-  it "logs context sent to model and response received from model when running a flow" do
+  it "maintains state across multiple runs (conversational memory)" do
     # Arrange
-    fixtures = create_test_flow
-    flow = fixtures[:flow]
-    logger = fixtures[:logger]
+    store = DummyContextStore.new
+    client = DummyClient.new
+    logger = DummyLogger.new
+    flow = Mantle::ChatFlow.new(store, client, logger)
 
     # Act
-    flow.run("Test input")
+    flow.run("Turn 1", ->(msg : String) { })
+    flow.run("Turn 2", ->(msg : String) { })
 
     # Assert
-    logger.last_message.should eq("Model Response\n" + "Simulated response from model")
+    store.chat_context.should contain("Turn 1")
+    store.chat_context.should contain("Turn 2")
+    store.chat_context.index("Turn 1").not_nil!.should be < store.chat_context.index("Turn 2").not_nil!
   end
 end

@@ -17,40 +17,32 @@ module Mantle
   # Base class for different LLM-based processing flows.
   # Examples include flows for planning steps, command generation, reflection, etc.
   class Flow
-    property workspace : ContextStore
+    property context_store : ContextStore
     property client : Client
-    property model_config : ModelConfig
     property logger : Logger
-    property output_file : String
-
-    property context : String?
-    property output : String?
 
     # Custom errors for flow operations
     class InputError < Exception; end
 
     def initialize(
-      @workspace : ContextStore,
+      @context_store : ContextStore,
       @client : Client,
-      @model_config : ModelConfig,
       @logger : Logger,
-      @output_file : String,
     )
     end
 
     # Assemble context, send it to client, set model response in class
-    def run(input : String)
-      @context = build_context(input)
-      @logger.log("Context Input", @context.not_nil!)
-      @output = @client.execute(@context.not_nil!)
-      @logger.log("Model Response", @output.not_nil!)
+    def run(input : String, on_response : Proc(String,Nil))
+      # To be implemented by specific flows
     end
+  end
 
-    # ---------
-
-    # Base class just uses system prompt and input as context.
-    private def build_context(input : String) : String
-      context = @workspace.system_prompt + "\n" + input
+  class ChatFlow < Flow
+    def run(input : String, on_response : Proc(String,Nil))
+      @context_store.add_message("User", input)
+      response = @client.execute(@context_store.chat_context)
+      @context_store.add_message("Assistant", response)
+      on_response.call(response)
     end
   end
 end
