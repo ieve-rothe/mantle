@@ -2,7 +2,6 @@
 require "./spec_helper"
 
 describe Mantle::EphemeralContextStore do
-  
   describe "#initialize" do
     it "sets the initial system prompt and starts the context with it" do
       prompt = "You are a helpful assistant."
@@ -48,6 +47,41 @@ describe Mantle::EphemeralContextStore do
       
       store.system_prompt.should eq("New Prompt")
       store.chat_context.should eq("Old Prompt\n[SYSTEM UPDATE]: Your core instructions have changed to New Prompt\n")
+    end
+  end
+end
+
+# Should maintain last N messages in context
+describe Mantle::EphemeralSlidingContextStore do
+  describe "#initialize" do
+    it "accepts a system prompt and a number of messages to keep in context" do
+      # Arrange
+      sys_prompt = "System Prompt"
+      messages_to_keep = 3
+
+      # Act
+      store = Mantle::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
+
+      # Assert
+      store.system_prompt.should eq(sys_prompt)
+      store.chat_context.should eq(sys_prompt)
+      store.messages_to_keep.should eq(messages_to_keep)
+    end
+
+    it "allows messages to be stacked up to the specified limit" do
+      # Arrange
+      sys_prompt = "System Prompt"
+      messages_to_keep = 3
+      store = Mantle::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
+
+      # Act
+      store.add_message("User", "Message1")
+      store.add_message("Assistant", "Message2")
+      store.add_message("User", "Message3")
+      store.add_message("Assistant", "Message4")
+
+      # Assert
+      store.chat_context.should eq("System Prompt\n[Assistant] Message2\n[User] Message3\n[Assistant] Message4\n")
     end
   end
 end

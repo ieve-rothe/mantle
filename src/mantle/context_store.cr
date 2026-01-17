@@ -7,25 +7,26 @@
 require "json"
 
 module Mantle
-  # Contract definition for context store
-  #
-  # Reminder that immutable types like strings need both the getter and setter defined manually in abstract class, whereas mutable types like Hash don't need the separate setter definition.
-  abstract class ContextStore
-    abstract def system_prompt : String
-    abstract def system_prompt=(system_prompt : String)
-    abstract def chat_context : String
-    abstract def chat_context=(chat_context : String)
-  end
-
-  class EphemeralContextStore < Mantle::ContextStore
+  # Base class context store, not usable by itself.
+  class ContextStore
     property system_prompt : String
-    property chat_context : String = ""
+    getter chat_context : String = ""
 
     def initialize(system_prompt : String)
       @system_prompt = system_prompt
       @chat_context += system_prompt
     end
 
+    def clear_context
+      @chat_context = system_prompt
+    end
+
+    def add_message(label : String, message : String)
+      # Implement in specific class
+    end
+  end
+
+  class EphemeralContextStore < Mantle::ContextStore
     def system_prompt=(system_prompt : String)
       @chat_context += "\n[SYSTEM UPDATE]: Your core instructions have changed to #{system_prompt}\n"
       @system_prompt = system_prompt
@@ -35,9 +36,22 @@ module Mantle
       msg_with_label = "[#{label}] #{message}\n"
       @chat_context += msg_with_label
     end
+  end
 
-    def clear_context
-      @chat_context = system_prompt
+  class EphemeralSlidingContextStore < Mantle::ContextStore
+    property messages_to_keep
+
+    def initialize(system_prompt : String, messages_to_keep : Int32)
+      super(system_prompt)
+      @messages_to_keep = messages_to_keep
+      @messages = Deque(String).new
+    end
+
+    def add_message(label : String, message : String)
+      msg_with_label = "[#{label}] #{message}\n"
+      @messages << msg_with_label
+      @messages.shift if @messages.size > @messages_to_keep
+      @chat_context = "#{@system_prompt}\n#{@messages.join}"
     end
   end
 end

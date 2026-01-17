@@ -5,7 +5,7 @@ describe Mantle::ChatFlow do
   
   it "updates the context store with both the user input and the assistant response" do
     # Arrange
-    store = DummyContextStore.new
+    store = DummyContextStore.new("Sys Prompt")
     client = DummyClient.new
     logger = DummyLogger.new
     flow = Mantle::ChatFlow.new(store, client, logger)
@@ -21,7 +21,7 @@ describe Mantle::ChatFlow do
 
   it "executes the on_response callback with the model's response" do
     # Arrange
-    store = DummyContextStore.new
+    store = DummyContextStore.new("Sys Prompt")
     client = DummyClient.new
     logger = DummyLogger.new
     flow = Mantle::ChatFlow.new(store, client, logger)
@@ -37,7 +37,7 @@ describe Mantle::ChatFlow do
 
   it "maintains state across multiple runs (conversational memory)" do
     # Arrange
-    store = DummyContextStore.new
+    store = DummyContextStore.new("Sys Prompt")
     client = DummyClient.new
     logger = DummyLogger.new
     flow = Mantle::ChatFlow.new(store, client, logger)
