@@ -111,7 +111,7 @@ module Mantle
     property last_bot_message_file : String
 
     def initialize(@log_file : String, @context_log_file : String, @last_user_message_file : String, @last_bot_message_file : String)
-      super()
+      super(@log_file)
     end
 
     def log_context(message : String)
