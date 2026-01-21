@@ -50,6 +50,18 @@ module Mantle
       File.write(@log_file, "", mode: "w")
     end
 
+    def log_context(message : String)
+      # Only implemented in DetailedLogger
+    end
+
+    def log_user_message(message : String)
+      # Only implemented in DetailedLogger
+    end
+
+    def log_bot_message(message : String)
+      # Only implemented in DetailedLogger
+    end
+
     private def new_context()
       separator = "\n" + get_ascii_divider(:stars) + "\n"
       File.write(@log_file, separator, mode: "a")
@@ -91,7 +103,27 @@ module Mantle
       end
     end
     #---
+  end
 
-    
+  class DetailedLogger < FileLogger
+    property context_log_file : String
+    property last_user_message_file : String
+    property last_bot_message_file : String
+
+    def initialize(@log_file : String, @context_log_file : String, @last_user_message_file : String, @last_bot_message_file : String)
+      super()
+    end
+
+    def log_context(message : String)
+      File.write(@context_log_file, message, mode: "w")
+    end
+
+    def log_user_message(message : String)
+      File.write(@last_user_message_file, message, mode: "w")
+    end
+
+    def log_bot_message(message : String)
+      File.write(@last_bot_message_file, message, mode: "w")
+    end
   end
 end

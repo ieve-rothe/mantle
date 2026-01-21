@@ -92,7 +92,6 @@ module Mantle
     def save_context_to_json : Nil
       data = FileData.new(@system_prompt, @messages.to_a)
       File.write(@context_file, data.to_json)
-      puts "Saved context to #{@context_file}"
     end
 
     def load_context_from_json

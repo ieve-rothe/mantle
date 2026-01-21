@@ -43,8 +43,11 @@ module Mantle
 
     def run(input : String, on_response : Proc(String,Nil))
       @context_store.add_message(user_name, input)
+      @logger.log_user_message(input)
+      @logger.log_context(@context_store.chat_context)
       response = @client.execute(@context_store.chat_context)
       @context_store.add_message(bot_name, response)
+      @logger.log_bot_message(response)
       on_response.call(response)
     end
   end

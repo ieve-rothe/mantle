@@ -27,4 +27,16 @@ class DummyLogger < Mantle::Logger
   def log(label : String, message : String)
     @last_message = "#{label} #{message}"
   end
+
+  def log_context(message : String)
+    # Only implemented in DetailedLogger
+  end
+
+  def log_user_message(message : String)
+    # Only implemented in DetailedLogger
+  end
+
+  def log_bot_message(message : String)
+    # Only implemented in DetailedLogger
+  end
 end
