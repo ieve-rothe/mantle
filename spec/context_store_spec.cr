@@ -1,6 +1,7 @@
 # spec/context_store_spec.cr
 require "./spec_helper"
 
+#------------------------------------------------------------------------------
 describe Mantle::EphemeralContextStore do
   describe "#initialize" do
     it "sets the initial system prompt and starts the context with it" do
@@ -51,6 +52,8 @@ describe Mantle::EphemeralContextStore do
   end
 end
 
+#------------------------------------------------------------------------------
+# Ephemeral Sliding Context Store
 # Should maintain last N messages in context
 describe Mantle::EphemeralSlidingContextStore do
   describe "#initialize" do
@@ -85,3 +88,179 @@ describe Mantle::EphemeralSlidingContextStore do
     end
   end
 end
+
+#------------------------------------------------------------------------------
+# JSON Sliding Context Store
+# Should maintain last N messages in context, loading them from JSON backend store
+describe Mantle::JSONSlidingContextStore do
+  describe "#initialize" do
+    it "creates a new context store with a new JSON file if file doesn't exist" do
+      # Arrange
+      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+      sys_prompt = "You are a test assistant."
+      window_size = 5
+
+      # Act
+      store = Mantle::JSONSlidingContextStore.new(sys_prompt, window_size, test_file)
+
+      # Assert
+      store.system_prompt.should eq(sys_prompt)
+      store.context_window_discrete.should eq(window_size)
+      store.chat_context.should eq(sys_prompt)
+      File.exists?(test_file).should be_true
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "loads existing context from JSON file if it exists" do
+      # Arrange
+      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+      sys_prompt = "Original system prompt"
+      window_size = 3
+
+      # Create a pre-existing context file
+      existing_data = {
+        "system_prompt" => sys_prompt,
+        "messages" => ["[User] Hello\n", "[Assistant] Hi there\n"]
+      }
+      File.write(test_file, existing_data.to_json)
+
+      # Act
+      store = Mantle::JSONSlidingContextStore.new(sys_prompt, window_size, test_file)
+
+      # Assert
+      store.chat_context.should eq("Original system prompt[User] Hello\n[Assistant] Hi there\n")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "loads only the last N messages when file has more than window size" do
+      # Arrange
+      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+      sys_prompt = "System"
+      window_size = 2
+
+      # Create a file with 4 messages but window size is 2
+      existing_data = {
+        "system_prompt" => sys_prompt,
+        "messages" => [
+          "[User] Message1\n",
+          "[Assistant] Response1\n",
+          "[User] Message2\n",
+          "[Assistant] Response2\n"
+        ]
+      }
+      File.write(test_file, existing_data.to_json)
+
+      # Act
+      store = Mantle::JSONSlidingContextStore.new(sys_prompt, window_size, test_file)
+
+      # Assert - should only have last 2 messages
+      store.chat_context.should eq("System[User] Message2\n[Assistant] Response2\n")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+
+  describe "#add_message" do
+    it "adds a labeled message to the context" do
+      # Arrange
+      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+      store = Mantle::JSONSlidingContextStore.new("System:", 5, test_file)
+
+      # Act
+      store.add_message("User", "Hello!")
+
+      # Assert
+      store.chat_context.should eq("System:[User] Hello!\n")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "maintains sliding window by dropping oldest messages" do
+      # Arrange
+      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+      store = Mantle::JSONSlidingContextStore.new("System", 3, test_file)
+
+      # Act - Add 5 messages with window size of 3
+      store.add_message("User", "Message1")
+      store.add_message("Assistant", "Response1")
+      store.add_message("User", "Message2")
+      store.add_message("Assistant", "Response2")
+      store.add_message("User", "Message3")
+
+      # Assert - Should only have last 3 messages
+      expected = "System[User] Message2\n[Assistant] Response2\n[User] Message3\n"
+      store.chat_context.should eq(expected)
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "automatically saves context to JSON file after each message" do
+      # Arrange
+      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+      store = Mantle::JSONSlidingContextStore.new("System", 3, test_file)
+
+      # Act
+      store.add_message("User", "TestMessage")
+
+      # Assert - File should contain the new message
+      File.exists?(test_file).should be_true
+      json_content = JSON.parse(File.read(test_file))
+      json_content["messages"].as_a.size.should eq(1)
+      json_content["messages"].as_a[0].should eq("[User] TestMessage\n")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+
+  describe "#chat_context" do
+    it "returns system prompt concatenated with messages" do
+      # Arrange
+      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+      store = Mantle::JSONSlidingContextStore.new("SysPrompt", 3, test_file)
+
+      # Act
+      store.add_message("User", "Msg1")
+      store.add_message("Bot", "Msg2")
+
+      # Assert
+      store.chat_context.should eq("SysPrompt[User] Msg1\n[Bot] Msg2\n")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+
+  describe "persistence across instances" do
+    it "allows a new instance to resume from saved context" do
+      # Arrange
+      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+      sys_prompt = "Persistent System"
+
+      # First instance - create and add messages
+      store1 = Mantle::JSONSlidingContextStore.new(sys_prompt, 3, test_file)
+      store1.add_message("User", "Hello")
+      store1.add_message("Assistant", "Hi")
+
+      # Act - Create second instance with same file
+      store2 = Mantle::JSONSlidingContextStore.new(sys_prompt, 3, test_file)
+
+      # Assert - Second instance should have same context
+      store2.chat_context.should eq("Persistent System[User] Hello\n[Assistant] Hi\n")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+end
+
+#------------------------------------------------------------------------------
+# Ephemeral Sliding Context Store
+# Should maintain last N messages in context, loading them from JSON backend store
