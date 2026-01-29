@@ -7,6 +7,7 @@
 require "json"
 
 module Mantle
+  #----------------------------------------------------------------------------
   # Base class context store, not usable by itself.
   class ContextStore
     property system_prompt : String
@@ -26,6 +27,7 @@ module Mantle
     end
   end
 
+  #----------------------------------------------------------------------------
   class EphemeralContextStore < Mantle::ContextStore
     def system_prompt=(system_prompt : String)
       @chat_context += "\n[SYSTEM UPDATE]: Your core instructions have changed to #{system_prompt}\n"
@@ -38,6 +40,7 @@ module Mantle
     end
   end
 
+  #----------------------------------------------------------------------------
   class EphemeralSlidingContextStore < Mantle::ContextStore
     property messages_to_keep
 
@@ -55,6 +58,7 @@ module Mantle
     end
   end
 
+  #----------------------------------------------------------------------------
   class JSONSlidingContextStore < Mantle::ContextStore
     # Data transfer object
     private struct FileData
@@ -67,13 +71,15 @@ module Mantle
     end
 
     # Class properties
-    property context_window_discrete #discrete, number of messages to keep, not based on token length
+    property context_window_discrete : Int32 #discrete, number of messages to keep, not based on token length
+    property current_num_messages : Int32
 
     def initialize(system_prompt : String, context_window_discrete : Int32, context_file : String)
       super(system_prompt)
       @context_window_discrete = context_window_discrete
       @messages = Deque(String).new
       @context_file = context_file
+      @current_num_messages = 0
 
       load_context_from_json
     end
@@ -86,6 +92,7 @@ module Mantle
       msg_with_label = "[#{label}] #{message}\n"
       @messages << msg_with_label
       @messages.shift if @messages.size > @context_window_discrete
+      @current_num_messages = @messages.size
       save_context_to_json
     end
 
@@ -107,11 +114,33 @@ module Mantle
         end
         @messages.clear
         messages_to_load.each { |msg| @messages << msg}
+        @current_num_messages = @messages.size
         puts "Loaded context from #{@context_file}"
       rescue e : File::NotFoundError
         save_context_to_json
         puts "Warning: Context file was not found - creating a new one."
       end
     end
+
+    def prune(num_to_prune : Int32)
+      pruned_messages = [] of String
+
+      if num_to_prune > @current_num_messages
+        count = @current_num_messages
+      else
+        count = num_to_prune
+      end   
+
+      count.times do
+        pruned_messages << @messages.shift
+      end
+      save_context_to_json
+      return pruned_messages
+    end
+  end
+
+  #----------------------------------------------------------------------------
+  class LayeredContextStore < ContextStore
+    
   end
 end

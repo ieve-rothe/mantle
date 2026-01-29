@@ -259,6 +259,54 @@ describe Mantle::JSONSlidingContextStore do
       File.delete(test_file) if File.exists?(test_file)
     end
   end
+  describe "#prune" do
+    it "removes the oldest N messages and returns them" do
+      # Arrange
+      test_file = "/tmp/mantle_test_prune_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::JSONSlidingContextStore.new("System", 10, test_file)
+      
+      store.add_message("User", "One")
+      store.add_message("Assistant", "Two")
+      store.add_message("User", "Three")
+      store.add_message("Assistant", "Four")
+
+      # Act - Prune the oldest 2 messages
+      pruned_messages = store.prune(2)
+
+      # Assert - Check return value
+      pruned_messages.size.should eq(2)
+      pruned_messages[0].should contain("One")
+      pruned_messages[1].should contain("Two")
+
+      # Assert - Check current state (only the last 2 should remain)
+      store.chat_context.should eq("System[User] Three\n[Assistant] Four\n")
+      
+      # Assert - Check persistence (file should be updated)
+      json_content = JSON.parse(File.read(test_file))
+      json_content["messages"].as_a.size.should eq(2)
+      json_content["messages"].as_a[0].as_s.should contain("Three")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "handles pruning more messages than currently exist by returning all available" do
+      # Arrange
+      test_file = "/tmp/mantle_test_prune_overflow_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::JSONSlidingContextStore.new("System", 10, test_file)
+      store.add_message("User", "Only Message")
+
+      # Act - Try to prune 100 messages when only 1 exists
+      pruned = store.prune(100)
+
+      # Assert
+      pruned.size.should eq(1)
+      store.chat_context.should eq("System")
+      
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
 end
 
 #------------------------------------------------------------------------------
