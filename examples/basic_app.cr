@@ -17,7 +17,7 @@ class DummyContextStore < Mantle::ContextStore
 end
 
 workspace = DummyContextStore.new
-logger = Mantle::FileLogger.new("basic_app_log.txt")
+logger = Mantle::FileLogger.new("basic_app_log.txt", "User", "Assistant")
 model_config = Mantle::ModelConfig.new(
   "gpt-oss:20b",                        # model_name
   false,                                # stream

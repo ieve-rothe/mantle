@@ -11,6 +11,12 @@ module Mantle
   # Defines contract that loggers must follow.
   # Abstract class was implemented to allow a 'DummyLogger' to be used for unit tests
   abstract class Logger
+    property user_name : String
+    property bot_name : String
+
+    def initialize(@user_name : String, @bot_name : String)
+    end
+
     # Logs a message with generic label
     #
     # - `label`: A category label, eg "Context Input", "Model Response", "ERROR"
@@ -20,11 +26,10 @@ module Mantle
     # Logs a user or bot message with full context
     #
     # This is the main method for logging interactions in flows.
-    # - `role`: Either :user or :bot
-    # - `name`: The display name (e.g., "User", "Assistant")
+    # - `role`: Either :user or :bot (name is determined by role and stored user_name/bot_name)
     # - `message`: The actual message content
     # - `context`: The full conversation context at this point
-    abstract def log_message(role : Symbol, name : String, message : String, context : String)
+    abstract def log_message(role : Symbol, message : String, context : String)
   end
 
   # Concrete logger to write formatted messages to log file
@@ -37,7 +42,10 @@ module Mantle
     # Creates a new FileLogger
     #
     # - `log_file`: Path to file where logs will be appended
-    def initialize(@log_file : String)
+    # - `user_name`: Display name for user messages
+    # - `bot_name`: Display name for bot messages
+    def initialize(@log_file : String, user_name : String, bot_name : String)
+      super(user_name, bot_name)
       new_context
     end
 
@@ -58,10 +66,10 @@ module Mantle
     #
     # For basic FileLogger, just writes to the main log file.
     # - `role`: Either :user or :bot
-    # - `name`: The display name (e.g., "User", "Assistant")
     # - `message`: The actual message content
     # - `context`: The full conversation context (not used in basic logger)
-    def log_message(role : Symbol, name : String, message : String, context : String)
+    def log_message(role : Symbol, message : String, context : String)
+      name = role == :user ? @user_name : @bot_name
       log(name, message)
     end
 
@@ -121,8 +129,8 @@ module Mantle
     property last_user_message_file : String
     property last_bot_message_file : String
 
-    def initialize(@log_file : String, @context_log_file : String, @last_user_message_file : String, @last_bot_message_file : String)
-      super(@log_file)
+    def initialize(@log_file : String, @context_log_file : String, @last_user_message_file : String, @last_bot_message_file : String, user_name : String, bot_name : String)
+      super(@log_file, user_name, bot_name)
     end
 
     # Logs a user or bot message with full context
@@ -131,9 +139,9 @@ module Mantle
     # - Main log file (via parent)
     # - Context file (always updated with current context)
     # - User or bot specific message file
-    def log_message(role : Symbol, name : String, message : String, context : String)
+    def log_message(role : Symbol, message : String, context : String)
       # Log to main log file
-      super(role, name, message, context)
+      super(role, message, context)
 
       # Write current context
       File.write(@context_log_file, context, mode: "w")

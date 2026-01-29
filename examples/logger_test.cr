@@ -7,7 +7,7 @@
 
 require "../src/mantle.cr"
 
-logger = Mantle::FileLogger.new("basic_app_log.txt")
+logger = Mantle::FileLogger.new("basic_app_log.txt", "User", "Assistant")
 logger.clear_log_file
 logger.log("test", "test_label")
 logger.log("Because initialize is the process of building an instance, self inside that block already refers to the instance. Calling the method simply as new_context (without the FileLogger. prefix) would point the compiler to the instance method you defined.

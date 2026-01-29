@@ -21,14 +21,16 @@ end
 class DummyLogger < Mantle::Logger
   property last_message : String? = nil
 
-  def initialize(@log_file : String = "test.log")
+  def initialize(user_name : String = "User", bot_name : String = "Assistant")
+    super(user_name, bot_name)
   end
 
   def log(label : String, message : String)
     @last_message = "#{label} #{message}"
   end
 
-  def log_message(role : Symbol, name : String, message : String, context : String)
+  def log_message(role : Symbol, message : String, context : String)
+    name = role == :user ? @user_name : @bot_name
     @last_message = "#{role} #{name} #{message}"
   end
 end
