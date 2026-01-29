@@ -11,11 +11,20 @@ module Mantle
   # Defines contract that loggers must follow.
   # Abstract class was implemented to allow a 'DummyLogger' to be used for unit tests
   abstract class Logger
-    # Logs a message
+    # Logs a message with generic label
     #
-    # - `message`: Content to be logged
     # - `label`: A category label, eg "Context Input", "Model Response", "ERROR"
+    # - `message`: Content to be logged
     abstract def log(label : String, message : String)
+
+    # Logs a user or bot message with full context
+    #
+    # This is the main method for logging interactions in flows.
+    # - `role`: Either :user or :bot
+    # - `name`: The display name (e.g., "User", "Assistant")
+    # - `message`: The actual message content
+    # - `context`: The full conversation context at this point
+    abstract def log_message(role : Symbol, name : String, message : String, context : String)
   end
 
   # Concrete logger to write formatted messages to log file
@@ -36,30 +45,29 @@ module Mantle
     #
     # Rescues and prints error to STDOUT if file write fails
     #
-    # - `message`: Content to be logged
     # - `label`: A category label, eg "Context Input", "Model Response", "ERROR"
+    # - `message`: Content to be logged
     def log(label : String, message : String)
       formatted_entry = format(message, label)
       File.write(@log_file, formatted_entry, mode: "a")
     rescue ex
       puts "Logger failed to write: #{ex.message}"
     end
+
+    # Logs a user or bot message
+    #
+    # For basic FileLogger, just writes to the main log file.
+    # - `role`: Either :user or :bot
+    # - `name`: The display name (e.g., "User", "Assistant")
+    # - `message`: The actual message content
+    # - `context`: The full conversation context (not used in basic logger)
+    def log_message(role : Symbol, name : String, message : String, context : String)
+      log(name, message)
+    end
     #---
 
     def clear_log_file()
       File.write(@log_file, "", mode: "w")
-    end
-
-    def log_context(message : String)
-      # Only implemented in DetailedLogger
-    end
-
-    def log_user_message(message : String)
-      # Only implemented in DetailedLogger
-    end
-
-    def log_bot_message(message : String)
-      # Only implemented in DetailedLogger
     end
 
     private def new_context()
@@ -114,16 +122,28 @@ module Mantle
       super(@log_file)
     end
 
-    def log_context(message : String)
-      File.write(@context_log_file, message, mode: "w")
-    end
+    # Logs a user or bot message with full context
+    #
+    # Overrides FileLogger to write to multiple files:
+    # - Main log file (via parent)
+    # - Context file (always updated with current context)
+    # - User or bot specific message file
+    def log_message(role : Symbol, name : String, message : String, context : String)
+      # Log to main log file
+      super(role, name, message, context)
 
-    def log_user_message(message : String)
-      File.write(@last_user_message_file, message, mode: "w")
-    end
+      # Write current context
+      File.write(@context_log_file, context, mode: "w")
 
-    def log_bot_message(message : String)
-      File.write(@last_bot_message_file, message, mode: "w")
+      # Write to role-specific file
+      case role
+      when :user
+        File.write(@last_user_message_file, message, mode: "w")
+      when :bot
+        File.write(@last_bot_message_file, message, mode: "w")
+      end
+    rescue ex
+      puts "DetailedLogger failed to write: #{ex.message}"
     end
   end
 end
