@@ -64,17 +64,19 @@ module Mantle
     def log_message(role : Symbol, name : String, message : String, context : String)
       log(name, message)
     end
-    #---
 
-    def clear_log_file()
+    # ---
+
+    def clear_log_file
       File.write(@log_file, "", mode: "w")
     end
 
-    private def new_context()
+    private def new_context
       separator = "\n" + get_ascii_divider(:stars) + "\n"
       File.write(@log_file, separator, mode: "a")
     end
-    #---
+
+    # ---
 
     # Formats a log entry with a UTC timestamp and label.
     private def format(message : String, label : String)
@@ -85,7 +87,8 @@ module Mantle
     private def log_separator
       "#{"-" * 50}"
     end
-    #---
+
+    # ---
 
     # Returns ASCII art dividers for file output
     # Cycles through multiple divider styles
@@ -110,7 +113,7 @@ module Mantle
         return dividers[:stars]
       end
     end
-    #---
+    # ---
   end
 
   class DetailedLogger < FileLogger

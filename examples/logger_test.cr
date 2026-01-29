@@ -7,8 +7,6 @@
 
 require "../src/mantle.cr"
 
-
-
 logger = Mantle::FileLogger.new("basic_app_log.txt")
 logger.clear_log_file
 logger.log("test", "test_label")

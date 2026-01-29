@@ -32,7 +32,7 @@ module Mantle
     end
 
     # Assemble context, send it to client, set model response in class
-    def run(input : String, on_response : Proc(String,Nil))
+    def run(input : String, on_response : Proc(String, Nil))
       # To be implemented by specific flows
     end
   end
@@ -41,7 +41,7 @@ module Mantle
     property user_name : String = "User"
     property bot_name : String = "Assistant"
 
-    def run(input : String, on_response : Proc(String,Nil))
+    def run(input : String, on_response : Proc(String, Nil))
       @context_store.add_message(user_name, input)
       @logger.log_message(:user, user_name, input, @context_store.chat_context)
 

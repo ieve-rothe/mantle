@@ -4,7 +4,6 @@ require "http/server"
 require "json"
 
 describe Mantle::Client do
-    
   it "Correctly packs input request and model parameters into API request, sends over HTTP to API endpoint, and parses received result (no streaming)" do
     # Arrange
     model_config = Mantle::ModelConfig.new(

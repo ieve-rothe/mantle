@@ -7,7 +7,7 @@
 require "json"
 
 module Mantle
-  #----------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   # Base class context store, not usable by itself.
   class ContextStore
     property system_prompt : String
@@ -27,20 +27,20 @@ module Mantle
     end
   end
 
-  #----------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   class EphemeralContextStore < Mantle::ContextStore
     def system_prompt=(system_prompt : String)
       @chat_context += "\n[SYSTEM UPDATE]: Your core instructions have changed to #{system_prompt}\n"
       @system_prompt = system_prompt
     end
-    
+
     def add_message(label : String, message : String)
       msg_with_label = "[#{label}] #{message}\n"
       @chat_context += msg_with_label
     end
   end
 
-  #----------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   class EphemeralSlidingContextStore < Mantle::ContextStore
     property messages_to_keep
 
@@ -58,7 +58,7 @@ module Mantle
     end
   end
 
-  #----------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   class JSONSlidingContextStore < Mantle::ContextStore
     # Data transfer object
     private struct FileData
@@ -71,7 +71,7 @@ module Mantle
     end
 
     # Class properties
-    property context_window_discrete : Int32 #discrete, number of messages to keep, not based on token length
+    property context_window_discrete : Int32 # discrete, number of messages to keep, not based on token length
     property current_num_messages : Int32
 
     def initialize(system_prompt : String, context_window_discrete : Int32, context_file : String)
@@ -113,7 +113,7 @@ module Mantle
           messages_to_load = all_messages
         end
         @messages.clear
-        messages_to_load.each { |msg| @messages << msg}
+        messages_to_load.each { |msg| @messages << msg }
         @current_num_messages = @messages.size
         puts "Loaded context from #{@context_file}"
       rescue e : File::NotFoundError
@@ -129,7 +129,7 @@ module Mantle
         count = @current_num_messages
       else
         count = num_to_prune
-      end   
+      end
 
       count.times do
         pruned_messages << @messages.shift
@@ -139,8 +139,7 @@ module Mantle
     end
   end
 
-  #----------------------------------------------------------------------------
+  # ----------------------------------------------------------------------------
   class LayeredContextStore < ContextStore
-    
   end
 end

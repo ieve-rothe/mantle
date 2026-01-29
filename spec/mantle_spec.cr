@@ -2,7 +2,6 @@
 require "./spec_helper"
 
 describe Mantle::ChatFlow do
-  
   it "updates the context store with both the user input and the assistant response" do
     # Arrange
     store = DummyContextStore.new("Sys Prompt")

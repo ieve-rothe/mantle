@@ -19,18 +19,18 @@ end
 workspace = DummyContextStore.new
 logger = Mantle::FileLogger.new("basic_app_log.txt")
 model_config = Mantle::ModelConfig.new(
-    "gpt-oss:20b",                        # model_name
-    false,                                # stream
-    0.6,                                  # temperature
-    0.7,                                  # top_p
-    700,                                  # max_tokens
-    "http://localhost:11434/api/generate" # api_url
-  )
+  "gpt-oss:20b",                        # model_name
+  false,                                # stream
+  0.6,                                  # temperature
+  0.7,                                  # top_p
+  700,                                  # max_tokens
+  "http://localhost:11434/api/generate" # api_url
+)
 client = Mantle::LlamaClient.new(model_config)
 flow = Mantle::Flow.new(workspace,
-                client,
-                model_config,
-                logger,
-                "basic_app_log.txt")
+  client,
+  model_config,
+  logger,
+  "basic_app_log.txt")
 
 flow.run("Hi")
