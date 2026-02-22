@@ -11,19 +11,25 @@ module Mantle
   # Base class context store, not usable by itself.
   class ContextStore
     property system_prompt : String
-    getter chat_context : String = ""
+    getter current_view : String = ""
+    property current_num_messages : Int32
 
     def initialize(system_prompt : String)
       @system_prompt = system_prompt
-      @chat_context += system_prompt
+      @current_view += system_prompt
+      @current_num_messages = 0
     end
 
     def clear_context
-      @chat_context = system_prompt
+      @current_view = system_prompt
     end
 
     def add_message(label : String, message : String)
       # Implement in specific class
+    end
+
+    def prune(num_to_prune : Int32)
+      # Implement in specific class.
     end
   end
 
@@ -41,7 +47,7 @@ module Mantle
       msg_with_label = "[#{label}] #{message}\n"
       @messages << msg_with_label
       @messages.shift if @messages.size > @messages_to_keep
-      @chat_context = "#{@system_prompt}\n#{@messages.join}"
+      @current_view = "#{@system_prompt}\n#{@messages.join}"
     end
   end
 
@@ -57,19 +63,15 @@ module Mantle
       end
     end
 
-    # Class properties
-    property current_num_messages : Int32
-
     def initialize(system_prompt : String, context_file : String)
       super(system_prompt)
       @messages = Deque(String).new
       @context_file = context_file
-      @current_num_messages = 0
 
       load_context_from_json
     end
 
-    def chat_context : String
+    def current_view : String
       system_prompt + @messages.join
     end
 
@@ -99,7 +101,7 @@ module Mantle
       end
     end
 
-    def prune(num_to_prune : Int32)
+    def prune(num_to_prune : Int32) : Array(String)
       pruned_messages = [] of String
 
       if num_to_prune > @current_num_messages

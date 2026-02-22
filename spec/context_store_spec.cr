@@ -16,7 +16,7 @@ describe Mantle::EphemeralSlidingContextStore do
 
       # Assert
       store.system_prompt.should eq(sys_prompt)
-      store.chat_context.should eq(sys_prompt)
+      store.current_view.should eq(sys_prompt)
       store.messages_to_keep.should eq(messages_to_keep)
     end
 
@@ -33,7 +33,7 @@ describe Mantle::EphemeralSlidingContextStore do
       store.add_message("Assistant", "Message4")
 
       # Assert
-      store.chat_context.should eq("System Prompt\n[Assistant] Message2\n[User] Message3\n[Assistant] Message4\n")
+      store.current_view.should eq("System Prompt\n[Assistant] Message2\n[User] Message3\n[Assistant] Message4\n")
     end
   end
 end
@@ -53,7 +53,7 @@ describe Mantle::JSONContextStore do
 
       # Assert
       store.system_prompt.should eq(sys_prompt)
-      store.chat_context.should eq(sys_prompt)
+      store.current_view.should eq(sys_prompt)
       File.exists?(test_file).should be_true
 
       # Cleanup
@@ -76,7 +76,7 @@ describe Mantle::JSONContextStore do
       store = Mantle::JSONContextStore.new(sys_prompt, test_file)
 
       # Assert
-      store.chat_context.should eq("Original system prompt[User] Hello\n[Assistant] Hi there\n")
+      store.current_view.should eq("Original system prompt[User] Hello\n[Assistant] Hi there\n")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -93,7 +93,7 @@ describe Mantle::JSONContextStore do
       store.add_message("User", "Hello!")
 
       # Assert
-      store.chat_context.should eq("System:[User] Hello!\n")
+      store.current_view.should eq("System:[User] Hello!\n")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -118,7 +118,7 @@ describe Mantle::JSONContextStore do
     end
   end
 
-  describe "#chat_context" do
+  describe "#current_view" do
     it "returns system prompt concatenated with messages" do
       # Arrange
       test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
@@ -129,7 +129,7 @@ describe Mantle::JSONContextStore do
       store.add_message("Bot", "Msg2")
 
       # Assert
-      store.chat_context.should eq("SysPrompt[User] Msg1\n[Bot] Msg2\n")
+      store.current_view.should eq("SysPrompt[User] Msg1\n[Bot] Msg2\n")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -151,7 +151,7 @@ describe Mantle::JSONContextStore do
       store2 = Mantle::JSONContextStore.new(sys_prompt, test_file)
 
       # Assert - Second instance should have same context
-      store2.chat_context.should eq("Persistent System[User] Hello\n[Assistant] Hi\n")
+      store2.current_view.should eq("Persistent System[User] Hello\n[Assistant] Hi\n")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -177,7 +177,7 @@ describe Mantle::JSONContextStore do
       pruned_messages[1].should contain("Two")
 
       # Assert - Check current state (only the last 2 should remain)
-      store.chat_context.should eq("System[User] Three\n[Assistant] Four\n")
+      store.current_view.should eq("System[User] Three\n[Assistant] Four\n")
 
       # Assert - Check persistence (file should be updated)
       json_content = JSON.parse(File.read(test_file))
@@ -199,7 +199,7 @@ describe Mantle::JSONContextStore do
 
       # Assert
       pruned.size.should eq(1)
-      store.chat_context.should eq("System")
+      store.current_view.should eq("System")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)

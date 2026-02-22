@@ -5,10 +5,30 @@ require "json"
 
 class DummyContextStore < Mantle::ContextStore
   property system_prompt : String = "System: Initial Prompt"
-  property chat_context : String = "System: Initial Prompt"
+  property current_view : String = "System: Initial Prompt"
 
   def add_message(label : String, message : String)
-    @chat_context += "\n[#{label}] #{message}"
+    @current_view += "\n[#{label}] #{message}"
+  end
+end
+
+class DummyMemoryStore < Mantle::LayeredMemoryStore
+  def current_view
+    ""
+  end
+end
+
+class DummyContextManager < Mantle::ContextManager
+  def initialize(context_store : Mantle::ContextStore)
+    super(context_store, DummyMemoryStore.new, "User", "Assistant")
+  end
+
+  def handle_user_message(msg : String)
+    @context_store.add_message("User", msg)
+  end
+
+  def handle_bot_message(msg : String)
+    @context_store.add_message("Assistant", msg)
   end
 end
 
