@@ -28,19 +28,6 @@ module Mantle
   end
 
   # ----------------------------------------------------------------------------
-  class EphemeralContextStore < Mantle::ContextStore
-    def system_prompt=(system_prompt : String)
-      @chat_context += "\n[SYSTEM UPDATE]: Your core instructions have changed to #{system_prompt}\n"
-      @system_prompt = system_prompt
-    end
-
-    def add_message(label : String, message : String)
-      msg_with_label = "[#{label}] #{message}\n"
-      @chat_context += msg_with_label
-    end
-  end
-
-  # ----------------------------------------------------------------------------
   class EphemeralSlidingContextStore < Mantle::ContextStore
     property messages_to_keep
 
@@ -59,7 +46,7 @@ module Mantle
   end
 
   # ----------------------------------------------------------------------------
-  class JSONSlidingContextStore < Mantle::ContextStore
+  class JSONContextStore < Mantle::ContextStore
     # Data transfer object
     private struct FileData
       include JSON::Serializable
@@ -71,12 +58,10 @@ module Mantle
     end
 
     # Class properties
-    property context_window_discrete : Int32 # discrete, number of messages to keep, not based on token length
     property current_num_messages : Int32
 
-    def initialize(system_prompt : String, context_window_discrete : Int32, context_file : String)
+    def initialize(system_prompt : String, context_file : String)
       super(system_prompt)
-      @context_window_discrete = context_window_discrete
       @messages = Deque(String).new
       @context_file = context_file
       @current_num_messages = 0
@@ -91,7 +76,6 @@ module Mantle
     def add_message(label : String, message : String)
       msg_with_label = "[#{label}] #{message}\n"
       @messages << msg_with_label
-      @messages.shift if @messages.size > @context_window_discrete
       @current_num_messages = @messages.size
       save_context_to_json
     end
@@ -105,15 +89,8 @@ module Mantle
       begin
         data = FileData.from_json(File.read(@context_file))
         @system_prompt = data.system_prompt
-        all_messages = data.messages
-        if all_messages.size > @context_window_discrete
-          start_index = all_messages.size - @context_window_discrete
-          messages_to_load = all_messages[start_index..-1]
-        else
-          messages_to_load = all_messages
-        end
         @messages.clear
-        messages_to_load.each { |msg| @messages << msg }
+        data.messages.each { |msg| @messages << msg }
         @current_num_messages = @messages.size
         puts "Loaded context from #{@context_file}"
       rescue e : File::NotFoundError
@@ -137,9 +114,5 @@ module Mantle
       save_context_to_json
       return pruned_messages
     end
-  end
-
-  # ----------------------------------------------------------------------------
-  class LayeredContextStore < ContextStore
   end
 end
