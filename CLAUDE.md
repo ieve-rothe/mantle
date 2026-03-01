@@ -71,8 +71,14 @@ Crystal is statically typed and performs type checking during compilation. Type 
 - Use `DummyLogger` pattern (implement abstract methods as no-ops) for unit tests
 
 **MemoryStore** (`src/mantle/memory_store.cr`)
-- Stub for future long-term memory management (distinct from context)
-- `MemoryCoordinator` and `LayeredMemoryStore` classes are placeholders
+- `JSONLayeredMemoryStore`: Hierarchical long-term memory with automatic consolidation
+- Manages memory in layers: Layer 0 (recent summaries) → Layer 1 (older summaries) → Layer 2, etc.
+- Messages from context are squishified and added to Layer 0
+- When a layer reaches capacity, oldest messages consolidate to the next layer
+- Configuration: `layer_capacity` (max items per layer), `layer_target` (items remaining after consolidation)
+- `ingest_step_size = layer_capacity - layer_target` determines batch size for consolidation
+- Persists to JSON with `ingest_pending` (messages awaiting squishification) and `layers` arrays
+- Fault-tolerant: If squishifier fails, messages remain in `ingest_pending` for retry
 
 ### Design Patterns
 
@@ -109,9 +115,43 @@ examples/
 - File-based tests use `Time.utc.to_unix_ms` and `Random.rand` for unique filenames
 - Dummy implementations (DummyContextStore, DummyLogger) for isolating components
 
+## Implementation Lessons Learned
+
+### Recursive Consolidation in JSONLayeredMemoryStore
+
+The layered memory consolidation uses recursive `cascade()` calls to move summaries between layers. Key design decisions:
+
+**Capacity Check Timing**
+- Check capacity BEFORE adding to prevent filling beyond capacity
+- Additional check AFTER processing ingest_pending ensures Layer 0 consolidates when full
+- Do NOT add post-processing checks to recursive calls (prevents infinite cascade chains)
+
+**Consolidation Flow**
+- `ingest()` adds messages to `@ingest_pending`, then calls `cascade(-1)`
+- `cascade(-1)` squishifies all pending messages and adds each to Layer 0
+- When Layer 0 reaches capacity during cascade, recursively calls `cascade(0)`
+- `cascade(0)` batches `ingest_step_size` items from Layer 0, squishifies, adds to Layer 1
+- This continues recursively up the layer hierarchy as needed
+
+**Preventing Infinite Recursion**
+- Safety limit: max layer index of 50 (reasonable for any realistic usage)
+- The layer index itself serves as recursion depth
+- Final consolidation check only for layer -1 (entry point), not for recursive calls
+
+**Realistic Parameters**
+- Recommended: `layer_capacity: 7-10`, `layer_target: 5`
+- Avoid very small values like `capacity: 2, target: 1` (creates excessive layers)
+- With realistic parameters, deep cascading requires significant message volume
+
+**Test Design**
+- Tests with unrealistic parameters revealed edge cases but were harder to reason about
+- Deterministic squishifier in tests preserves message content in summaries
+- When testing consolidation, check specific layer sections, not entire view
+
 ## API Design Notes
 
 - Clients and Loggers are abstract to support testing and alternative implementations
 - Context stores handle message formatting with `[Label] message\n` pattern
 - The `on_response` callback in Flow.run allows streaming or custom response handling
 - JSONSlidingContextStore automatically persists after each message for crash resilience
+- JSONLayeredMemoryStore: `layer_capacity` must be greater than `layer_target` (validated on initialization)

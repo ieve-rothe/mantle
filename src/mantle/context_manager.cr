@@ -8,7 +8,7 @@ module Mantle
   # Responsible for coordinating context and memory.
   class ContextManager
     property context_store : ContextStore
-    property memory_store : LayeredMemoryStore
+    property memory_store : JSONLayeredMemoryStore
     property user_name : String
     property bot_name : String
     property msg_target : Int32
@@ -16,7 +16,7 @@ module Mantle
     property msg_hardmax : Int32
 
     def initialize(@context_store : ContextStore,
-                   @memory_store : LayeredMemoryStore,
+                   @memory_store : JSONLayeredMemoryStore,
                    @user_name : String,
                    @bot_name : String,
                    @msg_target : Int32 = 4,
@@ -31,7 +31,6 @@ module Mantle
 
     def handle_user_message(msg : String)
       @context_store.add_message(@user_name, msg)
-      
 
       # Later - Don't write tests for these future functions yet.
       # potentially check for special context command flags?

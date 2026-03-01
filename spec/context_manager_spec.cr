@@ -32,11 +32,18 @@ class TrackingContextStore < Mantle::ContextStore
 end
 
 # Test-specific memory store that tracks ingestion calls
-class TrackingMemoryStore < Mantle::LayeredMemoryStore
+class TrackingMemoryStore < Mantle::JSONLayeredMemoryStore
   property ingested_messages : Array(Array(String))
   property layers : Array(Array(String))
 
   def initialize
+    # Initialize parent class properties with dummy test values
+    @memory_file = "/tmp/test_memory_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+    @layer_capacity = 10
+    @layer_target = 5
+    @squishifier = ->(messages : Array(String)) : String { "" }
+    @ingest_step_size = (@layer_capacity - @layer_target)
+    # Initialize test tracking properties
     @ingested_messages = [] of Array(String)
     @layers = [] of Array(String)
   end
@@ -51,8 +58,11 @@ class TrackingMemoryStore < Mantle::LayeredMemoryStore
   def ingest(messages : Array(String))
     @ingested_messages << messages
     # Add ingested messages to Layer 0 for testing purposes
-    @layers << messages if @layers.empty?
-    @layers[0] = @layers[0] + messages if @layers.size > 0
+    if @layers.empty?
+      @layers << messages
+    else
+      @layers[0] = @layers[0] + messages
+    end
   end
 end
 

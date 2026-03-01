@@ -12,7 +12,16 @@ class DummyContextStore < Mantle::ContextStore
   end
 end
 
-class DummyMemoryStore < Mantle::LayeredMemoryStore
+class DummyMemoryStore < Mantle::JSONLayeredMemoryStore
+  def initialize
+    # Initialize parent class properties with dummy test values
+    @memory_file = "/tmp/dummy_memory_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
+    @layer_capacity = 10
+    @layer_target = 5
+    @squishifier = ->(messages : Array(String)) : String { "" }
+    @ingest_step_size = (@layer_capacity - @layer_target)
+  end
+
   def current_view
     ""
   end
@@ -53,4 +62,20 @@ class DummyLogger < Mantle::Logger
     name = role == :user ? @user_name : @bot_name
     @last_message = "#{role} #{name} #{message}"
   end
+end
+
+####
+
+# Test helper: deterministic squishifier for predictable outputs
+def make_deterministic_squishifier
+  ->(messages : Array(String)) : String {
+    # Extract just the message content (strip labels and newlines for clarity)
+    content = messages.map { |msg| msg.strip }.join(" | ")
+    "Summary of #{messages.size} messages: #{content}"
+  }
+end
+
+# Test helper: create unique temp file path
+def temp_file_path
+  "/tmp/mantle_memory_test_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
 end
