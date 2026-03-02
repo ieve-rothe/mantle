@@ -24,9 +24,9 @@ module Mantle
     end
 
     def current_view
-      chat_context = @context_store.current_view
       memory_view = @memory_store.current_view
-      return chat_context + memory_view
+      chat_context = @context_store.current_view
+      return  memory_view + chat_context
     end
 
     def handle_user_message(msg : String)
@@ -63,6 +63,10 @@ module Mantle
           puts "Error - Tried to ingest to memory store with an invalid pruned_messages array"
         end
       end
+    end
+
+    def clear_context
+      @current_view = system_prompt
     end
   end
 end

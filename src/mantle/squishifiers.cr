@@ -8,7 +8,7 @@
 module Mantle::Squishifiers
     def self.build_basic_summarizer(client : Client) : Proc(Array(String), String)
         -> (messages : Array(String)) : String {
-            prompt = "Summarize the following conversation history into a concise third person narrative paragraph:\n"
+            prompt = "Extract factual data from this log into a bulleted list:\n"
             prompt += messages.join("\n")
 
             response = client.execute(prompt)

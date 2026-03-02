@@ -20,10 +20,6 @@ module Mantle
       @current_num_messages = 0
     end
 
-    def clear_context
-      @current_view = system_prompt
-    end
-
     def add_message(label : String, message : String)
       # Implement in specific class
     end
