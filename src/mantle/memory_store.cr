@@ -49,7 +49,7 @@ module Mantle
         view << "\n"
       end
 
-      view.to_s
+      return view.to_s
     end
 
     def ingest(messages : Array(String)) : Nil

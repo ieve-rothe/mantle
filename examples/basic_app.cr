@@ -4,6 +4,7 @@ require "../src/mantle.cr"
 
 # 1. Setup Primitives
 CONTEXT_FILE = "test_context.json"
+MEMORY_FILE = "test_memory.json"
 LOG_FILE     = "test_log.txt"
 
 # 2. Initialize Components
@@ -23,14 +24,23 @@ client = Mantle::LlamaClient.new(model_config)
 logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name)
 context_store = Mantle::JSONContextStore.new(
   system_prompt: "Respond to the test.",
-  file_path: CONTEXT_FILE
+  context_file: CONTEXT_FILE
 )
-memory_store = Mantle::LayeredMemoryStore.new
+squishy = Mantle::Squishifiers.build_basic_summarizer(client)
+memory_store = Mantle::JSONLayeredMemoryStore.new(
+  memory_file: MEMORY_FILE,
+  layer_capacity: 10,
+  layer_target: 5,
+  squishifier: squishy
+)
+
 context_manager = Mantle::ContextManager.new(
-  context_store,
-  memory_store,
-  user_name,
-  bot_name
+  context_store: context_store,
+  memory_store: memory_store,
+  user_name: user_name,
+  bot_name: bot_name,
+  msg_target: 6,
+  msg_hardmax: 12
 )
 
 # 3. Build the Flow
@@ -54,4 +64,17 @@ flow.run(
 
 # 5. Verify the Context was updated
 puts "\n--- Final Context State ---"
-puts store.current_view
+puts context_store.current_view
+
+# 6. Run multiple turns to cause memory to update
+puts "--- Starting Multi-Test Turn ---"
+13.times do
+  input_text = "Testing. Is it still working?"
+    flow.run(
+    msg: input_text,
+    on_response: ->(msg : String) {
+      puts "User: #{input_text}"
+      puts "Bot: #{msg}"
+    }
+    )
+end

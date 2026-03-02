@@ -322,9 +322,9 @@ describe Mantle::JSONLayeredMemoryStore do
       store = Mantle::JSONLayeredMemoryStore.new(file_path, 10, 4, recovering_squishifier)
 
       # Act - Two failures, then success
-      store.ingest(["[User] Msg1\n"])  # Fails
-      store.ingest(["[User] Msg2\n"])  # Fails again
-      store.ingest(["[User] Msg3\n"])  # Succeeds, processes all 3 together
+      store.ingest(["[User] Msg1\n"]) # Fails
+      store.ingest(["[User] Msg2\n"]) # Fails again
+      store.ingest(["[User] Msg3\n"]) # Succeeds, processes all 3 together
 
       # Assert - All messages eventually processed in one summary
       store.ingest_pending.should be_empty

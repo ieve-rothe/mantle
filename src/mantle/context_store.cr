@@ -113,6 +113,7 @@ module Mantle
       count.times do
         pruned_messages << @messages.shift
       end
+      @current_num_messages = @messages.size
       save_context_to_json
       return pruned_messages
     end
