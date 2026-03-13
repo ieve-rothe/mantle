@@ -40,7 +40,8 @@ context_manager = Mantle::ContextManager.new(
   user_name: user_name,
   bot_name: bot_name,
   msg_target: 6,
-  msg_hardmax: 12
+  msg_hardmax: 12,
+  strip_thinking_tags: true  # Strip <think></think> blocks from model responses
 )
 
 # 3. Build the Flow

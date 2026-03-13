@@ -421,4 +421,239 @@ describe Mantle::ContextManager do
       context_store.current_view.should contain("Happy to help!")
     end
   end
+
+  describe "#strip_thinking_tags" do
+    describe "when strip_thinking_tags is enabled" do
+      it "strips a single <think> block from bot message" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: true
+        )
+
+        # Act
+        manager.handle_bot_message("<think>Let me analyze this...</think>The answer is 42.")
+
+        # Assert - thinking block should be removed
+        context_store.current_view.should eq("System[Bot] The answer is 42.\n")
+        context_store.current_view.should_not contain("<think>")
+        context_store.current_view.should_not contain("Let me analyze this")
+      end
+
+      it "strips multiple <think> blocks from bot message" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: true
+        )
+
+        # Act
+        manager.handle_bot_message("<think>First thought</think>Answer part 1.<think>Second thought</think>Answer part 2.")
+
+        # Assert - both thinking blocks should be removed
+        context_store.current_view.should eq("System[Bot] Answer part 1.Answer part 2.\n")
+        context_store.current_view.should_not contain("<think>")
+        context_store.current_view.should_not contain("First thought")
+        context_store.current_view.should_not contain("Second thought")
+      end
+
+      it "handles thinking blocks with newlines and complex content" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: true
+        )
+
+        # Act
+        message_with_newlines = "<think>\nLet me think step by step:\n1. First point\n2. Second point\n</think>Here's my answer."
+        manager.handle_bot_message(message_with_newlines)
+
+        # Assert
+        context_store.current_view.should eq("System[Bot] Here's my answer.\n")
+        context_store.current_view.should_not contain("<think>")
+        context_store.current_view.should_not contain("First point")
+      end
+
+      it "handles malformed tags gracefully (unmatched opening tag)" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: true
+        )
+
+        # Act - unmatched opening tag
+        manager.handle_bot_message("<think>Incomplete thought... The answer is 42.")
+
+        # Assert - should handle gracefully, keeping the original message
+        context_store.current_view.should contain("The answer is 42.")
+      end
+
+      it "preserves message when no thinking tags are present" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: true
+        )
+
+        # Act
+        manager.handle_bot_message("Just a normal response without any thinking tags.")
+
+        # Assert - message should be unchanged
+        context_store.current_view.should eq("System[Bot] Just a normal response without any thinking tags.\n")
+      end
+
+      it "strips thinking tags before storing in context during consolidation" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          msg_target: 2,
+          msg_hardmax: 4,
+          strip_thinking_tags: true
+        )
+
+        # Act - Add messages with thinking tags that will trigger consolidation
+        manager.handle_bot_message("<think>Thinking 1</think>Response 1")
+        manager.handle_bot_message("<think>Thinking 2</think>Response 2")
+        manager.handle_bot_message("<think>Thinking 3</think>Response 3")
+        manager.handle_bot_message("<think>Thinking 4</think>Response 4")
+
+        # Assert - Memory should have ingested messages WITHOUT thinking tags
+        memory_store.ingested_messages.size.should eq(1)
+        memory_store.ingested_messages[0].each do |msg|
+          msg.should_not contain("<think>")
+          msg.should_not contain("Thinking")
+        end
+      end
+    end
+
+    describe "when strip_thinking_tags is disabled (default)" do
+      it "preserves thinking tags in bot messages by default" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot"
+          # strip_thinking_tags not specified, should default to false
+        )
+
+        # Act
+        manager.handle_bot_message("<think>My reasoning process</think>The answer is 42.")
+
+        # Assert - thinking tags should be preserved
+        context_store.current_view.should contain("<think>My reasoning process</think>")
+        context_store.current_view.should contain("The answer is 42.")
+      end
+
+      it "preserves thinking tags when explicitly set to false" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: false
+        )
+
+        # Act
+        manager.handle_bot_message("<think>Analysis</think>Result")
+
+        # Assert
+        context_store.current_view.should contain("<think>Analysis</think>Result")
+      end
+    end
+
+    describe "edge cases" do
+      it "handles empty thinking blocks" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: true
+        )
+
+        # Act
+        manager.handle_bot_message("<think></think>Answer")
+
+        # Assert
+        context_store.current_view.should eq("System[Bot] Answer\n")
+      end
+
+      it "handles thinking blocks at the end of message" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: true
+        )
+
+        # Act
+        manager.handle_bot_message("The answer is 42.<think>I should verify this</think>")
+
+        # Assert
+        context_store.current_view.should eq("System[Bot] The answer is 42.\n")
+      end
+
+      it "handles message that is only thinking tags" do
+        # Arrange
+        context_store = TrackingContextStore.new("System")
+        memory_store = TrackingMemoryStore.new
+        manager = Mantle::ContextManager.new(
+          context_store: context_store,
+          memory_store: memory_store,
+          user_name: "User",
+          bot_name: "Bot",
+          strip_thinking_tags: true
+        )
+
+        # Act
+        manager.handle_bot_message("<think>Only thinking, no answer</think>")
+
+        # Assert
+        context_store.current_view.should eq("System[Bot] \n")
+      end
+    end
+  end
 end

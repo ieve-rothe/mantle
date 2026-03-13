@@ -14,13 +14,15 @@ module Mantle
     property msg_target : Int32
     # property msg_softmax : Int32 # (Not implemented yet)
     property msg_hardmax : Int32
+    property strip_thinking_tags : Bool
 
     def initialize(@context_store : ContextStore,
                    @memory_store : JSONLayeredMemoryStore,
                    @user_name : String,
                    @bot_name : String,
                    @msg_target : Int32 = 4,
-                   @msg_hardmax : Int32 = 10)
+                   @msg_hardmax : Int32 = 10,
+                   @strip_thinking_tags : Bool = false)
     end
 
     def current_view
@@ -38,7 +40,10 @@ module Mantle
     end
 
     def handle_bot_message(msg : String)
-      @context_store.add_message(@bot_name, msg)
+      # Strip thinking tags if enabled
+      processed_msg = @strip_thinking_tags ? strip_thinking(msg) : msg
+
+      @context_store.add_message(@bot_name, processed_msg)
 
       if @context_store.current_num_messages >= @msg_hardmax
         puts "Running memory consolidation, please wait..."
@@ -67,6 +72,12 @@ module Mantle
 
     def clear_context
       @current_view = system_prompt
+    end
+
+    private def strip_thinking(msg : String) : String
+      # Remove <think>...</think> blocks and their contents
+      # Uses regex with multiline flag to handle thinking blocks that span multiple lines
+      msg.gsub(/<think>.*?<\/think>/m, "")
     end
   end
 end
