@@ -110,6 +110,8 @@ module Mantle
 
         begin
           summary = @squishifier.call(chunk)
+          # Strip thinking tags from the squishified summary
+          summary = strip_thinking(summary)
           # If no exception from squishifier, then successful response from LLM
           source.shift(chunk_size) # Remove messages that we squished
           timestamp = Time.utc.to_s("%Y-%m-%d %H:%M")
@@ -160,6 +162,12 @@ module Mantle
     private def save_memories_to_json : Nil
       data = FileData.new(@ingest_pending, @layers)
       File.write(@memory_file, data.to_json)
+    end
+
+    private def strip_thinking(msg : String) : String
+      # Remove <think>...</think> blocks and their contents
+      # Uses regex with multiline flag to handle thinking blocks that span multiple lines
+      msg.gsub(/<think>.*?<\/think>/m, "")
     end
   end
 end

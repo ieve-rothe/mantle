@@ -340,6 +340,98 @@ describe Mantle::JSONLayeredMemoryStore do
     end
   end
 
+  describe "thinking tag stripping" do
+    it "strips thinking tags from squishified summaries" do
+      # Arrange
+      file_path = temp_file_path
+      # Squishifier that includes thinking tags in its output
+      thinking_squishifier = ->(messages : Array(String)) : String {
+        "<think>This is internal reasoning</think>Summary of #{messages.size} messages: #{messages.map { |msg| msg.strip }.join(" | ")}"
+      }
+      store = Mantle::JSONLayeredMemoryStore.new(file_path, 10, 4, thinking_squishifier)
+
+      # Act
+      store.ingest(["[User] Hello\n", "[Bot] Hi there\n"])
+
+      # Assert - Thinking tags should be stripped from the stored summary
+      view = store.current_view
+      view.should_not contain("<think>")
+      view.should_not contain("</think>")
+      view.should_not contain("This is internal reasoning")
+      view.should contain("Summary of 2 messages")
+      view.should contain("[User] Hello")
+
+      # Cleanup
+      File.delete(file_path)
+    end
+
+    it "strips multiline thinking tags from squishified summaries" do
+      # Arrange
+      file_path = temp_file_path
+      # Squishifier with multiline thinking tags
+      thinking_squishifier = ->(messages : Array(String)) : String {
+        "<think>\nFirst I need to analyze these messages.\nThen I'll create a summary.\n</think>\nFinal summary: #{messages.size} messages processed"
+      }
+      store = Mantle::JSONLayeredMemoryStore.new(file_path, 10, 4, thinking_squishifier)
+
+      # Act
+      store.ingest(["[User] Message 1\n", "[User] Message 2\n"])
+
+      # Assert - Multiline thinking block should be completely stripped
+      view = store.current_view
+      view.should_not contain("<think>")
+      view.should_not contain("</think>")
+      view.should_not contain("First I need to analyze")
+      view.should_not contain("Then I'll create")
+      view.should contain("Final summary: 2 messages processed")
+
+      # Cleanup
+      File.delete(file_path)
+    end
+
+    it "handles multiple thinking tags in a single summary" do
+      # Arrange
+      file_path = temp_file_path
+      thinking_squishifier = ->(messages : Array(String)) : String {
+        "<think>Part 1</think>Summary: <think>Part 2</think>#{messages.size} messages"
+      }
+      store = Mantle::JSONLayeredMemoryStore.new(file_path, 10, 4, thinking_squishifier)
+
+      # Act
+      store.ingest(["[User] Test\n"])
+
+      # Assert - All thinking tags should be stripped
+      view = store.current_view
+      view.should_not contain("<think>")
+      view.should_not contain("</think>")
+      view.should_not contain("Part 1")
+      view.should_not contain("Part 2")
+      view.should contain("Summary: 1 messages")
+
+      # Cleanup
+      File.delete(file_path)
+    end
+
+    it "preserves summaries without thinking tags" do
+      # Arrange
+      file_path = temp_file_path
+      normal_squishifier = ->(messages : Array(String)) : String {
+        "Normal summary without thinking tags: #{messages.size} messages"
+      }
+      store = Mantle::JSONLayeredMemoryStore.new(file_path, 10, 4, normal_squishifier)
+
+      # Act
+      store.ingest(["[User] Test\n"])
+
+      # Assert - Normal summaries should work unchanged
+      view = store.current_view
+      view.should contain("Normal summary without thinking tags: 1 messages")
+
+      # Cleanup
+      File.delete(file_path)
+    end
+  end
+
   describe "#consolidate_layer - Layer 0 to Layer 1" do
     it "consolidates Layer 0 when reaching capacity" do
       # Arrange
