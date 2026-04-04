@@ -6,10 +6,12 @@
 # Squishification is summarization / compression of messages into system memory
 
 module Mantle::Squishifiers
-    def self.build_basic_summarizer(client : Client) : Proc(Array(String), String)
+    def self.build_basic_summarizer(
+        client : Client,
+        system_prompt : String = "Extract factual data from the following conversation log into a concise bulleted list."
+    ) : Proc(Array(String), String)
         -> (messages : Array(String)) : String {
             # Build the chat messages array
-            system_prompt = "Extract factual data from the following conversation log into a concise bulleted list."
             user_content = messages.join("\n")
 
             chat_messages = [

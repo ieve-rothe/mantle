@@ -158,5 +158,40 @@ describe Mantle::Squishifiers do
       client1.captured_messages.not_nil![1]["content"].should eq("Message A")
       client2.captured_messages.not_nil![1]["content"].should eq("Message B")
     end
+
+    it "accepts custom system prompt" do
+      # Arrange
+      client = CapturingClient.new("Custom summary")
+      custom_prompt = "You are a technical summarizer. Extract only code-related information."
+      squishifier = Mantle::Squishifiers.build_basic_summarizer(client, custom_prompt)
+
+      test_messages = ["[User] Fixed the bug in main.cr"]
+
+      # Act
+      result = squishifier.call(test_messages)
+
+      # Assert
+      messages = client.captured_messages.not_nil!
+      messages[0]["role"].should eq("system")
+      messages[0]["content"].should eq(custom_prompt)
+      result.should eq("Custom summary")
+    end
+
+    it "uses default system prompt when none provided" do
+      # Arrange
+      client = CapturingClient.new("Default summary")
+      squishifier = Mantle::Squishifiers.build_basic_summarizer(client)
+
+      test_messages = ["[User] Test message"]
+
+      # Act
+      result = squishifier.call(test_messages)
+
+      # Assert
+      messages = client.captured_messages.not_nil!
+      messages[0]["role"].should eq("system")
+      messages[0]["content"].should eq("Extract factual data from the following conversation log into a concise bulleted list.")
+      result.should eq("Default summary")
+    end
   end
 end

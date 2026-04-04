@@ -7,6 +7,11 @@ CONTEXT_FILE = "examples/test_context.json"
 MEMORY_FILE = "examples/test_memory.json"
 LOG_FILE     = "examples/test_log.txt"
 
+# Clean up previous test files
+[CONTEXT_FILE, MEMORY_FILE, LOG_FILE].each do |file|
+  File.delete(file) if File.exists?(file)
+end
+
 # 2. Initialize Components
 model_config = Mantle::ModelConfig.new(
   model_name: "gpt-oss:20b",
