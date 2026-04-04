@@ -6,6 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Mantle is a Crystal framework for abstracting LLM interactions into composable Flow objects. It provides a low-level base layer for building LLM applications with a focus on separation of concerns: implementation details about _how_ to talk to models and structure loops belong in Mantle, while application-specific logic about _what_ an agent should achieve lives in the application layer.
 
+**For detailed architecture**, see `ARCHITECTURE.md`
+**For tool calling interfaces**, see `TOOL_CALLING_IMPLEMENTATION.md`
+
+---
+
 ## Development Commands
 
 ### Testing
@@ -31,127 +36,236 @@ shards install
 
 # Run example applications
 crystal run examples/basic_app.cr
-crystal run examples/logger_test.cr
+crystal run examples/tool_calling_app.cr
 ```
 
 ### Type Checking
 Crystal is statically typed and performs type checking during compilation. Type errors will appear when running `crystal spec` or `crystal run`.
 
-## Architecture
+---
 
-### Core Components
-
-**Flow** (`src/mantle/flow.cr`)
-- Base abstraction for LLM inference operations
-- Represents self-contained blocks of work (planning, reflection, tool execution, etc.)
-- `Flow` is an abstract base class; `ChatFlow` is the concrete implementation
-- Each flow has a `run(input, on_response)` method that assembles context, sends to client, and handles response
-- Flows coordinate between: context store (manages conversation), client (API communication), and logger (output tracking)
-
-**Client** (`src/mantle/client.cr`)
-- Abstract `Client` class defines the contract for LLM API interactions
-- `LlamaClient` is the concrete implementation for Ollama-compatible APIs
-- Configured via `ModelConfig` record with model name, streaming, temperature, top_p, max_tokens, and API URL
-- Returns string responses from `execute(prompt)` method
-
-**ContextStore** (`src/mantle/context_store.cr`)
-- Manages ongoing conversation context (not identity or long-term memory)
-- Multiple implementations with different retention strategies:
-  - `EphemeralContextStore`: Keeps all messages indefinitely
-  - `EphemeralSlidingContextStore`: Maintains fixed number of recent messages in memory
-  - `JSONSlidingContextStore`: Persists sliding window to JSON file for cross-session continuity
-  - `LayeredContextStore`: Stub for future hierarchical context management
-- All stores provide `add_message(label, message)` and `chat_context` getter
-- `JSONSlidingContextStore` includes `prune(num)` method to manually remove oldest messages
-
-**Logger** (`src/mantle/logger.cr`)
-- Abstract `Logger` class for pluggable logging implementations
-- `FileLogger`: Writes formatted timestamped entries to file with ASCII dividers
-- `DetailedLogger`: Extends FileLogger to write context, user messages, and bot messages to separate files
-- Use `DummyLogger` pattern (implement abstract methods as no-ops) for unit tests
-
-**MemoryStore** (`src/mantle/memory_store.cr`)
-- `JSONLayeredMemoryStore`: Hierarchical long-term memory with automatic consolidation
-- Manages memory in layers: Layer 0 (recent summaries) → Layer 1 (older summaries) → Layer 2, etc.
-- Messages from context are squishified and added to Layer 0
-- When a layer reaches capacity, oldest messages consolidate to the next layer
-- Configuration: `layer_capacity` (max items per layer), `layer_target` (items remaining after consolidation)
-- `ingest_step_size = layer_capacity - layer_target` determines batch size for consolidation
-- Persists to JSON with `ingest_pending` (messages awaiting squishification) and `layers` arrays
-- Fault-tolerant: If squishifier fails, messages remain in `ingest_pending` for retry
+## Coding Standards
 
 ### Design Patterns
 
-- **Abstract classes for contracts**: Client and Logger use abstract base classes to enable testing with dummy implementations
-- **Record types for configuration**: `ModelConfig` uses Crystal's `record` macro for immutable configuration objects
-- **Composition over inheritance**: Flow composes context store, client, and logger rather than inheriting functionality
-- **Separation of concerns**: Context (short-term), memory (long-term), and identity are distinct concepts
+**Abstract Classes for Contracts**
+- Use abstract base classes to define interfaces (e.g., `Client`, `Logger`)
+- Enables testing with dummy implementations
+- Example: `DummyClient`, `DummyLogger` in specs
 
-### File Organization
+**Record Types for Configuration**
+- Use Crystal's `record` macro for immutable configuration objects
+- Example: `ModelConfig` with positional arguments
+- Keeps configuration simple and type-safe
+
+**Composition Over Inheritance**
+- Flow composes `context_manager`, `client`, and `logger` rather than inheriting
+- Components can be swapped independently
+- Easier to test in isolation
+
+**Separation of Concerns**
+- **Context** (short-term): Managed by `ContextStore`
+- **Memory** (long-term): Managed by `MemoryStore`
+- **Identity**: Future feature (system prompts, personality)
+- Keep these distinct in design and implementation
+
+### Testing Conventions
+
+**Test Framework**
+- Use Crystal's built-in Spec framework
+- Follow Arrange-Act-Assert pattern with clear comments
+- Use descriptive test names that explain what's being tested
+
+**Temporary Files**
+- Context stores tested with temporary files in `/tmp/`
+- Always clean up in `after_all` blocks
+- Use `Time.utc.to_unix_ms` and `Random.rand` for unique filenames
+- Example: `/tmp/test_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.txt`
+
+**Dummy Implementations**
+- Create dummy classes for testing (`DummyContextStore`, `DummyLogger`, `DummyClient`)
+- Implement abstract methods as no-ops or simple returns
+- Isolates components for focused unit testing
+
+**Test Organization**
+- One spec file per source file (e.g., `client_spec.cr` for `client.cr`)
+- Use `describe` and `it` blocks to organize tests hierarchically
+- Test both success and failure cases
+
+---
+
+## API Design Guidelines
+
+### Client Interface
+- Abstract `Client` class defines contract for LLM API interactions
+- Returns `Response` objects (contains optional `content` and `tool_calls`)
+- Tool parameter is optional: `execute(messages, tools : Array(Tool)? = nil)`
+- Enables testing and alternative implementations
+
+### Flow Interface
+- Base `Flow` class coordinates context, client, and logger
+- `ChatFlow` for basic interactions (extracts text from Response)
+- `ToolEnabledChatFlow` for tool calling (handles loop automatically)
+- Use `on_response` callback pattern for streaming or custom handling
+
+### Context Store Interface
+- All stores provide `add_message(label, message)` and `current_view`
+- Message format: `{"role" => "user|assistant|system", "content" => "..."}`
+- Handle message formatting internally (don't expose raw storage format)
+
+### Logger Interface
+- Abstract `Logger` class for pluggable implementations
+- `log_message(label, message, context)` is the primary method
+- Use `DummyLogger` pattern for tests (no-ops)
+
+### Tool Interfaces
+- Tool definitions use `JSON::Serializable` for API compatibility
+- Built-in tools return JSON: `{"success": true, "content": "..."}` or `{"error": "..."}`
+- Custom tools use callback signature: `(String, Hash(String, JSON::Any)) -> String`
+- Keep tool logic in application layer, framework only provides mechanism
+
+---
+
+## Best Practices
+
+### Error Handling
+- Use exceptions for unrecoverable errors
+- Return error objects/messages for recoverable failures
+- Tool execution errors return JSON error format
+- Don't let one tool failure stop remaining tools
+
+### Safety
+- **Path Validation**: Built-in tools validate all filesystem access
+- **Iteration Limits**: Tool calling loops enforce `max_iterations` to prevent infinite loops
+- **Configuration**: Use explicit configuration objects (`BuiltinToolConfig`, `ModelConfig`)
+
+### Natural Language in Context
+- Tool interactions stored as natural language, not raw JSON
+- Makes context human-readable and LLM-friendly
+- Example: "Called read_file(file_path: 'test.txt'). Result: Hello, World!"
+- Helps with memory consolidation (squishification)
+
+### JSON Format Conventions
+- Use `JSON::Serializable` for structs that need serialization
+- Use `@[JSON::Field(emit_null: false)]` to omit nil fields
+- Return JSON strings from tool callbacks, not raw objects
+
+### Memory Management
+- Keep context (short-term) and memory (long-term) separate
+- Use squishifiers to summarize old messages before moving to memory
+- Configure `layer_capacity` > `layer_target` in `JSONLayeredMemoryStore`
+- Recommended: `layer_capacity: 7-10`, `layer_target: 5`
+
+---
+
+## Common Patterns
+
+### Creating a Basic Flow
+```crystal
+# Setup components
+context_store = Mantle::EphemeralSlidingContextStore.new(system_prompt, 50)
+memory_store = Mantle::JSONLayeredMemoryStore.new(...)
+context_manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+client = Mantle::LlamaClient.new(model_config)
+logger = Mantle::FileLogger.new("/tmp/log.txt", "User", "Bot")
+
+# Create flow
+flow = Mantle::ChatFlow.new(context_manager, client, logger)
+
+# Run
+flow.run("Hello!", ->(response : String) { puts response })
+```
+
+### Using Tool Calling
+```crystal
+# Use ToolEnabledChatFlow instead
+flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+
+# With built-in tools
+flow.run(
+  "List files",
+  builtins: [Mantle::BuiltinTool::ReadFile, Mantle::BuiltinTool::ListDirectory],
+  builtin_config: Mantle::BuiltinToolConfig.new(Dir.current),
+  on_response: ->(r : String) { puts r }
+)
+
+# With custom tools
+flow.run(
+  "What time is it?",
+  custom_tools: [time_tool],
+  tool_callback: my_callback,
+  on_response: ->(r : String) { puts r }
+)
+```
+
+### Testing with Dummy Implementations
+```crystal
+# Create dummy components
+context_store = DummyContextStore.new
+context_manager = DummyContextManager.new(context_store)
+client = DummyClient.new  # Returns Response.new(content: "Simulated", tool_calls: nil)
+logger = DummyLogger.new
+
+# Test flow in isolation
+flow = Mantle::ChatFlow.new(context_manager, client, logger)
+```
+
+---
+
+## File Organization
+
+Quick reference for finding code:
 
 ```
 src/mantle/
-├── flow.cr           # Flow abstractions and ChatFlow implementation
-├── client.cr         # LLM client abstractions and Ollama implementation
-├── context_store.cr  # Context management with multiple strategies
-├── logger.cr         # Logging abstractions and file-based implementations
-└── memory_store.cr   # Future: long-term memory (currently stubs)
+├── flow.cr              # Flow, ChatFlow, ToolEnabledChatFlow
+├── client.cr            # Client, LlamaClient, Response types
+├── tools.cr             # Tool definition structs
+├── builtin_tools.cr     # Built-in tools (ReadFile, ListDirectory)
+├── tool_executor.cr     # Routes tool calls to handlers
+├── tool_formatter.cr    # Converts tool calls to natural language
+├── context_store.cr     # Short-term conversation context
+├── context_manager.cr   # Combines context + memory
+├── logger.cr            # Logging abstractions
+└── memory_store.cr      # Long-term memory with consolidation
 
 spec/
-├── context_store_spec.cr  # Comprehensive context store tests
-├── client_spec.cr         # Client tests
-└── mantle_spec.cr        # Main library tests
-
-examples/
-├── basic_app.cr      # Basic usage example
-└── logger_test.cr    # Logger demonstration
+├── *_spec.cr            # One spec file per source file
+└── spec_helper.cr       # Shared test helpers and dummy implementations
 ```
 
-## Testing Conventions
+---
 
-- Tests use Crystal's built-in Spec framework
-- Arrange-Act-Assert pattern with clear comments
-- Context stores tested with temporary files in `/tmp/` (always cleaned up)
-- File-based tests use `Time.utc.to_unix_ms` and `Random.rand` for unique filenames
-- Dummy implementations (DummyContextStore, DummyLogger) for isolating components
+## Breaking Changes (v0.3.0)
 
-## Implementation Lessons Learned
+**Client Interface**:
+- `Client.execute()` now returns `Response` instead of `String`
+- Access text via `response.content`
+- `ChatFlow` handles this automatically
+- Only affects code that calls `client.execute()` directly
 
-### Recursive Consolidation in JSONLayeredMemoryStore
+**Migration**:
+```crystal
+# Before (v0.2.x)
+response = client.execute(messages)
+puts response  # String
 
-The layered memory consolidation uses recursive `cascade()` calls to move summaries between layers. Key design decisions:
+# After (v0.3.0)
+response = client.execute(messages)
+puts response.content  # String? (from Response object)
+```
 
-**Capacity Check Timing**
-- Check capacity BEFORE adding to prevent filling beyond capacity
-- Additional check AFTER processing ingest_pending ensures Layer 0 consolidates when full
-- Do NOT add post-processing checks to recursive calls (prevents infinite cascade chains)
+---
 
-**Consolidation Flow**
-- `ingest()` adds messages to `@ingest_pending`, then calls `cascade(-1)`
-- `cascade(-1)` squishifies all pending messages and adds each to Layer 0
-- When Layer 0 reaches capacity during cascade, recursively calls `cascade(0)`
-- `cascade(0)` batches `ingest_step_size` items from Layer 0, squishifies, adds to Layer 1
-- This continues recursively up the layer hierarchy as needed
+## When Working on This Codebase
 
-**Preventing Infinite Recursion**
-- Safety limit: max layer index of 50 (reasonable for any realistic usage)
-- The layer index itself serves as recursion depth
-- Final consolidation check only for layer -1 (entry point), not for recursive calls
-
-**Realistic Parameters**
-- Recommended: `layer_capacity: 7-10`, `layer_target: 5`
-- Avoid very small values like `capacity: 2, target: 1` (creates excessive layers)
-- With realistic parameters, deep cascading requires significant message volume
-
-**Test Design**
-- Tests with unrealistic parameters revealed edge cases but were harder to reason about
-- Deterministic squishifier in tests preserves message content in summaries
-- When testing consolidation, check specific layer sections, not entire view
-
-## API Design Notes
-
-- Clients and Loggers are abstract to support testing and alternative implementations
-- Context stores handle message formatting with `[Label] message\n` pattern
-- The `on_response` callback in Flow.run allows streaming or custom response handling
-- JSONSlidingContextStore automatically persists after each message for crash resilience
-- JSONLayeredMemoryStore: `layer_capacity` must be greater than `layer_target` (validated on initialization)
+1. **Read Architecture First**: Check `ARCHITECTURE.md` for detailed component descriptions
+2. **Follow TDD**: Write tests first, then implementation
+3. **Test Everything**: All new code needs corresponding specs
+4. **Use Dummy Implementations**: Isolate components in tests
+5. **Keep It Simple**: Framework provides mechanisms, applications provide logic
+6. **Natural Language**: Store tool interactions as readable text, not raw JSON
+7. **Safety First**: Validate inputs, enforce limits, handle errors gracefully
+8. **Document Interfaces**: Public methods and contracts should be clear
+9. **Preserve Backward Compatibility**: Use optional parameters when adding features
+10. **Run Full Test Suite**: `crystal spec` should always pass before committing

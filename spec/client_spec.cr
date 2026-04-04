@@ -2,6 +2,102 @@
 require "./spec_helper"
 require "http/server"
 require "json"
+require "../src/mantle/tools"
+
+describe "Mantle Response Types" do
+  describe "ToolCall" do
+    it "deserializes from JSON correctly" do
+      json = %({"id":"call_123","type":"function","function":{"name":"read_file","arguments":"{\\"file_path\\":\\"test.txt\\"}"}})
+      tool_call = Mantle::ToolCall.from_json(json)
+
+      tool_call.id.should eq("call_123")
+      tool_call.type.should eq("function")
+      tool_call.function.name.should eq("read_file")
+      tool_call.function.arguments.should eq(%({"file_path":"test.txt"}))
+    end
+
+    it "serializes to JSON correctly" do
+      tool_call = Mantle::ToolCall.new(
+        id: "call_456",
+        type: "function",
+        function: Mantle::ToolCallFunction.new(
+          name: "list_directory",
+          arguments: %({"directory_path":"."})
+        )
+      )
+
+      json = tool_call.to_json
+      json.should contain("call_456")
+      json.should contain("list_directory")
+    end
+  end
+
+  describe "Response" do
+    it "can be created with only content" do
+      response = Mantle::Response.new(
+        content: "Hello, world!",
+        tool_calls: nil
+      )
+
+      response.content.should eq("Hello, world!")
+      response.tool_calls.should be_nil
+    end
+
+    it "can be created with only tool_calls" do
+      tool_call = Mantle::ToolCall.new(
+        id: "call_1",
+        type: "function",
+        function: Mantle::ToolCallFunction.new(
+          name: "test_tool",
+          arguments: "{}"
+        )
+      )
+      response = Mantle::Response.new(
+        content: nil,
+        tool_calls: [tool_call]
+      )
+
+      response.content.should be_nil
+      response.tool_calls.should_not be_nil
+      response.tool_calls.not_nil!.size.should eq(1)
+    end
+
+    it "can be created with both content and tool_calls" do
+      tool_call = Mantle::ToolCall.new(
+        id: "call_1",
+        type: "function",
+        function: Mantle::ToolCallFunction.new(
+          name: "test_tool",
+          arguments: "{}"
+        )
+      )
+      response = Mantle::Response.new(
+        content: "Calling tool...",
+        tool_calls: [tool_call]
+      )
+
+      response.content.should eq("Calling tool...")
+      response.tool_calls.should_not be_nil
+    end
+
+    it "deserializes from JSON correctly - content only" do
+      json = %({"content":"Test response"})
+      response = Mantle::Response.from_json(json)
+
+      response.content.should eq("Test response")
+      response.tool_calls.should be_nil
+    end
+
+    it "deserializes from JSON correctly - with tool_calls" do
+      json = %({"content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"test","arguments":"{}"}}]})
+      response = Mantle::Response.from_json(json)
+
+      response.content.should be_nil
+      response.tool_calls.should_not be_nil
+      response.tool_calls.not_nil!.size.should eq(1)
+    end
+  end
+end
 
 describe Mantle::Client do
   it "Correctly packs messages array and model parameters into /chat API request, sends over HTTP to API endpoint, and parses received result (no streaming)" do
@@ -76,7 +172,168 @@ describe Mantle::Client do
     parsed_request["options"]["num_predict"].should eq(700)
 
     # Check response parsing
-    client_response.should eq("The sky is blue because it is the color of the sky.")
+    client_response.should be_a(Mantle::Response)
+    client_response.content.should eq("The sky is blue because it is the color of the sky.")
+    client_response.tool_calls.should be_nil
+
+    # Cleanup
+    server.close
+  end
+
+  it "includes tools array in request when tools are provided" do
+    # Arrange
+    model_config = Mantle::ModelConfig.new(
+      "test-model", false, 0.6, 0.7, 700, "http://localhost:43001/"
+    )
+    client = Mantle::LlamaClient.new(model_config)
+
+    # Define a test tool
+    test_tool = Mantle::Tool.new(
+      function: Mantle::FunctionDefinition.new(
+        name: "read_file",
+        description: "Read a file",
+        parameters: Mantle::ParametersSchema.new(
+          properties: {"file_path" => Mantle::PropertyDefinition.new("string", "File path")},
+          required: ["file_path"]
+        )
+      )
+    )
+
+    # Mock response
+    api_response = {
+      "model": "test-model",
+      "message": {
+        "role": "assistant",
+        "content": "Let me read that file for you.",
+      },
+      "done": true,
+    }.to_json
+
+    received_request_body : String? = nil
+    server = HTTP::Server.new do |context|
+      received_request_body = context.request.body.try(&.gets_to_end)
+      context.response.content_type = "application/json"
+      context.response.print api_response
+    end
+    address = server.bind_tcp 43001
+
+    spawn { server.listen }
+
+    test_messages = [{"role" => "user", "content" => "Read test.txt"}]
+
+    # Act
+    client.execute(test_messages, tools: [test_tool])
+
+    # Assert
+    received_request_body.should_not be_nil
+    parsed_request = JSON.parse(received_request_body.not_nil!)
+
+    # Check that tools array is in the request
+    parsed_request["tools"]?.should_not be_nil
+    tools_array = parsed_request["tools"].as_a
+    tools_array.size.should eq(1)
+    tools_array[0]["type"].should eq("function")
+    tools_array[0]["function"]["name"].should eq("read_file")
+
+    # Cleanup
+    server.close
+  end
+
+  it "parses tool_calls from API response" do
+    # Arrange
+    model_config = Mantle::ModelConfig.new(
+      "test-model", false, 0.6, 0.7, 700, "http://localhost:43002/"
+    )
+    client = Mantle::LlamaClient.new(model_config)
+
+    # Mock response with tool_calls
+    api_response = {
+      "model": "test-model",
+      "message": {
+        "role": "assistant",
+        "content": nil,
+        "tool_calls": [
+          {
+            "id": "call_123",
+            "type": "function",
+            "function": {
+              "name": "read_file",
+              "arguments": %({"file_path":"test.txt"})
+            }
+          }
+        ]
+      },
+      "done": true,
+    }.to_json
+
+    server = HTTP::Server.new do |context|
+      context.response.content_type = "application/json"
+      context.response.print api_response
+    end
+    address = server.bind_tcp 43002
+
+    spawn { server.listen }
+
+    test_messages = [{"role" => "user", "content" => "Read test.txt"}]
+
+    # Act
+    response = client.execute(test_messages)
+
+    # Assert
+    response.content.should be_nil
+    response.tool_calls.should_not be_nil
+    response.tool_calls.not_nil!.size.should eq(1)
+    response.tool_calls.not_nil![0].id.should eq("call_123")
+    response.tool_calls.not_nil![0].function.name.should eq("read_file")
+
+    # Cleanup
+    server.close
+  end
+
+  it "handles response with both content and tool_calls" do
+    # Arrange
+    model_config = Mantle::ModelConfig.new(
+      "test-model", false, 0.6, 0.7, 700, "http://localhost:43003/"
+    )
+    client = Mantle::LlamaClient.new(model_config)
+
+    # Mock response with both
+    api_response = {
+      "model": "test-model",
+      "message": {
+        "role": "assistant",
+        "content": "I'll read that file for you.",
+        "tool_calls": [
+          {
+            "id": "call_456",
+            "type": "function",
+            "function": {
+              "name": "read_file",
+              "arguments": %({"file_path":"test.txt"})
+            }
+          }
+        ]
+      },
+      "done": true,
+    }.to_json
+
+    server = HTTP::Server.new do |context|
+      context.response.content_type = "application/json"
+      context.response.print api_response
+    end
+    address = server.bind_tcp 43003
+
+    spawn { server.listen }
+
+    test_messages = [{"role" => "user", "content" => "Read test.txt"}]
+
+    # Act
+    response = client.execute(test_messages)
+
+    # Assert
+    response.content.should eq("I'll read that file for you.")
+    response.tool_calls.should_not be_nil
+    response.tool_calls.not_nil!.size.should eq(1)
 
     # Cleanup
     server.close

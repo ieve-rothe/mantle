@@ -21,7 +21,7 @@ module Mantle::Squishifiers
 
             response = client.execute(chat_messages)
 
-            return response.strip
+            return (response.content || "").strip
         }
     end
 end

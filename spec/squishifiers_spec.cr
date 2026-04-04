@@ -9,15 +9,15 @@ class CapturingClient < Mantle::Client
   def initialize(@response_to_return : String = "Mocked summary response")
   end
 
-  def execute(messages : Array(Hash(String, String))) : String
+  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil) : Mantle::Response
     @captured_messages = messages
-    @response_to_return
+    Mantle::Response.new(content: @response_to_return, tool_calls: nil)
   end
 end
 
 # Mock client that always fails
 class FailingClient < Mantle::Client
-  def execute(messages : Array(Hash(String, String))) : String
+  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil) : Mantle::Response
     raise Exception.new("LLM service unavailable")
   end
 end
