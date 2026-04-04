@@ -14,9 +14,21 @@ describe Mantle::ChatFlow do
     flow.run("Hello", ->(msg : String) { })
 
     # Assert
-    store.current_view.should contain("System: Initial Prompt")
-    store.current_view.should contain("[User] Hello")
-    store.current_view.should contain("[Assistant] Simulated response")
+    view = store.current_view
+    view.should be_a(Array(Hash(String, String)))
+
+    # Check system message
+    system_msg = view.find { |m| m["role"] == "system" }
+    system_msg.should_not be_nil
+    system_msg.not_nil!["content"].should eq("Sys Prompt")
+
+    # Check user message
+    user_msg = view.find { |m| m["role"] == "user" && m["content"] == "Hello" }
+    user_msg.should_not be_nil
+
+    # Check assistant response
+    assistant_msg = view.find { |m| m["role"] == "assistant" && m["content"] == "Simulated response" }
+    assistant_msg.should_not be_nil
   end
 
   it "executes the on_response callback with the model's response" do
@@ -49,8 +61,18 @@ describe Mantle::ChatFlow do
     flow.run("Turn 2", ->(msg : String) { })
 
     # Assert
-    store.current_view.should contain("Turn 1")
-    store.current_view.should contain("Turn 2")
-    store.current_view.index("Turn 1").not_nil!.should be < store.current_view.index("Turn 2").not_nil!
+    view = store.current_view
+    messages_content = view.map { |m| m["content"] }
+
+    # Both turns should be in the view
+    messages_content.should contain("Turn 1")
+    messages_content.should contain("Turn 2")
+
+    # Turn 1 should appear before Turn 2
+    turn1_index = view.index { |m| m["content"] == "Turn 1" }
+    turn2_index = view.index { |m| m["content"] == "Turn 2" }
+    turn1_index.should_not be_nil
+    turn2_index.should_not be_nil
+    turn1_index.not_nil!.should be < turn2_index.not_nil!
   end
 end

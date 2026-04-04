@@ -8,10 +8,16 @@
 module Mantle::Squishifiers
     def self.build_basic_summarizer(client : Client) : Proc(Array(String), String)
         -> (messages : Array(String)) : String {
-            prompt = "Extract factual data from this log into a bulleted list:\n"
-            prompt += messages.join("\n")
+            # Build the chat messages array
+            system_prompt = "Extract factual data from the following conversation log into a concise bulleted list."
+            user_content = messages.join("\n")
 
-            response = client.execute(prompt)
+            chat_messages = [
+                {"role" => "system", "content" => system_prompt},
+                {"role" => "user", "content" => user_content}
+            ]
+
+            response = client.execute(chat_messages)
 
             return response.strip
         }

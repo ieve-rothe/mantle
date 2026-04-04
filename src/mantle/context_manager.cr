@@ -25,14 +25,33 @@ module Mantle
                    @strip_thinking_tags : Bool = false)
     end
 
-    def current_view
+    def current_view : Array(Hash(String, String))
+      messages = [] of Hash(String, String)
+
+      # Build system message combining system prompt and memory
+      system_content = @context_store.system_prompt
       memory_view = @memory_store.current_view
-      chat_context = @context_store.current_view
-      return  memory_view + chat_context
+
+      if !memory_view.empty?
+        system_content += "\n\n" + memory_view
+      end
+
+      # Add system message if there's content
+      unless system_content.empty?
+        messages << {"role" => "system", "content" => system_content}
+      end
+
+      # Get conversation messages from context_store (skip the system message it includes)
+      context_messages = @context_store.current_view
+      conversation_messages = context_messages.select { |msg| msg["role"] != "system" }
+      messages.concat(conversation_messages)
+
+      return messages
     end
 
     def handle_user_message(msg : String)
-      @context_store.add_message(@user_name, msg)
+      # Always use "User" label for normalization, not custom user_name
+      @context_store.add_message("User", msg)
 
       # Later - Don't write tests for these future functions yet.
       # potentially check for special context command flags?
@@ -43,7 +62,8 @@ module Mantle
       # Strip thinking tags if enabled
       processed_msg = @strip_thinking_tags ? strip_thinking(msg) : msg
 
-      @context_store.add_message(@bot_name, processed_msg)
+      # Always use "Assistant" label for normalization, not custom bot_name
+      @context_store.add_message("Assistant", processed_msg)
 
       if @context_store.current_num_messages >= @msg_hardmax
         puts "Running memory consolidation, please wait..."
@@ -63,7 +83,12 @@ module Mantle
       else
         pruned_messages = @context_store.prune(num_to_prune)
         if pruned_messages && pruned_messages.size >= 1
-          @memory_store.ingest(pruned_messages)
+          # Convert message hashes to formatted strings for memory store
+          formatted_messages = pruned_messages.map do |msg|
+            role_label = msg["role"] == "user" ? @user_name : @bot_name
+            "[#{role_label}] #{msg["content"]}\n"
+          end
+          @memory_store.ingest(formatted_messages)
         else
           puts "Error - Tried to ingest to memory store with an invalid pruned_messages array"
         end
@@ -71,7 +96,9 @@ module Mantle
     end
 
     def clear_context
-      @current_view = system_prompt
+      # This method needs to be properly implemented based on the context store type
+      # For now, this is a placeholder that would need context_store to support clearing
+      # TODO: Add clear method to ContextStore interface
     end
 
     private def strip_thinking(msg : String) : String

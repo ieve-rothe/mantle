@@ -5,10 +5,23 @@ require "json"
 
 class DummyContextStore < Mantle::ContextStore
   property system_prompt : String = "System: Initial Prompt"
-  property current_view : String = "System: Initial Prompt"
+  property messages : Array(Hash(String, String)) = [] of Hash(String, String)
+
+  def initialize(@system_prompt : String = "System: Initial Prompt")
+    super(@system_prompt)
+  end
+
+  def current_view : Array(Hash(String, String))
+    result = [] of Hash(String, String)
+    result << {"role" => "system", "content" => @system_prompt} unless @system_prompt.empty?
+    result.concat(@messages)
+    result
+  end
 
   def add_message(label : String, message : String)
-    @current_view += "\n[#{label}] #{message}"
+    role = normalize_role(label)
+    @messages << {"role" => role, "content" => message}
+    @current_num_messages = @messages.size
   end
 end
 
@@ -42,7 +55,7 @@ class DummyContextManager < Mantle::ContextManager
 end
 
 class DummyClient < Mantle::Client
-  def execute(prompt : String) : String
+  def execute(messages : Array(Hash(String, String))) : String
     "Simulated response"
   end
 end

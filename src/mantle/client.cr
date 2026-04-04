@@ -12,7 +12,7 @@ module Mantle
 
   # Contract for Client class. Using a contract to allow for a dummy client class when unit testing other parts of codebase.
   abstract class Client
-    abstract def execute(prompt : String) : String
+    abstract def execute(messages : Array(Hash(String, String))) : String
   end
 
   # Client for sending requests to ollama API
@@ -33,26 +33,27 @@ module Mantle
       @api_url = model_config.api_url
     end
 
-    def execute(prompt : String) : String
+    def execute(messages : Array(Hash(String, String))) : String
       headers = HTTP::Headers{
         "Content-Type" => "application/json",
       }
 
       body = {
         model:       @model_name,
-        prompt:      prompt,
+        messages:    messages,
         stream:      @stream,
-        temperature: @temperature,
-        top_p:       @top_p,
-        max_tokens:  @max_tokens,
+        options: {
+          num_predict: @max_tokens,
+          temperature: @temperature,
+          top_p:       @top_p
+        }
       }.to_json
 
       response = HTTP::Client.post(@api_url, headers: headers, body: body)
 
       if response.status.success?
         response_data = JSON.parse(response.body)
-        generated_text = response_data["response"].as_s
-        return generated_text
+        return response_data["message"]["content"].as_s
       else
         raise Exception.new("Error #{response.status_code}: #{response.body}")
       end

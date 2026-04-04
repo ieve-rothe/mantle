@@ -32,17 +32,28 @@ module Mantle
     def run(msg : String, on_response : Proc(String, Nil))
       # To be implemented by specific flows
     end
+
+    # Convert message array to human-readable string for logging
+    protected def format_messages_for_log(messages : Array(Hash(String, String))) : String
+      messages.map do |msg|
+        role = msg["role"].capitalize
+        content = msg["content"]
+        "[#{role}] #{content}\n"
+      end.join
+    end
   end
 
   class ChatFlow < Flow
     def run(msg : String, on_response : Proc(String, Nil))
       @context_manager.handle_user_message(msg)
-      @logger.log_message(:user, msg, @context_manager.current_view)
+      context_view = @context_manager.current_view
+      @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
-      response = @client.execute(@context_manager.current_view)
+      response = @client.execute(context_view)
 
       @context_manager.handle_bot_message(response)
-      @logger.log_message(:bot, response, @context_manager.current_view)
+      updated_context = @context_manager.current_view
+      @logger.log_message(:bot, response, format_messages_for_log(updated_context))
 
       on_response.call(response)
     end

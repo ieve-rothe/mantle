@@ -4,26 +4,30 @@ require "./spec_helper"
 # Test-specific context store that tracks messages and supports pruning
 class TrackingContextStore < Mantle::ContextStore
   property system_prompt : String
-  property messages : Array(String)
+  property messages : Array(Hash(String, String))
   property add_message_calls : Array({String, String})
 
   def initialize(@system_prompt : String)
     super(system_prompt)
-    @messages = [] of String
+    @messages = [] of Hash(String, String)
     @add_message_calls = [] of {String, String}
   end
 
-  def current_view : String
-    @system_prompt + @messages.join
+  def current_view : Array(Hash(String, String))
+    result = [] of Hash(String, String)
+    result << {"role" => "system", "content" => @system_prompt} unless @system_prompt.empty?
+    result.concat(@messages)
+    result
   end
 
   def add_message(label : String, message : String)
     @add_message_calls << {label, message}
-    @messages << "[#{label}] #{message}\n"
+    role = normalize_role(label)
+    @messages << {"role" => role, "content" => message}
     @current_num_messages = @messages.size
   end
 
-  def prune(num : Int32) : Array(String)
+  def prune(num : Int32) : Array(Hash(String, String))
     num_to_prune = Math.min(num, @messages.size)
     pruned = @messages.shift(num_to_prune)
     @current_num_messages = @messages.size
@@ -128,9 +132,9 @@ describe Mantle::ContextManager do
   end
 
   describe "#current_view" do
-    it "returns concatenated view from context_store and memory_store" do
+    it "returns message array with system prompt (including memory) and conversation messages" do
       # Arrange
-      context_store = TrackingContextStore.new("System Prompt\n")
+      context_store = TrackingContextStore.new("System Prompt")
       memory_store = TrackingMemoryStore.new
       manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
 
@@ -145,15 +149,24 @@ describe Mantle::ContextManager do
       view = manager.current_view
 
       # Assert
-      # Should contain both memory and context
-      view.should contain("[Memory Layer 0] Previous conversation summary")
-      view.should contain("[User] Hello")
-      view.should contain("[Bot] Hi there")
+      view.should be_a(Array(Hash(String, String)))
+      view.size.should eq(3)  # system + 2 conversation messages
+
+      # System message should include both prompt and memory
+      view[0]["role"].should eq("system")
+      view[0]["content"].should contain("System Prompt")
+      view[0]["content"].should contain("[Memory Layer 0] Previous conversation summary")
+
+      # Conversation messages
+      view[1]["role"].should eq("user")
+      view[1]["content"].should eq("Hello")
+      view[2]["role"].should eq("assistant")
+      view[2]["content"].should eq("Hi there")
     end
   end
 
   describe "#handle_user_message" do
-    it "adds user message to context store with user_name label" do
+    it "adds user message to context store with normalized 'User' label" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -164,8 +177,13 @@ describe Mantle::ContextManager do
 
       # Assert
       context_store.add_message_calls.size.should eq(1)
-      context_store.add_message_calls[0].should eq({"Alice", "Hello world"})
-      context_store.current_view.should contain("[Alice] Hello world")
+      context_store.add_message_calls[0].should eq({"User", "Hello world"})
+
+      # Check that message was added with correct role and content
+      view = context_store.current_view
+      user_message = view.find { |msg| msg["content"] == "Hello world" }
+      user_message.should_not be_nil
+      user_message.not_nil!["role"].should eq("user")
     end
 
     it "does not trigger consolidate_memory even when exceeding msg_hardmax" do
@@ -194,7 +212,7 @@ describe Mantle::ContextManager do
   end
 
   describe "#handle_bot_message" do
-    it "adds bot message to context store with bot_name label" do
+    it "adds bot message to context store with normalized 'Assistant' label" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -205,8 +223,12 @@ describe Mantle::ContextManager do
 
       # Assert
       context_store.add_message_calls.size.should eq(1)
-      context_store.add_message_calls[0].should eq({"ChatBot", "How can I help?"})
-      context_store.current_view.should contain("[ChatBot] How can I help?")
+      context_store.add_message_calls[0].should eq({"Assistant", "How can I help?"})
+
+      view = context_store.current_view
+      bot_message = view.find { |msg| msg["content"] == "How can I help?" }
+      bot_message.should_not be_nil
+      bot_message.not_nil!["role"].should eq("assistant")
     end
 
     it "handles multiple bot messages in sequence" do
@@ -221,8 +243,15 @@ describe Mantle::ContextManager do
 
       # Assert
       context_store.add_message_calls.size.should eq(2)
-      context_store.current_view.should contain("[Assistant] First response")
-      context_store.current_view.should contain("[Assistant] Second response")
+
+      view = context_store.current_view
+      first_msg = view.find { |msg| msg["content"] == "First response" }
+      second_msg = view.find { |msg| msg["content"] == "Second response" }
+
+      first_msg.should_not be_nil
+      first_msg.not_nil!["role"].should eq("assistant")
+      second_msg.should_not be_nil
+      second_msg.not_nil!["role"].should eq("assistant")
     end
 
     it "does not trigger consolidate_memory when below msg_hardmax" do
@@ -322,15 +351,18 @@ describe Mantle::ContextManager do
 
       # Assert - Should prune 7 - 3 = 4 messages
       context_store.messages.size.should eq(3)
+
       # Remaining messages should be the most recent ones
-      context_store.current_view.should contain("Message 4")
-      context_store.current_view.should contain("Message 5")
-      context_store.current_view.should contain("Message 6")
-      context_store.current_view.should_not contain("Message 0")
-      context_store.current_view.should_not contain("Message 1")
+      view = context_store.current_view
+      remaining_contents = view.map { |msg| msg["content"] }
+      remaining_contents.should contain("Message 4")
+      remaining_contents.should contain("Message 5")
+      remaining_contents.should contain("Message 6")
+      remaining_contents.should_not contain("Message 0")
+      remaining_contents.should_not contain("Message 1")
     end
 
-    it "ingests pruned messages into memory_store" do
+    it "ingests pruned messages into memory_store as formatted strings" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -351,12 +383,13 @@ describe Mantle::ContextManager do
       # Act
       manager.consolidate_memory
 
-      # Assert - Should have called ingest with 3 pruned messages
+      # Assert - Should have called ingest with 3 pruned messages (formatted as strings)
       memory_store.ingested_messages.size.should eq(1)
       memory_store.ingested_messages[0].size.should eq(3)
-      memory_store.ingested_messages[0][0].should contain("Message 0")
-      memory_store.ingested_messages[0][1].should contain("Message 1")
-      memory_store.ingested_messages[0][2].should contain("Message 2")
+      # Messages are formatted as "[User] content\n" for memory
+      memory_store.ingested_messages[0][0].should eq("[User] Message 0\n")
+      memory_store.ingested_messages[0][1].should eq("[User] Message 1\n")
+      memory_store.ingested_messages[0][2].should eq("[User] Message 2\n")
     end
 
     it "leaves msg_target messages remaining in context_store" do
@@ -388,7 +421,7 @@ describe Mantle::ContextManager do
   describe "integration: user and bot message flow with consolidation" do
     it "handles conversational flow with automatic memory consolidation on bot messages" do
       # Arrange
-      context_store = TrackingContextStore.new("You are a helpful assistant.\n")
+      context_store = TrackingContextStore.new("You are a helpful assistant.")
       memory_store = TrackingMemoryStore.new
       manager = Mantle::ContextManager.new(
         context_store: context_store,
@@ -417,8 +450,11 @@ describe Mantle::ContextManager do
       memory_store.ingested_messages.size.should be > 0
       # After consolidation, messages can grow back up to (but not reaching) msg_hardmax
       context_store.messages.size.should be < manager.msg_hardmax
+
       # Most recent messages should still be in context
-      context_store.current_view.should contain("Happy to help!")
+      view = context_store.current_view
+      last_message = view.find { |msg| msg["content"] == "Happy to help!" }
+      last_message.should_not be_nil
     end
   end
 
@@ -440,9 +476,12 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("<think>Let me analyze this...</think>The answer is 42.")
 
         # Assert - thinking block should be removed
-        context_store.current_view.should eq("System[Bot] The answer is 42.\n")
-        context_store.current_view.should_not contain("<think>")
-        context_store.current_view.should_not contain("Let me analyze this")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should eq("The answer is 42.")
+        bot_message.not_nil!["content"].should_not contain("<think>")
+        bot_message.not_nil!["content"].should_not contain("Let me analyze this")
       end
 
       it "strips multiple <think> blocks from bot message" do
@@ -461,10 +500,13 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("<think>First thought</think>Answer part 1.<think>Second thought</think>Answer part 2.")
 
         # Assert - both thinking blocks should be removed
-        context_store.current_view.should eq("System[Bot] Answer part 1.Answer part 2.\n")
-        context_store.current_view.should_not contain("<think>")
-        context_store.current_view.should_not contain("First thought")
-        context_store.current_view.should_not contain("Second thought")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should eq("Answer part 1.Answer part 2.")
+        bot_message.not_nil!["content"].should_not contain("<think>")
+        bot_message.not_nil!["content"].should_not contain("First thought")
+        bot_message.not_nil!["content"].should_not contain("Second thought")
       end
 
       it "handles thinking blocks with newlines and complex content" do
@@ -484,9 +526,12 @@ describe Mantle::ContextManager do
         manager.handle_bot_message(message_with_newlines)
 
         # Assert
-        context_store.current_view.should eq("System[Bot] Here's my answer.\n")
-        context_store.current_view.should_not contain("<think>")
-        context_store.current_view.should_not contain("First point")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should eq("Here's my answer.")
+        bot_message.not_nil!["content"].should_not contain("<think>")
+        bot_message.not_nil!["content"].should_not contain("First point")
       end
 
       it "handles malformed tags gracefully (unmatched opening tag)" do
@@ -505,7 +550,10 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("<think>Incomplete thought... The answer is 42.")
 
         # Assert - should handle gracefully, keeping the original message
-        context_store.current_view.should contain("The answer is 42.")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should contain("The answer is 42.")
       end
 
       it "preserves message when no thinking tags are present" do
@@ -524,7 +572,10 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("Just a normal response without any thinking tags.")
 
         # Assert - message should be unchanged
-        context_store.current_view.should eq("System[Bot] Just a normal response without any thinking tags.\n")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should eq("Just a normal response without any thinking tags.")
       end
 
       it "strips thinking tags before storing in context during consolidation" do
@@ -573,8 +624,11 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("<think>My reasoning process</think>The answer is 42.")
 
         # Assert - thinking tags should be preserved
-        context_store.current_view.should contain("<think>My reasoning process</think>")
-        context_store.current_view.should contain("The answer is 42.")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should contain("<think>My reasoning process</think>")
+        bot_message.not_nil!["content"].should contain("The answer is 42.")
       end
 
       it "preserves thinking tags when explicitly set to false" do
@@ -593,7 +647,10 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("<think>Analysis</think>Result")
 
         # Assert
-        context_store.current_view.should contain("<think>Analysis</think>Result")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should eq("<think>Analysis</think>Result")
       end
     end
 
@@ -614,7 +671,10 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("<think></think>Answer")
 
         # Assert
-        context_store.current_view.should eq("System[Bot] Answer\n")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should eq("Answer")
       end
 
       it "handles thinking blocks at the end of message" do
@@ -633,7 +693,10 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("The answer is 42.<think>I should verify this</think>")
 
         # Assert
-        context_store.current_view.should eq("System[Bot] The answer is 42.\n")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should eq("The answer is 42.")
       end
 
       it "handles message that is only thinking tags" do
@@ -652,7 +715,10 @@ describe Mantle::ContextManager do
         manager.handle_bot_message("<think>Only thinking, no answer</think>")
 
         # Assert
-        context_store.current_view.should eq("System[Bot] \n")
+        view = context_store.current_view
+        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message.should_not be_nil
+        bot_message.not_nil!["content"].should eq("")
       end
     end
   end

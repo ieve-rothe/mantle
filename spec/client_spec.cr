@@ -4,7 +4,7 @@ require "http/server"
 require "json"
 
 describe Mantle::Client do
-  it "Correctly packs input request and model parameters into API request, sends over HTTP to API endpoint, and parses received result (no streaming)" do
+  it "Correctly packs messages array and model parameters into /chat API request, sends over HTTP to API endpoint, and parses received result (no streaming)" do
     # Arrange
     model_config = Mantle::ModelConfig.new(
       "test-model",             # model_name
@@ -16,12 +16,15 @@ describe Mantle::Client do
     )
     client = Mantle::LlamaClient.new(model_config)
 
+    # Mock response from /chat endpoint
     api_response = {
-      "model":                "llama3.2",
-      "created_at":           "2023-08-04T19:22:45.499127Z",
-      "response":             "The sky is blue because it is the color of the sky.",
+      "model":      "test-model",
+      "created_at": "2023-08-04T19:22:45.499127Z",
+      "message": {
+        "role":    "assistant",
+        "content": "The sky is blue because it is the color of the sky.",
+      },
       "done":                 true,
-      "context":              [1, 2, 3],
       "total_duration":       5043500667,
       "load_duration":        5025959,
       "prompt_eval_count":    26,
@@ -31,8 +34,6 @@ describe Mantle::Client do
     }.to_json
 
     # Use a local variable that the closure can capture.
-    # Reminder that we can't use instance variables except inside classes / modules.
-    # The local variable was giving a 'read before assignment' error down on the assert line until we actually assigned it nil here. Can't just define variable and type.
     received_request_body : String? = nil
     server = HTTP::Server.new do |context|
       received_request_body = context.request.body.try(&.gets_to_end)
@@ -46,15 +47,35 @@ describe Mantle::Client do
       server.listen
     end
 
+    # Prepare test messages
+    test_messages = [
+      {"role" => "system", "content" => "You are a helpful assistant."},
+      {"role" => "user", "content" => "Why is the sky blue?"},
+    ]
+
     # Act
-    client_response = client.execute("test prompt")
+    client_response = client.execute(test_messages)
 
     # Assert
     received_request_body.should_not be_nil
     parsed_request = JSON.parse(received_request_body.not_nil!)
-    parsed_request["prompt"].should eq("test prompt")
+
+    # Check messages array
+    parsed_request["messages"].should_not be_nil
+    messages = parsed_request["messages"].as_a
+    messages.size.should eq(2)
+    messages[0].as_h["role"].as_s.should eq("system")
+    messages[0].as_h["content"].as_s.should eq("You are a helpful assistant.")
+    messages[1].as_h["role"].as_s.should eq("user")
+    messages[1].as_h["content"].as_s.should eq("Why is the sky blue?")
+
+    # Check model config
     parsed_request["model"].should eq("test-model")
-    parsed_request["temperature"].should eq(0.6)
+    parsed_request["options"]["temperature"].should eq(0.6)
+    parsed_request["options"]["top_p"].should eq(0.7)
+    parsed_request["options"]["num_predict"].should eq(700)
+
+    # Check response parsing
     client_response.should eq("The sky is blue because it is the color of the sky.")
 
     # Cleanup

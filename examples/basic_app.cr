@@ -3,9 +3,9 @@ require "../src/mantle.cr"
 # Basic example showing implementation of a ChatFlow using a JSONSlidingContextStore, LayeredMemoryStore coordinated with a ContextManager
 
 # 1. Setup Primitives
-CONTEXT_FILE = "test_context.json"
-MEMORY_FILE = "test_memory.json"
-LOG_FILE     = "test_log.txt"
+CONTEXT_FILE = "examples/test_context.json"
+MEMORY_FILE = "examples/test_memory.json"
+LOG_FILE     = "examples/test_log.txt"
 
 # 2. Initialize Components
 model_config = Mantle::ModelConfig.new(
@@ -14,7 +14,7 @@ model_config = Mantle::ModelConfig.new(
   temperature: 1.0,
   top_p: 0.85,
   max_tokens: 5000,
-  api_url: "http://localhost:11434/api/generate"
+  api_url: "http://localhost:11434/api/chat"
 )
 
 user_name = "Username"
