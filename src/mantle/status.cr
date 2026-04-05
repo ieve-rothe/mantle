@@ -5,6 +5,13 @@
 require "set"
 
 module Mantle
+  # Allow for consumer to register a callback for handling status updates.
+  class_property on_status_update : Proc(Symbol, Nil)?
+
+  def self.emit_status(flag : Symbol)
+    on_status_update.try &.call(flag)
+  end
+
   # A singleton bucket for recording status flags and events that
   # the consumer application may want to inspect (e.g. for UI updates).
   module Status
@@ -14,6 +21,7 @@ module Mantle
     # Add a status flag to the bucket.
     def self.add(flag : Symbol)
       @@flags.add(flag)
+      emit_status(flag)
     end
 
     # Check if a status flag exists in the bucket.
