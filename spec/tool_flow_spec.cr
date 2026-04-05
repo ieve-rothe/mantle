@@ -37,7 +37,7 @@ describe "Mantle ToolEnabledChatFlow" do
       response_received = nil
       flow.run(
         "Hi",
-        on_response: ->(r : String) { response_received = r }
+        on_response: ->(r : Mantle::Response) { response_received = r.content.not_nil! }
       )
 
       response_received.should eq("Hello!")
@@ -98,7 +98,7 @@ describe "Mantle ToolEnabledChatFlow" do
         "What time is it?",
         custom_tools: custom_tools,
         tool_callback: tool_callback,
-        on_response: ->(r : String) { final_response = r }
+        on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
       )
 
       final_response.should eq("The time is 12:00")
@@ -201,7 +201,7 @@ describe "Mantle ToolEnabledChatFlow" do
           "Read the file",
           builtins: [Mantle::BuiltinTool::ReadFile],
           builtin_config: builtin_config,
-          on_response: ->(r : String) { final_response = r }
+          on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
         )
 
         final_response.should eq("Got it!")
@@ -293,7 +293,7 @@ describe "Mantle ToolEnabledChatFlow" do
           custom_tools: custom_tools,
           tool_callback: tool_callback,
           builtin_config: builtin_config,
-          on_response: ->(r : String) { final_response = r }
+          on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
         )
 
         final_response.should eq("Processed!")

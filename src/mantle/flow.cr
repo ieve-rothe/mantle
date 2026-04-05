@@ -33,7 +33,7 @@ module Mantle
     end
 
     # Assemble context, send it to client, set model response in class
-    def run(msg : String, on_response : Proc(String, Nil))
+    def run(msg : String, on_response : Proc(Mantle::Response, Nil))
       # To be implemented by specific flows
     end
 
@@ -48,7 +48,7 @@ module Mantle
   end
 
   class ChatFlow < Flow
-    def run(msg : String, on_response : Proc(String, Nil))
+    def run(msg : String, on_response : Proc(Mantle::Response, Nil))
       @context_manager.handle_user_message(msg)
       context_view = @context_manager.current_view
       @logger.log_message(:user, msg, format_messages_for_log(context_view))
@@ -64,9 +64,9 @@ module Mantle
 
       @context_manager.handle_bot_message(response_text)
       updated_context = @context_manager.current_view
-      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context))
+      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
 
-      on_response.call(response_text)
+      on_response.call(response)
     end
   end
 
@@ -82,7 +82,7 @@ module Mantle
       tool_callback : Proc(String, Hash(String, JSON::Any), String)? = nil,
       builtin_config : BuiltinToolConfig? = nil,
       max_iterations : Int32 = DEFAULT_MAX_ITERATIONS,
-      on_response : Proc(String, Nil)? = nil,
+      on_response : Proc(Mantle::Response, Nil)? = nil,
     )
       # Add user message to context
       @context_manager.handle_user_message(msg)
@@ -124,9 +124,9 @@ module Mantle
           @context_manager.check_and_consolidate
 
           updated_context = @context_manager.current_view
-          @logger.log_message(:bot, response_text, format_messages_for_log(updated_context))
+          @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
 
-          on_response.try(&.call(response_text))
+          on_response.try(&.call(response))
           break
         end
 
@@ -135,7 +135,7 @@ module Mantle
           # Log detailed tool call information (natural language)
           tool_calls.each do |call|
             formatted_call = ToolFormatter.format_tool_call(call)
-            @logger.log_message(:bot, formatted_call, format_messages_for_log(context_view))
+            @logger.log_message(:bot, formatted_call, format_messages_for_log(context_view), response.thinking)
           end
 
           # Add assistant message to context if there's content (defer consolidation)
@@ -165,7 +165,7 @@ module Mantle
           # Check consolidation now that the turn is complete
           @context_manager.check_and_consolidate
 
-          on_response.try(&.call(response_text))
+          on_response.try(&.call(response))
           break
         end
       end
