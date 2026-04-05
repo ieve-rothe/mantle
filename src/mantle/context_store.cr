@@ -5,6 +5,8 @@
 # Context store manages ... context. Not identity, not memory - just manages the ongoing chat and potentially functionality for storing chats when 'finished' and resuming previous chats.
 
 require "json"
+require "./app_logger"
+require "./status"
 
 module Mantle
   # ----------------------------------------------------------------------------
@@ -137,10 +139,11 @@ module Mantle
           @messages << msg
         end
         @current_num_messages = @messages.size
-        puts "Loaded context from #{@context_file}"
+        Mantle::Log.info { "Loaded context from #{@context_file}" }
       rescue e : File::NotFoundError
         save_context_to_json
-        puts "Warning: Context file was not found - creating a new one."
+        Mantle::Log.warn { "Context file was not found - creating a new one." }
+        Mantle::Status.add(:new_context_file)
       end
     end
 

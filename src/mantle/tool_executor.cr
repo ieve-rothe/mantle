@@ -25,7 +25,7 @@ module Mantle
     def initialize(
       builtin_config : BuiltinToolConfig?,
       @custom_callback : Proc(String, Hash(String, JSON::Any), String)?,
-      bot_name : String = "Assistant"
+      bot_name : String = "Assistant",
     )
       @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config, bot_name) : nil
     end

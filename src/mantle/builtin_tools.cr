@@ -49,7 +49,7 @@ module Mantle
               "file_path" => PropertyDefinition.new(
                 type: "string",
                 description: "Path to the file to read"
-              )
+              ),
             },
             required: ["file_path"]
           )
@@ -67,7 +67,7 @@ module Mantle
               "directory_path" => PropertyDefinition.new(
                 type: "string",
                 description: "Path to the directory to list. Defaults to current directory if not specified."
-              )
+              ),
             },
             required: nil # directory_path is optional
           )
@@ -85,7 +85,7 @@ module Mantle
               "message" => PropertyDefinition.new(
                 type: "string",
                 description: "The message content of the notification"
-              )
+              ),
             },
             required: ["message"]
           )

@@ -4,6 +4,7 @@
 
 require "file"
 require "time"
+require "./app_logger"
 
 module Mantle
   # Abstract class for loggers
@@ -65,7 +66,7 @@ module Mantle
       formatted_entry = format(message, label)
       File.write(@log_file, formatted_entry, mode: "a")
     rescue ex
-      puts "Logger failed to write: #{ex.message}"
+      Mantle::Log.error { "Logger failed to write: #{ex.message}" }
     end
 
     # Logs a user or bot message
@@ -167,7 +168,7 @@ module Mantle
         File.write(@last_bot_message_file, message, mode: "w")
       end
     rescue ex
-      puts "DetailedLogger failed to write: #{ex.message}"
+      Mantle::Log.error { "DetailedLogger failed to write: #{ex.message}" }
     end
 
     # Logs the raw API payload for request and response to specific files
@@ -175,7 +176,7 @@ module Mantle
       File.write(@last_request_file.not_nil!, request, mode: "w") if @last_request_file
       File.write(@last_response_file.not_nil!, response, mode: "w") if @last_response_file
     rescue ex
-      puts "DetailedLogger failed to write payloads: #{ex.message}"
+      Mantle::Log.error { "DetailedLogger failed to write payloads: #{ex.message}" }
     end
   end
 end
