@@ -4,6 +4,8 @@
 #
 # Coordinates context routing from flow to ContextStore and MemoryStore
 
+require "./app_logger"
+
 module Mantle
   # Responsible for coordinating context and memory.
   class ContextManager
@@ -66,7 +68,7 @@ module Mantle
       @context_store.add_message("Assistant", processed_msg)
 
       if check_consolidation && @context_store.current_num_messages >= @msg_hardmax
-        puts "Running memory consolidation, please wait..."
+        Mantle::Log.info { "Running memory consolidation, please wait..." }
         consolidate_memory
       end
 
@@ -79,7 +81,7 @@ module Mantle
       @context_store.add_message(role, content)
 
       if check_consolidation && @context_store.current_num_messages >= @msg_hardmax
-        puts "Running memory consolidation, please wait..."
+        Mantle::Log.info { "Running memory consolidation, please wait..." }
         consolidate_memory
       end
     end
@@ -87,7 +89,7 @@ module Mantle
     # Manually trigger consolidation check (for use at turn boundaries)
     def check_and_consolidate
       if @context_store.current_num_messages >= @msg_hardmax
-        puts "Running memory consolidation, please wait..."
+        Mantle::Log.info { "Running memory consolidation, please wait..." }
         consolidate_memory
       end
     end
@@ -97,7 +99,7 @@ module Mantle
       num_to_prune = @msg_hardmax - @msg_target
       if num_to_prune == nil || num_to_prune <= 1
         # Error, num_to_prune not valid
-        puts "Error - Tried to prune context by an invalid number of messages."
+        Mantle::Log.error { "Tried to prune context by an invalid number of messages." }
       else
         pruned_messages = @context_store.prune(num_to_prune)
         if pruned_messages && pruned_messages.size >= 1
@@ -108,7 +110,7 @@ module Mantle
           end
           @memory_store.ingest(formatted_messages)
         else
-          puts "Error - Tried to ingest to memory store with an invalid pruned_messages array"
+          Mantle::Log.error { "Tried to ingest to memory store with an invalid pruned_messages array" }
         end
       end
     end

@@ -5,6 +5,7 @@
 # Manages memory for the agent.
 
 require "json"
+require "./app_logger"
 
 module Mantle
   # Maybe write a base class once we have an implementation for Layered and then are going to add another type of memorystore
@@ -62,7 +63,7 @@ module Mantle
       # Check that target layer has space. If we're at layer_capacity, call ingest for the target layer to clear up space. (Which runs this same function, so might need to do some squishification deeper in the recursion stack)
       # Then, run squishifier N times. If there are fewer than ingest_step_size in the last chunk, just squish it anyway? Or maybe we'll save it for next time.
       # For each result of squishifier, stick it in Layer 0.
-      # If we can't get a response from the model, don't pop anytihng out of ingest_pending, just leave it there and log / puts an error.
+      # If we can't get a response from the model, don't pop anytihng out of ingest_pending, just leave it there and log an error.
     end
 
     # Private -------------------------------------------------------------
@@ -70,7 +71,7 @@ module Mantle
     private def cascade(current_layer_index : Int32) : Nil
       # Prevent infinite recursion - reasonable max layer depth
       if current_layer_index > 50
-        puts "[System] Maximum layer depth (50) reached"
+        Mantle::Log.warn { "Maximum layer depth (50) reached" }
         return
       end
 
@@ -102,7 +103,7 @@ module Mantle
 
         # If target is still at capacity after consolidation, we can't add more
         if @layers[target_layer_index].size >= @layer_capacity
-          puts "[System] Layer #{target_layer_index} still at capacity after consolidation"
+          Mantle::Log.warn { "Layer #{target_layer_index} still at capacity after consolidation" }
           return
         end
 
@@ -120,7 +121,7 @@ module Mantle
           # Recalculate chunk_size for next iteration (only matters for layer -1)
           chunk_size = current_layer_index == -1 ? source.size : @ingest_step_size
         rescue ex
-          puts "[System] Squishifier failed at layer #{current_layer_index}: #{ex.message}"
+          Mantle::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
           return
         end
       end
