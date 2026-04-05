@@ -165,14 +165,26 @@ module Mantle
       if allowed = @config.allowed_paths
         # Check if path is within any of the explicitly allowed paths
         allowed.any? do |allowed_path|
-          expanded_allowed = File.expand_path(allowed_path)
-          absolute_path.starts_with?(expanded_allowed)
+          is_subpath?(absolute_path, allowed_path)
         end
       else
         # Default: only allow paths within working directory
-        expanded_working = File.expand_path(@config.working_directory)
-        absolute_path.starts_with?(expanded_working)
+        is_subpath?(absolute_path, @config.working_directory)
       end
+    end
+
+    # Helper to check if a path is a subpath of a base directory
+    private def is_subpath?(path : String, base : String) : Bool
+      expanded_path = File.expand_path(path)
+      expanded_base = File.expand_path(base)
+
+      # Equal path is allowed
+      return true if expanded_path == expanded_base
+
+      # Must start with base + separator to ensure it's a true subpath
+      # and not just a path that shares a prefix (e.g., /tmp/allowed_secret vs /tmp/allowed)
+      base_with_separator = expanded_base.ends_with?(File::SEPARATOR) ? expanded_base : expanded_base + File::SEPARATOR
+      expanded_path.starts_with?(base_with_separator)
     end
   end
 end
