@@ -106,7 +106,7 @@ context_manager = Mantle::ContextManager.new(
   msg_hardmax: 8    # Trigger consolidation at 8 messages (low limit for testing)
 )
 
-logger = Mantle::FileLogger.new(log_file, "User", "Assistant")
+logger = Mantle::FileLogger.new(log_file, "User", "Assistant", include_thinking: true)
 
 # Create ToolEnabledChatFlow
 flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
@@ -133,8 +133,11 @@ custom_tools = [
 ]
 
 # Callback for displaying responses
-display_response = ->(response : String) {
-  puts "Assistant: #{response}"
+display_response = ->(response : Mantle::Response) {
+  if thinking = response.thinking
+    puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+  end
+  puts "Assistant: #{response.content}"
   puts
   puts "[Context messages: #{context_store.current_num_messages}/#{context_manager.msg_hardmax}]"
   puts

@@ -71,7 +71,7 @@ class DummyLogger < Mantle::Logger
     @last_message = "#{label} #{message}"
   end
 
-  def log_message(role : Symbol, message : String, context : String)
+  def log_message(role : Symbol, message : String, context : String, thinking : String? = nil)
     name = role == :user ? @user_name : @bot_name
     @last_message = "#{role} #{name} #{message}"
   end

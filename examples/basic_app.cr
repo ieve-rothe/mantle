@@ -51,7 +51,7 @@ user_name = "Username"
 bot_name = "Botname"
 
 client = Mantle::LlamaClient.new(model_config)
-logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name)
+logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
 context_store = Mantle::JSONContextStore.new(
   system_prompt: "Respond to the test.",
   context_file: CONTEXT_FILE
@@ -93,9 +93,12 @@ input_text = "Hello! Are you running correctly?"
 
 flow.run(
   msg: input_text,
-  on_response: ->(msg : String) {
+  on_response: ->(resp : Mantle::Response) {
     puts "User: #{input_text}"
-    puts "Bot: #{msg}"
+    if thinking = resp.thinking
+      puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+    end
+    puts "Bot: #{resp.content}"
   }
 )
 
@@ -109,9 +112,12 @@ puts "--- Starting Multi-Test Turn ---"
   input_text = "Testing. Is it still working?"
   flow.run(
     msg: input_text,
-    on_response: ->(msg : String) {
+    on_response: ->(resp : Mantle::Response) {
       puts "User: #{input_text}"
-      puts "Bot: #{msg}"
+      if thinking = resp.thinking
+        puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+      end
+      puts "Bot: #{resp.content}"
     }
   )
 

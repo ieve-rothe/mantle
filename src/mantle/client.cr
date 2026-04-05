@@ -75,6 +75,9 @@ module Mantle
     property content : String? # Text response content (if any)
 
     @[JSON::Field(emit_null: false)]
+    property thinking : String? # Thinking process output (if any)
+
+    @[JSON::Field(emit_null: false)]
     property tool_calls : Array(ToolCall)? # Tool calls requested (if any)
 
     @[JSON::Field(ignore: true)]
@@ -83,7 +86,7 @@ module Mantle
     @[JSON::Field(ignore: true)]
     property raw_response : String?
 
-    def initialize(@content : String?, @tool_calls : Array(ToolCall)?)
+    def initialize(@content : String?, @tool_calls : Array(ToolCall)?, @thinking : String? = nil)
     end
   end
 
@@ -151,6 +154,9 @@ module Mantle
         # Extract content (may be nil if only tool_calls present)
         content = message["content"]?.try(&.as_s?)
 
+        # Extract thinking process (if any)
+        thinking = message["thinking"]?.try(&.as_s?)
+
         # Extract tool_calls if present
         tool_calls_json = message["tool_calls"]?
         tool_calls = if tool_calls_json
@@ -159,7 +165,7 @@ module Mantle
                        nil
                      end
 
-        return Response.new(content: content, tool_calls: tool_calls).tap do |r|
+        return Response.new(content: content, tool_calls: tool_calls, thinking: thinking).tap do |r|
           r.raw_request = body
           r.raw_response = response.body
         end
