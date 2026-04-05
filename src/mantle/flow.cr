@@ -55,6 +55,10 @@ module Mantle
 
       response = @client.execute(context_view)
 
+      if (req = response.raw_request) && (res = response.raw_response)
+        @logger.log_api_payloads(req, res)
+      end
+
       # Extract text content from Response (ignore tool_calls in base ChatFlow)
       response_text = response.content || ""
 
@@ -78,7 +82,7 @@ module Mantle
       tool_callback : Proc(String, Hash(String, JSON::Any), String)? = nil,
       builtin_config : BuiltinToolConfig? = nil,
       max_iterations : Int32 = DEFAULT_MAX_ITERATIONS,
-      on_response : Proc(String, Nil)? = nil
+      on_response : Proc(String, Nil)? = nil,
     )
       # Add user message to context
       @context_manager.handle_user_message(msg)
@@ -105,6 +109,10 @@ module Mantle
 
         # Execute LLM with tools
         response = @client.execute(context_view, all_tools)
+
+        if (req = response.raw_request) && (res = response.raw_response)
+          @logger.log_api_payloads(req, res)
+        end
 
         # Check if we have a text response (end of loop)
         if response.content && (response.tool_calls.nil? || response.tool_calls.not_nil!.empty?)
