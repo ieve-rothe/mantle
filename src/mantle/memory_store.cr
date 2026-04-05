@@ -155,7 +155,6 @@ module Mantle
         @layers = data.layers
       rescue e : File::NotFoundError
         save_memories_to_json
-        # puts "Info: Memory file was not found - creating a new one."
       end
     end
 
