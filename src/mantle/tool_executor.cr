@@ -84,7 +84,7 @@ module Mantle
           {error: "Custom tool #{name} failed: #{ex.message}"}.to_json
         end
       else
-        {error: "Custom tool #{name} requested but no custom_callback provided"}.to_json
+        {error: "Unknown tool '#{name}' - not a built-in tool and no custom tool handler provided"}.to_json
       end
     end
   end

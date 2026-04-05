@@ -206,11 +206,12 @@ describe "Mantle ToolEnabledChatFlow" do
 
         final_response.should eq("Got it!")
 
-        # Check that tool result was added to context
+        # Check that tool result was added to context with 'tool' role
         context_messages = context_store.messages
-        # Should have natural language representation of tool call and result
-        tool_messages = context_messages.select { |m| m["content"].includes?("read_file") }
+        tool_messages = context_messages.select { |m| m["role"] == "tool" }
         tool_messages.should_not be_empty
+        # Tool result should contain the file content
+        tool_messages[0]["content"].should contain("File contents")
       ensure
         File.delete(temp_file) if File.exists?(temp_file)
       end

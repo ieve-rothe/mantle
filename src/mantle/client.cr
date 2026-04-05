@@ -18,9 +18,34 @@ module Mantle
     include JSON::Serializable
 
     property name : String      # Function name (e.g., "read_file")
-    property arguments : String # JSON string of arguments
+
+    # Custom converter to handle both string and object formats for arguments
+    # OpenAI format: arguments as JSON string
+    # Ollama format: arguments as JSON object
+    @[JSON::Field(converter: Mantle::ToolCallFunction::ArgumentsConverter)]
+    property arguments : String # JSON string of arguments (normalized)
 
     def initialize(@name : String, @arguments : String)
+    end
+
+    # Custom JSON converter that handles both string and object argument formats
+    module ArgumentsConverter
+      def self.from_json(pull : JSON::PullParser) : String
+        case pull.kind
+        when .string?
+          # OpenAI format: already a JSON string
+          pull.read_string
+        when .begin_object?
+          # Ollama format: JSON object, convert to string
+          JSON.parse(pull.read_raw).to_json
+        else
+          raise JSON::ParseException.new("Expected String or Object for arguments", pull.line_number, pull.column_number)
+        end
+      end
+
+      def self.to_json(value : String, builder : JSON::Builder)
+        builder.string(value)
+      end
     end
   end
 
@@ -30,10 +55,14 @@ module Mantle
     include JSON::Serializable
 
     property id : String                      # Unique identifier for this tool call
-    property type : String                     # Always "function" for function tools
+
+    # Type field defaults to "function" since some APIs (e.g., Ollama) omit it
+    @[JSON::Field(emit_null: false)]
+    property type : String = "function"       # Always "function" for function tools
+
     property function : ToolCallFunction      # The function to call
 
-    def initialize(@id : String, @type : String, @function : ToolCallFunction)
+    def initialize(@id : String, @function : ToolCallFunction, @type : String = "function")
     end
   end
 

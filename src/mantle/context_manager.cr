@@ -58,20 +58,38 @@ module Mantle
       # (such as, clear context, replay last turn without changes, replay last turn with changes)
     end
 
-    def handle_bot_message(msg : String)
+    def handle_bot_message(msg : String, check_consolidation : Bool = true)
       # Strip thinking tags if enabled
       processed_msg = @strip_thinking_tags ? strip_thinking(msg) : msg
 
       # Always use "Assistant" label for normalization, not custom bot_name
       @context_store.add_message("Assistant", processed_msg)
 
-      if @context_store.current_num_messages >= @msg_hardmax
+      if check_consolidation && @context_store.current_num_messages >= @msg_hardmax
         puts "Running memory consolidation, please wait..."
         consolidate_memory
       end
 
       # Future functionality (don't write tests yet):
       # Check for msg_softmax, set a flag for dreaming loop.
+    end
+
+    # Add a message to context with a specific role, optionally deferring consolidation check
+    def add_message(role : String, content : String, check_consolidation : Bool = true)
+      @context_store.add_message(role, content)
+
+      if check_consolidation && @context_store.current_num_messages >= @msg_hardmax
+        puts "Running memory consolidation, please wait..."
+        consolidate_memory
+      end
+    end
+
+    # Manually trigger consolidation check (for use at turn boundaries)
+    def check_and_consolidate
+      if @context_store.current_num_messages >= @msg_hardmax
+        puts "Running memory consolidation, please wait..."
+        consolidate_memory
+      end
     end
 
     def consolidate_memory

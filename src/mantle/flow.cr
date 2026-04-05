@@ -105,9 +105,13 @@ module Mantle
 
         # Check if we have a text response (end of loop)
         if response.content && (response.tool_calls.nil? || response.tool_calls.not_nil!.empty?)
-          # Final text response
+          # Final text response - add to context without consolidation check
           response_text = response.content.not_nil!
-          @context_manager.handle_bot_message(response_text)
+          @context_manager.handle_bot_message(response_text, check_consolidation: false)
+
+          # Check consolidation now that the full turn is complete
+          @context_manager.check_and_consolidate
+
           updated_context = @context_manager.current_view
           @logger.log_message(:bot, response_text, format_messages_for_log(updated_context))
 
@@ -117,36 +121,39 @@ module Mantle
 
         # We have tool calls - process them
         if tool_calls = response.tool_calls
-          # Format assistant message with tool calls (natural language)
-          assistant_msg = ToolFormatter.format_assistant_message_with_tool_calls(
-            response.content,
-            tool_calls
-          )
+          # Log detailed tool call information (natural language)
+          tool_calls.each do |call|
+            formatted_call = ToolFormatter.format_tool_call(call)
+            @logger.log_message(:bot, formatted_call, format_messages_for_log(context_view))
+          end
 
-          # Add to context
-          @context_manager.handle_bot_message(assistant_msg)
+          # Add assistant message to context if there's content (defer consolidation)
+          if response.content && !response.content.not_nil!.empty?
+            @context_manager.handle_bot_message(response.content.not_nil!, check_consolidation: false)
+          end
 
           # Execute tools
           tool_results = tool_executor.execute_all(tool_calls)
 
-          # Add tool results to context (natural language)
+          # Add tool results to context with 'tool' role (defer consolidation)
           tool_results.each do |result|
-            formatted_result = ToolFormatter.format_tool_result(
-              result.tool_call_id,
-              result.result
-            )
-            @context_manager.handle_bot_message(formatted_result)
+            @context_manager.add_message("tool", result.result, check_consolidation: false)
+
+            # Log detailed tool result (natural language)
+            formatted_result = ToolFormatter.format_tool_result(result.tool_call_id, result.result)
+            @logger.log_message(:bot, formatted_result, format_messages_for_log(@context_manager.current_view))
           end
 
           # Update context view for next iteration
           context_view = @context_manager.current_view
-
-          # Log tool interaction
-          @logger.log_message(:bot, "Tool calls: #{tool_calls.size}", format_messages_for_log(context_view))
         else
           # No content and no tool calls - shouldn't happen, but handle it
           response_text = ""
-          @context_manager.handle_bot_message(response_text)
+          @context_manager.handle_bot_message(response_text, check_consolidation: false)
+
+          # Check consolidation now that the turn is complete
+          @context_manager.check_and_consolidate
+
           on_response.try(&.call(response_text))
           break
         end

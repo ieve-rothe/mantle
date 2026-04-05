@@ -43,15 +43,17 @@ module Mantle
         "assistant"
       when "system"
         "system"
+      when "tool"
+        "tool"
       else
-        raise ArgumentError.new("Invalid role label: #{label}. Must be user, assistant, or system.")
+        raise ArgumentError.new("Invalid role label: #{label}. Must be user, assistant, system, or tool.")
       end
     end
 
     # Validate that role is one of the allowed values
     protected def validate_role(role : String)
-      unless ["user", "assistant", "system"].includes?(role)
-        raise ArgumentError.new("Invalid role: #{role}. Must be user, assistant, or system.")
+      unless ["user", "assistant", "system", "tool"].includes?(role)
+        raise ArgumentError.new("Invalid role: #{role}. Must be user, assistant, system, or tool.")
       end
     end
   end
