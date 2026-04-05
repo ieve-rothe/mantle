@@ -5,6 +5,7 @@
 # Coordinates context routing from flow to ContextStore and MemoryStore
 
 require "./app_logger"
+require "./status"
 
 module Mantle
   # Responsible for coordinating context and memory.
@@ -68,7 +69,6 @@ module Mantle
       @context_store.add_message("Assistant", processed_msg)
 
       if check_consolidation && @context_store.current_num_messages >= @msg_hardmax
-        Mantle::Log.info { "Running memory consolidation, please wait..." }
         consolidate_memory
       end
 
@@ -81,7 +81,6 @@ module Mantle
       @context_store.add_message(role, content)
 
       if check_consolidation && @context_store.current_num_messages >= @msg_hardmax
-        Mantle::Log.info { "Running memory consolidation, please wait..." }
         consolidate_memory
       end
     end
@@ -89,14 +88,17 @@ module Mantle
     # Manually trigger consolidation check (for use at turn boundaries)
     def check_and_consolidate
       if @context_store.current_num_messages >= @msg_hardmax
-        Mantle::Log.info { "Running memory consolidation, please wait..." }
         consolidate_memory
       end
     end
 
     def consolidate_memory
+      Mantle::Status.add(:memory_consolidation)
       # If we're at msg_hardmax, prune msg_hardmax - msg_target messages from context_store using the .prune method, then we pump those messages into memory_store.ingest()
       num_to_prune = @msg_hardmax - @msg_target
+
+      Mantle::Log.info { "Context hit size #{@context_store.current_num_messages} (threshold: #{@msg_hardmax}). Consolidating Context -> Memory. Target context size: #{@msg_target}. Pruning #{num_to_prune} messages." }
+
       if num_to_prune == nil || num_to_prune <= 1
         # Error, num_to_prune not valid
         Mantle::Log.error { "Tried to prune context by an invalid number of messages." }

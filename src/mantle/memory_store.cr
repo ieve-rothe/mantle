@@ -6,6 +6,7 @@
 
 require "json"
 require "./app_logger"
+require "./status"
 
 module Mantle
   # Maybe write a base class once we have an implementation for Layered and then are going to add another type of memorystore
@@ -105,6 +106,11 @@ module Mantle
         if @layers[target_layer_index].size >= @layer_capacity
           Mantle::Log.warn { "Layer #{target_layer_index} still at capacity after consolidation" }
           return
+        end
+
+        if current_layer_index != -1
+          Mantle::Status.add(:memory_consolidation)
+          Mantle::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_capacity}). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_target}." }
         end
 
         chunk = source.first(chunk_size)
