@@ -12,7 +12,32 @@ LOG_FILE     = "examples/test_log.txt"
   File.delete(file) if File.exists?(file)
 end
 
-# 2. Initialize Components
+# 2. Configure Logging
+# The consumer application configures the `mantle` logger source
+APP_LOG_FILE = "examples/test_app_log.txt"
+File.delete(APP_LOG_FILE) if File.exists?(APP_LOG_FILE)
+
+::Log.setup do |c|
+  # We want a timestamped format for our application log
+  formatter = ::Log::Formatter.new do |entry, io|
+    io << entry.timestamp.to_utc.to_s("%Y-%m-%d %H:%M:%S")
+    io << " [" << entry.severity.label << "] "
+    io << entry.source << ": "
+    io << entry.message
+  end
+
+  # Setup an IO backend writing to the app log file
+  backend = ::Log::IOBackend.new(io: File.new(APP_LOG_FILE, "a"), formatter: formatter)
+
+  # Bind the mantle logger to info level using our file backend
+  c.bind("mantle", :info, backend)
+
+  # Also print warnings and errors to stdout so the user sees them
+  stdout_backend = ::Log::IOBackend.new(io: STDOUT)
+  c.bind("mantle", :warn, stdout_backend)
+end
+
+# 3. Initialize Components
 model_config = Mantle::ModelConfig.new(
   model_name: "gpt-oss:20b",
   stream: false,
@@ -49,15 +74,21 @@ context_manager = Mantle::ContextManager.new(
   strip_thinking_tags: true  # Strip <think></think> blocks from model responses
 )
 
-# 3. Build the Flow
+# 4. Build the Flow
 flow = Mantle::ChatFlow.new(
   context_manager: context_manager,
   client: client,
   logger: logger
 )
 
-# 4. Execute a single turn
+# 5. Execute a single turn
 puts "--- Starting Test Turn ---"
+
+# Print status flags if any occurred during setup (e.g., :new_context_file)
+if Mantle::Status.has?(:new_context_file)
+  puts "NOTICE: A fresh context file was created."
+  Mantle::Status.remove(:new_context_file)
+end
 input_text = "Hello! Are you running correctly?"
 
 flow.run(
@@ -68,19 +99,25 @@ flow.run(
   }
 )
 
-# 5. Verify the Context was updated
+# 6. Verify the Context was updated
 puts "\n--- Final Context State ---"
 puts context_store.current_view
 
-# 6. Run multiple turns to cause memory to update
+# 7. Run multiple turns to cause memory to update
 puts "--- Starting Multi-Test Turn ---"
 13.times do
   input_text = "Testing. Is it still working?"
-    flow.run(
+  flow.run(
     msg: input_text,
     on_response: ->(msg : String) {
       puts "User: #{input_text}"
       puts "Bot: #{msg}"
     }
-    )
+  )
+
+  # Consumer UI can watch Mantle::Status to know when background tasks occur
+  if Mantle::Status.has?(:memory_consolidation)
+    puts "UI UPDATE: Memory consolidation is currently running in the background..."
+    Mantle::Status.remove(:memory_consolidation)
+  end
 end
