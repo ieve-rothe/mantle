@@ -8,7 +8,7 @@ squishifier = ->(messages : Array(String)) : String {
 }
 
 file_path = "benchmarks/test_memory.json"
-FileUtils.rm_f(file_path)
+FileUtils.rm_rf(file_path)
 
 # Parameters to trigger many cascades and writes
 # capacity=10, target=2 => ingest_step_size=8
@@ -71,4 +71,4 @@ Benchmark.bm do |x|
   end
 end
 
-FileUtils.rm_f(file_path)
+FileUtils.rm_rf(file_path)
