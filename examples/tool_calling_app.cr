@@ -69,7 +69,7 @@ puts
 
 # Setup Mantle components
 model_config = Mantle::ModelConfig.new(
-  "gpt-oss:20b",                    # model_name
+  "gemma4:e2b",                    # model_name
   false,                            # stream
   0.7,                              # temperature
   0.9,                              # top_p
