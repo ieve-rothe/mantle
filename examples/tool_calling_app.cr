@@ -115,14 +115,17 @@ flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
 builtin_config = Mantle::BuiltinToolConfig.new(
   working_directory: Dir.current,
   allowed_paths: [Dir.current, "/tmp"],
-  notify_icon: File.expand_path("../assets/icon.png", __DIR__)
+  notify_icon: File.expand_path("../assets/icon.png", __DIR__),
+  autonomous_zone_paths: [File.join(Dir.current, "examples", "sandbox")],
+  file_backup_count: 3
 )
 
 # Define which tools are available
 builtins = [
   Mantle::BuiltinTool::ReadFile,
   Mantle::BuiltinTool::ListDirectory,
-  Mantle::BuiltinTool::NotifySend
+  Mantle::BuiltinTool::NotifySend,
+  Mantle::BuiltinTool::WriteFile
 ]
 
 custom_tools = [
@@ -219,6 +222,15 @@ puts "[Turn 9] Notify Send Example"
 puts "-" * 70
 flow.run(
   "Send me a desktop notification telling me the summary is complete.",
+  builtins: builtins,
+  builtin_config: builtin_config,
+  on_response: display_response
+)
+
+puts "[Turn 10] Write File Example"
+puts "-" * 70
+flow.run(
+  "Please write a small text file saying 'Hello from Mantle tools!' in the examples/sandbox folder.",
   builtins: builtins,
   builtin_config: builtin_config,
   on_response: display_response
