@@ -17,16 +17,17 @@ module Mantle
   # Handles both built-in tools (via BuiltinToolExecutor) and custom tools (via callback)
   class ToolExecutor
     # List of built-in tool names for routing
-    BUILTIN_TOOL_NAMES = ["read_file", "list_directory"]
+    BUILTIN_TOOL_NAMES = ["read_file", "list_directory", "notify_send"]
 
     @builtin_executor : BuiltinToolExecutor?
     @custom_callback : Proc(String, Hash(String, JSON::Any), String)?
 
     def initialize(
       builtin_config : BuiltinToolConfig?,
-      @custom_callback : Proc(String, Hash(String, JSON::Any), String)?
+      @custom_callback : Proc(String, Hash(String, JSON::Any), String)?,
+      bot_name : String = "Assistant"
     )
-      @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config) : nil
+      @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config, bot_name) : nil
     end
 
     # Execute all tool calls and return their results

@@ -92,7 +92,7 @@ module Mantle
       tool_names = all_tools ? all_tools.map { |t| t.function.name } : nil
 
       # Create tool executor
-      tool_executor = ToolExecutor.new(builtin_config, tool_callback)
+      tool_executor = ToolExecutor.new(builtin_config, tool_callback, @context_manager.bot_name)
 
       # Tool call loop
       iteration = 0
