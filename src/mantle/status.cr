@@ -21,7 +21,7 @@ module Mantle
     # Add a status flag to the bucket.
     def self.add(flag : Symbol)
       @@flags.add(flag)
-      emit_status(flag)
+      Mantle.emit_status(flag)
     end
 
     # Check if a status flag exists in the bucket.
