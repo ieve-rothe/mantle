@@ -73,10 +73,11 @@ describe "Mantle Built-in Tools" do
         tools = Mantle::BuiltinToolRegistry.all_definitions
 
         tools.should be_a(Array(Mantle::Tool))
-        tools.size.should eq(2)
+        tools.size.should eq(3)
         tool_names = tools.map { |t| t.function.name }
         tool_names.should contain("read_file")
         tool_names.should contain("list_directory")
+        tool_names.should contain("notify_send")
       end
     end
 
@@ -84,13 +85,15 @@ describe "Mantle Built-in Tools" do
       it "returns definitions for multiple built-in tools" do
         tools = Mantle::BuiltinToolRegistry.definitions_for([
           Mantle::BuiltinTool::ReadFile,
-          Mantle::BuiltinTool::ListDirectory
+          Mantle::BuiltinTool::ListDirectory,
+          Mantle::BuiltinTool::NotifySend
         ])
 
-        tools.size.should eq(2)
+        tools.size.should eq(3)
         tool_names = tools.map { |t| t.function.name }
         tool_names.should contain("read_file")
         tool_names.should contain("list_directory")
+        tool_names.should contain("notify_send")
       end
 
       it "returns empty array for empty input" do

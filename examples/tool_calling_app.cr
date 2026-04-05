@@ -114,13 +114,15 @@ flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
 # Configure built-in tool access
 builtin_config = Mantle::BuiltinToolConfig.new(
   working_directory: Dir.current,
-  allowed_paths: [Dir.current, "/tmp"]
+  allowed_paths: [Dir.current, "/tmp"],
+  notify_icon: File.expand_path("../assets/icon.png", __DIR__)
 )
 
 # Define which tools are available
 builtins = [
   Mantle::BuiltinTool::ReadFile,
-  Mantle::BuiltinTool::ListDirectory
+  Mantle::BuiltinTool::ListDirectory,
+  Mantle::BuiltinTool::NotifySend
 ]
 
 custom_tools = [
@@ -210,6 +212,15 @@ puts "[Turn 8] Final question about consolidation"
 puts "-" * 70
 flow.run(
   "Can you summarize what we've discussed so far?",
+  on_response: display_response
+)
+
+puts "[Turn 9] Notify Send Example"
+puts "-" * 70
+flow.run(
+  "Send me a desktop notification telling me the summary is complete.",
+  builtins: builtins,
+  builtin_config: builtin_config,
   on_response: display_response
 )
 

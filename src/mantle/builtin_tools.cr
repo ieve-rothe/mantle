@@ -7,6 +7,7 @@ module Mantle
   enum BuiltinTool
     ReadFile
     ListDirectory
+    NotifySend
   end
 
   # Registry that provides tool definitions for built-in tools
@@ -19,6 +20,8 @@ module Mantle
         read_file_definition
       when BuiltinTool::ListDirectory
         list_directory_definition
+      when BuiltinTool::NotifySend
+        notify_send_definition
       else
         raise "Unknown builtin tool: #{builtin}"
       end
@@ -71,6 +74,24 @@ module Mantle
         )
       )
     end
+
+    private def self.notify_send_definition : Tool
+      Tool.new(
+        function: FunctionDefinition.new(
+          name: "notify_send",
+          description: "Send a desktop notification to the user",
+          parameters: ParametersSchema.new(
+            properties: {
+              "message" => PropertyDefinition.new(
+                type: "string",
+                description: "The message content of the notification"
+              )
+            },
+            required: ["message"]
+          )
+        )
+      )
+    end
   end
 
   # Configuration for built-in tool execution safety
@@ -78,8 +99,9 @@ module Mantle
   class BuiltinToolConfig
     property working_directory : String
     property allowed_paths : Array(String)?
+    property notify_icon : String?
 
-    def initialize(@working_directory : String, @allowed_paths : Array(String)? = nil)
+    def initialize(@working_directory : String, @allowed_paths : Array(String)? = nil, @notify_icon : String? = nil)
     end
   end
 
@@ -87,8 +109,9 @@ module Mantle
   # Validates all file system access against allowed paths
   class BuiltinToolExecutor
     @config : BuiltinToolConfig
+    @bot_name : String
 
-    def initialize(@config : BuiltinToolConfig)
+    def initialize(@config : BuiltinToolConfig, @bot_name : String = "Assistant")
     end
 
     # Execute a built-in tool by name with given arguments
@@ -99,6 +122,8 @@ module Mantle
         execute_read_file(arguments)
       when "list_directory"
         execute_list_directory(arguments)
+      when "notify_send"
+        execute_notify_send(arguments)
       else
         {error: "Unknown built-in tool: #{tool_name}"}.to_json
       end
@@ -146,6 +171,32 @@ module Mantle
         {success: true, entries: entries}.to_json
       rescue ex
         {error: "Error listing directory: #{ex.message}"}.to_json
+      end
+    end
+
+    private def execute_notify_send(arguments : Hash(String, JSON::Any)) : String
+      message = arguments["message"]?.try(&.as_s?)
+
+      unless message
+        return {error: "Missing required parameter: message"}.to_json
+      end
+
+      # Build notify-send arguments
+      args = [@bot_name, message]
+
+      if icon = @config.notify_icon
+        args << "--icon=#{icon}"
+      end
+
+      begin
+        status = Process.run("notify-send", args)
+        if status.success?
+          {success: true, message: "Notification sent successfully"}.to_json
+        else
+          {error: "Error sending notification. Exit code: #{status.exit_code}"}.to_json
+        end
+      rescue ex
+        {error: "Error executing notify-send: #{ex.message}"}.to_json
       end
     end
 
