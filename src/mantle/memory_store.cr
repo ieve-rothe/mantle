@@ -116,7 +116,6 @@ module Mantle
           source.shift(chunk_size) # Remove messages that we squished
           timestamp = Time.utc.to_s("%Y-%m-%d %H:%M")
           @layers[target_layer_index] << "[#{timestamp}] #{summary}"
-          save_memories_to_json
 
           # Recalculate chunk_size for next iteration (only matters for layer -1)
           chunk_size = current_layer_index == -1 ? source.size : @ingest_step_size
@@ -125,6 +124,8 @@ module Mantle
           return
         end
       end
+
+      save_memories_to_json
 
       # After processing all source items from ingest_pending, check if Layer 0 needs consolidation
       # (This handles the case where we filled it to capacity but have no more items to add)
