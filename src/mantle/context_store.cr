@@ -33,6 +33,10 @@ module Mantle
       # Implement in specific class.
     end
 
+    def clear
+      # Implement in specific class.
+    end
+
     # Normalize label to valid chat role
     protected def normalize_role(label : String) : String
       normalized = label.downcase
@@ -80,6 +84,11 @@ module Mantle
       @messages << {"role" => role, "content" => message}
       @messages.shift if @messages.size > @messages_to_keep
       @current_num_messages = @messages.size
+    end
+
+    def clear
+      @messages.clear
+      @current_num_messages = 0
     end
   end
 
@@ -157,6 +166,12 @@ module Mantle
       @current_num_messages = @messages.size
       save_context_to_json
       return pruned_messages
+    end
+
+    def clear
+      @messages.clear
+      @current_num_messages = 0
+      save_context_to_json
     end
   end
 end
