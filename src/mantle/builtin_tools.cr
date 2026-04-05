@@ -8,6 +8,7 @@ module Mantle
     ReadFile
     ListDirectory
     NotifySend
+    WriteFile
   end
 
   # Registry that provides tool definitions for built-in tools
@@ -22,6 +23,8 @@ module Mantle
         list_directory_definition
       when BuiltinTool::NotifySend
         notify_send_definition
+      when BuiltinTool::WriteFile
+        write_file_definition
       else
         raise "Unknown builtin tool: #{builtin}"
       end
@@ -52,6 +55,28 @@ module Mantle
               )
             },
             required: ["file_path"]
+          )
+        )
+      )
+    end
+
+    private def self.write_file_definition : Tool
+      Tool.new(
+        function: FunctionDefinition.new(
+          name: "write_file",
+          description: "Write content to a file at the specified path",
+          parameters: ParametersSchema.new(
+            properties: {
+              "file_path" => PropertyDefinition.new(
+                type: "string",
+                description: "Path to the file to write"
+              ),
+              "content" => PropertyDefinition.new(
+                type: "string",
+                description: "Content to write to the file"
+              )
+            },
+            required: ["file_path", "content"]
           )
         )
       )
@@ -100,8 +125,16 @@ module Mantle
     property working_directory : String
     property allowed_paths : Array(String)?
     property notify_icon : String?
+    property autonomous_zone_paths : Array(String)?
+    property file_backup_count : Int32
 
-    def initialize(@working_directory : String, @allowed_paths : Array(String)? = nil, @notify_icon : String? = nil)
+    def initialize(
+      @working_directory : String,
+      @allowed_paths : Array(String)? = nil,
+      @notify_icon : String? = nil,
+      @autonomous_zone_paths : Array(String)? = nil,
+      @file_backup_count : Int32 = 3
+    )
     end
   end
 
@@ -124,8 +157,79 @@ module Mantle
         execute_list_directory(arguments)
       when "notify_send"
         execute_notify_send(arguments)
+      when "write_file"
+        execute_write_file(arguments)
       else
         {error: "Unknown built-in tool: #{tool_name}"}.to_json
+      end
+    end
+
+    private def execute_write_file(arguments : Hash(String, JSON::Any)) : String
+      file_path = arguments["file_path"]?.try(&.as_s?)
+      content = arguments["content"]?.try(&.as_s?)
+
+      unless file_path
+        return {error: "Missing required parameter: file_path"}.to_json
+      end
+
+      unless content
+        return {error: "Missing required parameter: content"}.to_json
+      end
+
+      unless @config.autonomous_zone_paths
+        return {error: "Writing files is not configured (no autonomous zone specified)"}.to_json
+      end
+
+      absolute_path = resolve_path(file_path)
+
+      unless path_in_autonomous_zone?(absolute_path)
+        return {error: "Access to path not allowed (outside autonomous zone): #{absolute_path}"}.to_json
+      end
+
+      begin
+        # Ensure the parent directory exists
+        Dir.mkdir_p(File.dirname(absolute_path))
+
+        # Create a backup if the file already exists
+        if File.exists?(absolute_path)
+          create_file_backup(absolute_path)
+        end
+
+        # Write the file
+        File.write(absolute_path, content)
+        {success: true, message: "File written successfully."}.to_json
+      rescue ex
+        {error: "Error writing file: #{ex.message}"}.to_json
+      end
+    end
+
+    private def create_file_backup(absolute_path : String)
+      # Create new backup
+      timestamp = Time.utc.to_s("%Y%m%d%H%M%S")
+      backup_path = "#{absolute_path}.#{timestamp}.bak"
+      File.copy(absolute_path, backup_path)
+
+      # Rotate old backups
+      backup_limit = @config.file_backup_count
+
+      # Find all backups for this file
+      dir = File.dirname(absolute_path)
+      filename = File.basename(absolute_path)
+
+      # Use Dir.children instead of Dir.glob to safely handle special characters in paths
+      if Dir.exists?(dir)
+        backups = Dir.children(dir)
+          .select { |f| f.starts_with?("#{filename}.") && f.ends_with?(".bak") }
+          .map { |f| File.join(dir, f) }
+          .sort
+
+        # If we have more backups than the limit, delete the oldest ones
+        if backups.size > backup_limit
+          backups_to_delete = backups.size - backup_limit
+          backups[0, backups_to_delete].each do |old_backup|
+            File.delete(old_backup) if File.exists?(old_backup)
+          end
+        end
       end
     end
 
@@ -208,6 +312,17 @@ module Mantle
       else
         # Relative to working directory
         File.expand_path(path, @config.working_directory)
+      end
+    end
+
+    # Check if a path is within the autonomous zone
+    private def path_in_autonomous_zone?(absolute_path : String) : Bool
+      if zone_paths = @config.autonomous_zone_paths
+        zone_paths.any? do |zone_path|
+          is_subpath?(absolute_path, zone_path)
+        end
+      else
+        false
       end
     end
 
