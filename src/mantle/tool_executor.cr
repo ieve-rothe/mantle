@@ -31,9 +31,9 @@ module Mantle
 
     # Execute all tool calls and return their results
     # Routes each call to either built-in executor or custom callback
-    def execute_all(tool_calls : Array(ToolCall)) : Array(ToolResult)
+    def execute_all(tool_calls : Array(ToolCall), available_tool_names : Array(String)? = nil) : Array(ToolResult)
       tool_calls.map do |call|
-        result_json = execute_single(call)
+        result_json = execute_single(call, available_tool_names)
         ToolResult.new(
           tool_call_id: call.id,
           result: result_json
@@ -42,7 +42,7 @@ module Mantle
     end
 
     # Execute a single tool call
-    private def execute_single(tool_call : ToolCall) : String
+    private def execute_single(tool_call : ToolCall, available_tool_names : Array(String)?) : String
       function_name = tool_call.function.name
       arguments_json = tool_call.function.arguments
 
@@ -57,7 +57,7 @@ module Mantle
       if is_builtin_tool?(function_name)
         execute_builtin(function_name, arguments)
       else
-        execute_custom(function_name, arguments)
+        execute_custom(function_name, arguments, available_tool_names)
       end
     end
 
@@ -76,7 +76,7 @@ module Mantle
     end
 
     # Execute a custom tool via callback
-    private def execute_custom(name : String, arguments : Hash(String, JSON::Any)) : String
+    private def execute_custom(name : String, arguments : Hash(String, JSON::Any), available_tool_names : Array(String)?) : String
       if callback = @custom_callback
         begin
           callback.call(name, arguments)
@@ -84,7 +84,13 @@ module Mantle
           {error: "Custom tool #{name} failed: #{ex.message}"}.to_json
         end
       else
-        {error: "Unknown tool '#{name}' - not a built-in tool and no custom tool handler provided"}.to_json
+        error_msg = "Unknown tool '#{name}'."
+        if available_tool_names && !available_tool_names.empty?
+          error_msg += " Available tools: #{available_tool_names.join(", ")}"
+        else
+          error_msg += " No tools are currently available."
+        end
+        {error: error_msg}.to_json
       end
     end
   end

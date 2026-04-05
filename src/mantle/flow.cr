@@ -88,6 +88,9 @@ module Mantle
       # Merge tool definitions
       all_tools = merge_tools(builtins, custom_tools)
 
+      # Extract tool names for error messages
+      tool_names = all_tools ? all_tools.map { |t| t.function.name } : nil
+
       # Create tool executor
       tool_executor = ToolExecutor.new(builtin_config, tool_callback)
 
@@ -133,7 +136,7 @@ module Mantle
           end
 
           # Execute tools
-          tool_results = tool_executor.execute_all(tool_calls)
+          tool_results = tool_executor.execute_all(tool_calls, tool_names)
 
           # Add tool results to context with 'tool' role (defer consolidation)
           tool_results.each do |result|
