@@ -17,7 +17,7 @@ module Mantle
   class ToolCallFunction
     include JSON::Serializable
 
-    property name : String      # Function name (e.g., "read_file")
+    property name : String # Function name (e.g., "read_file")
 
     # Custom converter to handle both string and object formats for arguments
     # OpenAI format: arguments as JSON string
@@ -54,13 +54,13 @@ module Mantle
   class ToolCall
     include JSON::Serializable
 
-    property id : String                      # Unique identifier for this tool call
+    property id : String # Unique identifier for this tool call
 
     # Type field defaults to "function" since some APIs (e.g., Ollama) omit it
     @[JSON::Field(emit_null: false)]
-    property type : String = "function"       # Always "function" for function tools
+    property type : String = "function" # Always "function" for function tools
 
-    property function : ToolCallFunction      # The function to call
+    property function : ToolCallFunction # The function to call
 
     def initialize(@id : String, @function : ToolCallFunction, @type : String = "function")
     end
@@ -72,10 +72,16 @@ module Mantle
     include JSON::Serializable
 
     @[JSON::Field(emit_null: false)]
-    property content : String?              # Text response content (if any)
+    property content : String? # Text response content (if any)
 
     @[JSON::Field(emit_null: false)]
     property tool_calls : Array(ToolCall)? # Tool calls requested (if any)
+
+    @[JSON::Field(ignore: true)]
+    property raw_request : String?
+
+    @[JSON::Field(ignore: true)]
+    property raw_response : String?
 
     def initialize(@content : String?, @tool_calls : Array(ToolCall)?)
     end
@@ -153,7 +159,10 @@ module Mantle
                        nil
                      end
 
-        return Response.new(content: content, tool_calls: tool_calls)
+        return Response.new(content: content, tool_calls: tool_calls).tap do |r|
+          r.raw_request = body
+          r.raw_response = response.body
+        end
       else
         raise Exception.new("Error #{response.status_code}: #{response.body}")
       end

@@ -75,6 +75,10 @@ class DummyLogger < Mantle::Logger
     name = role == :user ? @user_name : @bot_name
     @last_message = "#{role} #{name} #{message}"
   end
+
+  def log_api_payloads(request : String, response : String)
+    # No-op for tests
+  end
 end
 
 ####

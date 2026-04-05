@@ -30,6 +30,12 @@ module Mantle
     # - `message`: The actual message content
     # - `context`: The full conversation context at this point
     abstract def log_message(role : Symbol, message : String, context : String)
+
+    # Logs the raw API payload for request and response
+    #
+    # - `request`: The raw JSON string sent to the model
+    # - `response`: The raw JSON string returned by the model
+    abstract def log_api_payloads(request : String, response : String)
   end
 
   # Concrete logger to write formatted messages to log file
@@ -71,6 +77,11 @@ module Mantle
     def log_message(role : Symbol, message : String, context : String)
       name = role == :user ? @user_name : @bot_name
       log(name, message)
+    end
+
+    # Default implementation for FileLogger does not log payloads
+    def log_api_payloads(request : String, response : String)
+      # No-op
     end
 
     # ---
@@ -128,8 +139,10 @@ module Mantle
     property context_log_file : String
     property last_user_message_file : String
     property last_bot_message_file : String
+    property last_request_file : String?
+    property last_response_file : String?
 
-    def initialize(@log_file : String, @context_log_file : String, @last_user_message_file : String, @last_bot_message_file : String, user_name : String, bot_name : String)
+    def initialize(@log_file : String, @context_log_file : String, @last_user_message_file : String, @last_bot_message_file : String, user_name : String, bot_name : String, @last_request_file : String? = nil, @last_response_file : String? = nil)
       super(@log_file, user_name, bot_name)
     end
 
@@ -155,6 +168,14 @@ module Mantle
       end
     rescue ex
       puts "DetailedLogger failed to write: #{ex.message}"
+    end
+
+    # Logs the raw API payload for request and response to specific files
+    def log_api_payloads(request : String, response : String)
+      File.write(@last_request_file.not_nil!, request, mode: "w") if @last_request_file
+      File.write(@last_response_file.not_nil!, response, mode: "w") if @last_response_file
+    rescue ex
+      puts "DetailedLogger failed to write payloads: #{ex.message}"
     end
   end
 end
