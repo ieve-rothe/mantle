@@ -104,12 +104,13 @@ describe "Mantle Built-in Tools" do
         tools = Mantle::BuiltinToolRegistry.all_definitions
 
         tools.should be_a(Array(Mantle::Tool))
-        tools.size.should eq(4)
+        tools.size.should eq(5)
         tool_names = tools.map { |t| t.function.name }
         tool_names.should contain("read_file")
         tool_names.should contain("list_directory")
         tool_names.should contain("notify_send")
         tool_names.should contain("write_file")
+        tool_names.should contain("search_codebase")
       end
     end
 
@@ -485,6 +486,76 @@ describe "Mantle Built-in Tools" do
         )
 
         result.should contain("error")
+      end
+    end
+
+    describe "search_codebase" do
+      it "returns missing query error" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "search_codebase",
+          {} of String => JSON::Any
+        )
+
+        result.should contain("error")
+        result.should contain("Missing required parameter")
+      end
+
+      it "searches inside working directory successfully" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        # Write test files
+        File.write("#{temp_dir}/search_target.txt", "line1\nline2 has MATCH\nline3")
+
+        result = executor.execute(
+          "search_codebase",
+          {"query" => JSON::Any.new("MATCH")}
+        )
+
+        result.should contain("success")
+        result.should contain("search_target.txt:2")
+      end
+
+      it "rejects search in unauthorized directory" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "search_codebase",
+          {
+            "query" => JSON::Any.new("restricted"),
+            "directory_path" => JSON::Any.new(outside_dir)
+          }
+        )
+
+        result.should contain("error")
+        result.should contain("not allowed")
+      end
+
+      it "truncates output to 10 lines max" do
+        # Clear out temp_dir specifically for this test so we know exactly how many matches there are
+        empty_dir = File.join(temp_dir, "empty_search_dir")
+        Dir.mkdir_p(empty_dir)
+
+        config = Mantle::BuiltinToolConfig.new(working_directory: empty_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        content = String.build do |io|
+          20.times { |i| io.puts "Line #{i} has MATCH" }
+        end
+        File.write("#{empty_dir}/many_matches.txt", content)
+
+        result = executor.execute(
+          "search_codebase",
+          {"query" => JSON::Any.new("MATCH")}
+        )
+
+        result.should contain("success")
+        result.should contain("warning")
+        result.should contain("Results truncated from 20 to 10")
       end
     end
 

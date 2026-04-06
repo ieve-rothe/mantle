@@ -17,7 +17,7 @@ module Mantle
   # Handles both built-in tools (via BuiltinToolExecutor) and custom tools (via callback)
   class ToolExecutor
     # List of built-in tool names for routing
-    BUILTIN_TOOL_NAMES = ["read_file", "list_directory", "notify_send", "write_file"]
+    BUILTIN_TOOL_NAMES = ["read_file", "list_directory", "notify_send", "write_file", "search_codebase"]
 
     @builtin_executor : BuiltinToolExecutor?
     @custom_callback : Proc(String, Hash(String, JSON::Any), String)?
