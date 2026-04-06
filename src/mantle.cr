@@ -10,6 +10,7 @@ require "./mantle/memory_store"
 require "./mantle/squishifiers"
 require "./mantle/client"
 require "./mantle/logger"
+require "./mantle/markdown_formatter"
 
 module Mantle
   VERSION = "0.1.0"
