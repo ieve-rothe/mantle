@@ -150,11 +150,7 @@ module Mantle
     def prune(num_to_prune : Int32) : Array(Hash(String, String))
       pruned_messages = [] of Hash(String, String)
 
-      if num_to_prune > @current_num_messages
-        count = @current_num_messages
-      else
-        count = num_to_prune
-      end
+      count = [num_to_prune, @current_num_messages].min
 
       count.times do
         pruned_messages << @messages.shift
