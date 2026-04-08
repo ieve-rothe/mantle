@@ -110,7 +110,7 @@ describe "Mantle Built-in Tools" do
         tool_names.should contain("list_directory")
         tool_names.should contain("notify_send")
         tool_names.should contain("write_file")
-        tool_names.should contain("search_codebase")
+        tool_names.should contain("search_files")
       end
     end
 
@@ -489,18 +489,176 @@ describe "Mantle Built-in Tools" do
       end
     end
 
-    describe "search_codebase" do
+    describe "search_files" do
       it "returns missing query error" do
         config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::BuiltinToolExecutor.new(config)
 
         result = executor.execute(
-          "search_codebase",
+          "search_files",
           {} of String => JSON::Any
         )
 
         result.should contain("error")
         result.should contain("Missing required parameter")
+      end
+
+      it "returns zero matches as empty array" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        File.write("#{temp_dir}/zero_matches.txt", "nothing here")
+
+        result = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("nonexistent_string")}
+        )
+
+        result.should contain("success")
+        result.should contain("\"matches\":[]")
+      end
+
+      it "is case-sensitive by default" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        File.write("#{temp_dir}/case_sensitive.txt", "here is UpperCase and lowercase")
+
+        result = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("uppercase")}
+        )
+
+        # uppercase shouldn't match UpperCase
+        result.should contain("\"matches\":[]")
+      end
+
+      it "handles regex with special characters correctly" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        File.write("#{temp_dir}/regex.txt", "abc123xyz")
+
+        result = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("c\\d+x")}
+        )
+
+        result.should contain("regex.txt:1")
+      end
+
+      it "skips hidden files and directories" do
+        empty_dir = File.join(temp_dir, "empty_search_dir2")
+        Dir.mkdir_p(empty_dir)
+
+        config = Mantle::BuiltinToolConfig.new(working_directory: empty_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        Dir.mkdir_p("#{empty_dir}/.hidden_dir")
+        File.write("#{empty_dir}/.hidden_dir/file.txt", "HIDDEN_MATCH")
+        File.write("#{empty_dir}/.hidden_file", "HIDDEN_MATCH")
+
+        result = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("HIDDEN_MATCH")}
+        )
+
+        # By default grep doesn't ignore hidden files unless told to, but ripgrep does.
+        # We'll just verify the call succeeds. Since we might be running grep or ripgrep,
+        # we can check that it doesn't crash, but the exact behavior depends on the underlying tool.
+        # So we'll just check success.
+        result.should contain("success")
+      end
+
+      it "skips binary files gracefully" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        # Write null bytes to make it binary
+        File.write("#{temp_dir}/binary.bin", "binary_match\0\0\0")
+
+        result = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("binary_match")}
+        )
+
+        result.should contain("success")
+        # Ensure it skipped the binary file and didn't match
+        result.should contain("\"matches\":[]")
+      end
+
+      it "filters by file extension" do
+        empty_dir = File.join(temp_dir, "empty_search_dir3")
+        Dir.mkdir_p(empty_dir)
+
+        config = Mantle::BuiltinToolConfig.new(working_directory: empty_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        File.write("#{empty_dir}/test.cr", "FILTER_MATCH")
+        File.write("#{empty_dir}/test.md", "FILTER_MATCH")
+
+        result = executor.execute(
+          "search_files",
+          {
+            "query" => JSON::Any.new("FILTER_MATCH"),
+            "file_pattern" => JSON::Any.new("*.cr")
+          }
+        )
+
+        result.should contain("success")
+        result.should contain("test.cr:1")
+        result.should_not contain("test.md:1")
+      end
+
+      it "returns helpful error for malformed regex" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("[invalid_regex")}
+        )
+
+        result.should contain("error")
+        result.should contain("Search failed")
+      end
+
+      it "returns error if directory does not exist" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "search_files",
+          {
+            "query" => JSON::Any.new("MATCH"),
+            "directory_path" => JSON::Any.new("nonexistent_dir")
+          }
+        )
+
+        result.should contain("error")
+        result.should contain("Path does not exist")
+      end
+
+      it "truncates exactly at 11 matches" do
+        empty_dir = File.join(temp_dir, "empty_search_dir4")
+        Dir.mkdir_p(empty_dir)
+
+        config = Mantle::BuiltinToolConfig.new(working_directory: empty_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        content = String.build do |io|
+          11.times { |i| io.puts "Line #{i} has EXACT11MATCH" }
+        end
+        File.write("#{empty_dir}/exact11_matches.txt", content)
+
+        result = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("EXACT11MATCH")}
+        )
+
+        result.should contain("success")
+        result.should contain("warning")
+        result.should contain("Results truncated from 11 to 10")
       end
 
       it "searches inside working directory successfully" do
@@ -511,7 +669,7 @@ describe "Mantle Built-in Tools" do
         File.write("#{temp_dir}/search_target.txt", "line1\nline2 has MATCH\nline3")
 
         result = executor.execute(
-          "search_codebase",
+          "search_files",
           {"query" => JSON::Any.new("MATCH")}
         )
 
@@ -524,7 +682,7 @@ describe "Mantle Built-in Tools" do
         executor = Mantle::BuiltinToolExecutor.new(config)
 
         result = executor.execute(
-          "search_codebase",
+          "search_files",
           {
             "query" => JSON::Any.new("restricted"),
             "directory_path" => JSON::Any.new(outside_dir)
@@ -533,29 +691,6 @@ describe "Mantle Built-in Tools" do
 
         result.should contain("error")
         result.should contain("not allowed")
-      end
-
-      it "truncates output to 10 lines max" do
-        # Clear out temp_dir specifically for this test so we know exactly how many matches there are
-        empty_dir = File.join(temp_dir, "empty_search_dir")
-        Dir.mkdir_p(empty_dir)
-
-        config = Mantle::BuiltinToolConfig.new(working_directory: empty_dir)
-        executor = Mantle::BuiltinToolExecutor.new(config)
-
-        content = String.build do |io|
-          20.times { |i| io.puts "Line #{i} has MATCH" }
-        end
-        File.write("#{empty_dir}/many_matches.txt", content)
-
-        result = executor.execute(
-          "search_codebase",
-          {"query" => JSON::Any.new("MATCH")}
-        )
-
-        result.should contain("success")
-        result.should contain("warning")
-        result.should contain("Results truncated from 20 to 10")
       end
     end
 

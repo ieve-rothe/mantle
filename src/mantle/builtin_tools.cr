@@ -9,7 +9,7 @@ module Mantle
     ListDirectory
     NotifySend
     WriteFile
-    SearchCodebase
+    SearchFiles
   end
 
   # Registry that provides tool definitions for built-in tools
@@ -26,8 +26,8 @@ module Mantle
         notify_send_definition
       when BuiltinTool::WriteFile
         write_file_definition
-      when BuiltinTool::SearchCodebase
-        search_codebase_definition
+      when BuiltinTool::SearchFiles
+        search_files_definition
       else
         raise "Unknown builtin tool: #{builtin}"
       end
@@ -63,20 +63,24 @@ module Mantle
       )
     end
 
-    private def self.search_codebase_definition : Tool
+    private def self.search_files_definition : Tool
       Tool.new(
         function: FunctionDefinition.new(
-          name: "search_codebase",
-          description: "Search the codebase for a string using ripgrep or grep. Returns a heavily truncated list of matches.",
+          name: "search_files",
+          description: "Search for a string in files using ripgrep or grep. Returns a heavily truncated list of matches.",
           parameters: ParametersSchema.new(
             properties: {
               "query" => PropertyDefinition.new(
                 type: "string",
-                description: "The search string to find in the codebase."
+                description: "The search string or regex to find."
               ),
               "directory_path" => PropertyDefinition.new(
                 type: "string",
                 description: "Path to the directory to search. Defaults to current directory if not specified."
+              ),
+              "file_pattern" => PropertyDefinition.new(
+                type: "string",
+                description: "Optional glob pattern to filter files (e.g., '*.cr', '*.md')."
               ),
             },
             required: ["query"]
@@ -184,8 +188,8 @@ module Mantle
         execute_notify_send(arguments)
       when "write_file"
         execute_write_file(arguments)
-      when "search_codebase"
-        execute_search_codebase(arguments)
+      when "search_files"
+        execute_search_files(arguments)
       else
         {error: "Unknown built-in tool: #{tool_name}"}.to_json
       end
@@ -305,7 +309,7 @@ module Mantle
       end
     end
 
-    private def execute_search_codebase(arguments : Hash(String, JSON::Any)) : String
+    private def execute_search_files(arguments : Hash(String, JSON::Any)) : String
       query = arguments["query"]?.try(&.as_s)
 
       unless query
@@ -314,6 +318,7 @@ module Mantle
 
       # Default to "." (working directory) if no path provided
       dir_path = arguments["directory_path"]?.try(&.as_s) || "."
+      file_pattern = arguments["file_pattern"]?.try(&.as_s)
 
       # Resolve to absolute path
       absolute_path = resolve_path(dir_path)
@@ -324,6 +329,11 @@ module Mantle
       end
 
       begin
+        # If absolute_path exists but is a file, we want to skip directory logic and just search the file
+        unless File.exists?(absolute_path)
+          return {error: "Path does not exist: #{absolute_path}"}.to_json
+        end
+
         # Determine whether to use rg or grep
         use_rg = !Process.find_executable("rg").nil?
 
@@ -331,13 +341,35 @@ module Mantle
         error = String::Builder.new
 
         if use_rg
-          status = Process.run("rg", ["-n", "-H", "--no-heading", "--", query, absolute_path], output: output, error: error)
+          args = ["-n", "-H", "--no-heading"]
+          if file_pattern
+            args << "-g"
+            args << file_pattern
+          end
+          args << "--"
+          args << query
+          args << absolute_path
+          status = Process.run("rg", args, output: output, error: error)
         else
           # grep: -r recursive, -n line numbers, -I ignore binary files, -H with filename
-          status = Process.run("grep", ["-rnIH", "--", query, absolute_path], output: output, error: error)
+          args = ["-rnIH"]
+          if file_pattern
+            args << "--include=#{file_pattern}"
+          end
+          args << "--"
+          args << query
+          args << absolute_path
+          status = Process.run("grep", args, output: output, error: error)
         end
 
         output_str = output.to_s
+
+        # Handle process failures (like bad regex)
+        if !status.success? && status.exit_code > 1
+          err_msg = error.to_s.strip
+          err_msg = "Command failed with exit code #{status.exit_code}" if err_msg.empty?
+          return {error: "Search failed: #{err_msg}"}.to_json
+        end
 
         unless status.success? && !output_str.empty?
           # grep/rg return 1 if no lines are found
