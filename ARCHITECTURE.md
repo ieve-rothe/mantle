@@ -19,7 +19,7 @@ Mantle is a Crystal framework for abstracting LLM interactions into composable F
 
 **Responsibilities**:
 - Represents self-contained blocks of work (planning, reflection, tool execution, etc.)
-- Each flow has a `run(input, on_response)` method that assembles context, sends to client, and handles response
+- Each flow has a `run(msg : String, on_response : Proc(Mantle::Response, Nil))` method that assembles context, sends to client, and handles response
 - Coordinates between: context store (manages conversation), client (API communication), and logger (output tracking)
 
 **Design**: Uses composition over inheritance - Flow composes context_manager, client, and logger rather than inheriting functionality
@@ -74,9 +74,15 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 **Purpose**: Higher-level interface combining context and memory
 
+**Configuration Options**:
+- `msg_target`: Target context size after consolidation
+- `msg_hardmax`: Maximum context size before triggering consolidation
+- `user_name` & `bot_name`: Labels for users and agents
+- `strip_thinking_tags`: Optional flag to strip `<think>...</think>` tags from stored context
+
 **Responsibilities**:
 - Bridges ContextStore (short-term) and MemoryStore (long-term)
-- Provides `handle_user_message()` and `handle_bot_message()` convenience methods
+- Provides `handle_user_message(msg : String)` and `handle_bot_message(msg : String, check_consolidation : Bool = true)` convenience methods
 - Assembles complete context view (system prompt + memory + conversation)
 
 ---
@@ -137,16 +143,17 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 **Purpose**: Framework-provided tools with safety controls
 
 **Components**:
-- `BuiltinTool`: Enum with values `ReadFile` and `ListDirectory`
+- `BuiltinTool`: Enum with values `ReadFile`, `ListDirectory`, `NotifySend`, and `WriteFile`
 - `BuiltinToolRegistry`: Maps enum values to Tool definitions
 - `BuiltinToolExecutor`: Executes built-in tools with path validation
-- `BuiltinToolConfig`: Controls filesystem access (working_directory, allowed_paths)
+- `BuiltinToolConfig`: Controls filesystem access (`working_directory`, `allowed_paths`, `notify_icon`, `autonomous_zone_paths`, `file_backup_count`)
 
 **Safety Model**:
 - Default: Only allow access to `working_directory`
 - Optional: Explicitly grant access via `allowed_paths` array
 - Path validation prevents directory traversal attacks (e.g., `../../etc/passwd`)
 - Relative paths are resolved against `working_directory`
+- Write Operations: Prevented by default. Creating or overwriting files with `write_file` requires the target path to be within explicitly configured `autonomous_zone_paths`. Overwriting files automatically creates rotational `.bak` backups.
 
 **Return Format**: JSON with `{"success": true, "content": "..."}` or `{"error": "..."}`
 
@@ -161,7 +168,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 - `ToolResult`: Links tool call ID to execution result
 
 **Routing Logic**:
-- Checks function name against built-in tools list (`["read_file", "list_directory"]`)
+- Checks function name against built-in tools list (`["read_file", "list_directory", "notify_send", "write_file"]`)
 - Routes to `BuiltinToolExecutor` for built-in tools
 - Routes to application-provided callback for custom tools
 
