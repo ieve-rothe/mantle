@@ -119,6 +119,15 @@ puts "--- Starting Multi-Test Turn ---"
       end
       puts "Bot: #{resp.content}"
     }
+    )
+end
+
+# 7. Clear the context
+puts "\n--- Clearing Context ---"
+context_manager.clear_context
+
+puts "\n--- Final Context State After Clearing ---"
+puts context_store.current_view
   )
 
   # Consumer UI can watch Mantle::Status to know when background tasks occur

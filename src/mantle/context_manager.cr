@@ -118,9 +118,7 @@ module Mantle
     end
 
     def clear_context
-      # This method needs to be properly implemented based on the context store type
-      # For now, this is a placeholder that would need context_store to support clearing
-      # TODO: Add clear method to ContextStore interface
+      @context_store.clear
     end
 
     private def strip_thinking(msg : String) : String
