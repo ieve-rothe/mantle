@@ -26,7 +26,7 @@ user_name = "Username"
 bot_name = "Botname"
 
 client = Mantle::LlamaClient.new(model_config)
-logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name)
+logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
 context_store = Mantle::JSONContextStore.new(
   system_prompt: "You are an AI named Emma. You are speaking to Cam. We are running a diagnostic test within the LLM framework we built for which your main 'brain' application is a consumer.",
   context_file: CONTEXT_FILE
@@ -79,9 +79,12 @@ simulated_session.each_with_index do |input_text, index|
   
   flow.run(
     msg: input_text,
-    on_response: ->(msg : String) {
+    on_response: ->(resp : Mantle::Response) {
       puts "User: #{input_text}"
-      puts "Bot: #{msg}"
+      if thinking = resp.thinking
+        puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+      end
+      puts "Bot: #{resp.content}"
     }
   )
   
@@ -103,8 +106,11 @@ final_question = "I'm back. Just to check your memory—what was I planning to d
 
 flow.run(
   msg: final_question,
-  on_response: ->(msg : String) {
+  on_response: ->(resp : Mantle::Response) {
     puts "User: #{final_question}"
-    puts "Bot: #{msg}"
+    if thinking = resp.thinking
+      puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+    end
+    puts "Bot: #{resp.content}"
   }
 )

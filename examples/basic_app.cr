@@ -12,7 +12,32 @@ LOG_FILE     = "examples/test_log.txt"
   File.delete(file) if File.exists?(file)
 end
 
-# 2. Initialize Components
+# 2. Configure Logging
+# The consumer application configures the `mantle` logger source
+APP_LOG_FILE = "examples/test_app_log.txt"
+File.delete(APP_LOG_FILE) if File.exists?(APP_LOG_FILE)
+
+::Log.setup do |c|
+  # We want a timestamped format for our application log
+  formatter = ::Log::Formatter.new do |entry, io|
+    io << entry.timestamp.to_utc.to_s("%Y-%m-%d %H:%M:%S")
+    io << " [" << entry.severity.label << "] "
+    io << entry.source << ": "
+    io << entry.message
+  end
+
+  # Setup an IO backend writing to the app log file
+  backend = ::Log::IOBackend.new(io: File.new(APP_LOG_FILE, "a"), formatter: formatter)
+
+  # Bind the mantle logger to info level using our file backend
+  c.bind("mantle", :info, backend)
+
+  # Also print warnings and errors to stdout so the user sees them
+  stdout_backend = ::Log::IOBackend.new(io: STDOUT)
+  c.bind("mantle", :warn, stdout_backend)
+end
+
+# 3. Initialize Components
 model_config = Mantle::ModelConfig.new(
   model_name: "gpt-oss:20b",
   stream: false,
@@ -26,7 +51,7 @@ user_name = "Username"
 bot_name = "Botname"
 
 client = Mantle::LlamaClient.new(model_config)
-logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name)
+logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
 context_store = Mantle::JSONContextStore.new(
   system_prompt: "Respond to the test.",
   context_file: CONTEXT_FILE
@@ -49,38 +74,50 @@ context_manager = Mantle::ContextManager.new(
   strip_thinking_tags: true  # Strip <think></think> blocks from model responses
 )
 
-# 3. Build the Flow
+# 4. Build the Flow
 flow = Mantle::ChatFlow.new(
   context_manager: context_manager,
   client: client,
   logger: logger
 )
 
-# 4. Execute a single turn
+# 5. Execute a single turn
 puts "--- Starting Test Turn ---"
+
+# Print status flags if any occurred during setup (e.g., :new_context_file)
+if Mantle::Status.has?(:new_context_file)
+  puts "NOTICE: A fresh context file was created."
+  Mantle::Status.remove(:new_context_file)
+end
 input_text = "Hello! Are you running correctly?"
 
 flow.run(
   msg: input_text,
-  on_response: ->(msg : String) {
+  on_response: ->(resp : Mantle::Response) {
     puts "User: #{input_text}"
-    puts "Bot: #{msg}"
+    if thinking = resp.thinking
+      puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+    end
+    puts "Bot: #{resp.content}"
   }
 )
 
-# 5. Verify the Context was updated
+# 6. Verify the Context was updated
 puts "\n--- Final Context State ---"
 puts context_store.current_view
 
-# 6. Run multiple turns to cause memory to update
+# 7. Run multiple turns to cause memory to update
 puts "--- Starting Multi-Test Turn ---"
 13.times do
   input_text = "Testing. Is it still working?"
-    flow.run(
+  flow.run(
     msg: input_text,
-    on_response: ->(msg : String) {
+    on_response: ->(resp : Mantle::Response) {
       puts "User: #{input_text}"
-      puts "Bot: #{msg}"
+      if thinking = resp.thinking
+        puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+      end
+      puts "Bot: #{resp.content}"
     }
     )
 end
@@ -91,3 +128,11 @@ context_manager.clear_context
 
 puts "\n--- Final Context State After Clearing ---"
 puts context_store.current_view
+  )
+
+  # Consumer UI can watch Mantle::Status to know when background tasks occur
+  if Mantle::Status.has?(:memory_consolidation)
+    puts "UI UPDATE: Memory consolidation is currently running in the background..."
+    Mantle::Status.remove(:memory_consolidation)
+  end
+end

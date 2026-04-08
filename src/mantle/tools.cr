@@ -35,8 +35,8 @@ module Mantle
   struct FunctionDefinition
     include JSON::Serializable
 
-    property name : String               # Function identifier
-    property description : String        # What the function does
+    property name : String                 # Function identifier
+    property description : String          # What the function does
     property parameters : ParametersSchema # What arguments it accepts
 
     def initialize(@name : String, @description : String, @parameters : ParametersSchema)

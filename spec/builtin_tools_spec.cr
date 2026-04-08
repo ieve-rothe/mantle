@@ -12,6 +12,10 @@ describe "Mantle Built-in Tools" do
     it "contains ListDirectory" do
       Mantle::BuiltinTool::ListDirectory.should_not be_nil
     end
+
+    it "contains WriteFile" do
+      Mantle::BuiltinTool::WriteFile.should_not be_nil
+    end
   end
 
   describe "BuiltinToolRegistry" do
@@ -44,6 +48,33 @@ describe "Mantle Built-in Tools" do
         tool.function.description.should_not be_empty
       end
 
+      it "returns Tool definition for WriteFile" do
+        tool = Mantle::BuiltinToolRegistry.definition_for(Mantle::BuiltinTool::WriteFile)
+
+        tool.should be_a(Mantle::Tool)
+        tool.type.should eq("function")
+        tool.function.name.should eq("write_file")
+        tool.function.description.should_not be_empty
+      end
+
+      it "WriteFile has correct parameters" do
+        tool = Mantle::BuiltinToolRegistry.definition_for(Mantle::BuiltinTool::WriteFile)
+
+        params = tool.function.parameters
+        params.type.should eq("object")
+        params.properties.has_key?("file_path").should be_true
+        params.properties["file_path"].type.should eq("string")
+        params.properties.has_key?("content").should be_true
+        params.properties["content"].type.should eq("string")
+
+        required = params.required
+        required.should_not be_nil
+        if required
+          required.should contain("file_path")
+          required.should contain("content")
+        end
+      end
+
       it "ListDirectory has correct parameters" do
         tool = Mantle::BuiltinToolRegistry.definition_for(Mantle::BuiltinTool::ListDirectory)
 
@@ -73,10 +104,12 @@ describe "Mantle Built-in Tools" do
         tools = Mantle::BuiltinToolRegistry.all_definitions
 
         tools.should be_a(Array(Mantle::Tool))
-        tools.size.should eq(2)
+        tools.size.should eq(4)
         tool_names = tools.map { |t| t.function.name }
         tool_names.should contain("read_file")
         tool_names.should contain("list_directory")
+        tool_names.should contain("notify_send")
+        tool_names.should contain("write_file")
       end
     end
 
@@ -84,13 +117,15 @@ describe "Mantle Built-in Tools" do
       it "returns definitions for multiple built-in tools" do
         tools = Mantle::BuiltinToolRegistry.definitions_for([
           Mantle::BuiltinTool::ReadFile,
-          Mantle::BuiltinTool::ListDirectory
+          Mantle::BuiltinTool::ListDirectory,
+          Mantle::BuiltinTool::NotifySend
         ])
 
-        tools.size.should eq(2)
+        tools.size.should eq(3)
         tool_names = tools.map { |t| t.function.name }
         tool_names.should contain("read_file")
         tool_names.should contain("list_directory")
+        tool_names.should contain("notify_send")
       end
 
       it "returns empty array for empty input" do
@@ -114,6 +149,8 @@ describe "Mantle Built-in Tools" do
 
       config.working_directory.should eq("/tmp")
       config.allowed_paths.should be_nil
+      config.autonomous_zone_paths.should be_nil
+      config.file_backup_count.should eq(3)
     end
 
     it "can be created with allowed paths" do
@@ -128,6 +165,17 @@ describe "Mantle Built-in Tools" do
     it "defaults allowed_paths to nil (working directory only)" do
       config = Mantle::BuiltinToolConfig.new(working_directory: "/tmp")
       config.allowed_paths.should be_nil
+    end
+
+    it "can be created with autonomous_zone_paths and file_backup_count" do
+      config = Mantle::BuiltinToolConfig.new(
+        working_directory: "/tmp",
+        autonomous_zone_paths: ["/tmp/auto"],
+        file_backup_count: 5
+      )
+
+      config.autonomous_zone_paths.should eq(["/tmp/auto"])
+      config.file_backup_count.should eq(5)
     end
   end
 
@@ -212,6 +260,151 @@ describe "Mantle Built-in Tools" do
         )
 
         result.should contain("error")
+      end
+    end
+
+    describe "write_file" do
+      it "rejects file writing if autonomous_zone_paths is nil" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "write_file",
+          {
+            "file_path" => JSON::Any.new("#{temp_dir}/test_file.txt"),
+            "content" => JSON::Any.new("test content")
+          }
+        )
+
+        result.should contain("error")
+        result.should contain("not configured")
+      end
+
+      it "rejects file writing outside autonomous zone" do
+        config = Mantle::BuiltinToolConfig.new(
+          working_directory: temp_dir,
+          autonomous_zone_paths: [temp_dir]
+        )
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "write_file",
+          {
+            "file_path" => JSON::Any.new("#{outside_dir}/restricted.txt"),
+            "content" => JSON::Any.new("test content")
+          }
+        )
+
+        result.should contain("error")
+        result.should contain("not allowed")
+      end
+
+      it "writes file inside autonomous zone" do
+        config = Mantle::BuiltinToolConfig.new(
+          working_directory: temp_dir,
+          autonomous_zone_paths: [temp_dir]
+        )
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        target_path = "#{temp_dir}/new_file.txt"
+
+        result = executor.execute(
+          "write_file",
+          {
+            "file_path" => JSON::Any.new(target_path),
+            "content" => JSON::Any.new("new file content")
+          }
+        )
+
+        result.should contain("success")
+
+        # Verify it actually wrote the content
+        File.read(target_path).should eq("new file content")
+      end
+
+      it "creates a backup when modifying an existing file" do
+        config = Mantle::BuiltinToolConfig.new(
+          working_directory: temp_dir,
+          autonomous_zone_paths: [temp_dir]
+        )
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        target_path = "#{temp_dir}/existing_file.txt"
+        File.write(target_path, "original content")
+
+        result = executor.execute(
+          "write_file",
+          {
+            "file_path" => JSON::Any.new(target_path),
+            "content" => JSON::Any.new("modified content")
+          }
+        )
+
+        result.should contain("success")
+
+        # Verify the file was modified
+        File.read(target_path).should eq("modified content")
+
+        # Verify a backup was created
+        backups = Dir.glob("#{target_path}.*.bak")
+        backups.size.should eq(1)
+        File.read(backups[0]).should eq("original content")
+      end
+
+      it "rotates backups when limit is exceeded" do
+        config = Mantle::BuiltinToolConfig.new(
+          working_directory: temp_dir,
+          autonomous_zone_paths: [temp_dir],
+          file_backup_count: 2
+        )
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        target_path = "#{temp_dir}/rotated_file.txt"
+        File.write(target_path, "base")
+
+        # Create 3 older fake backups manually
+        File.write("#{target_path}.20000101000000.bak", "oldest")
+        File.write("#{target_path}.20010101000000.bak", "middle")
+        File.write("#{target_path}.20020101000000.bak", "newest")
+
+        # Now execute the write file tool which should trigger rotation
+        result = executor.execute(
+          "write_file",
+          {
+            "file_path" => JSON::Any.new(target_path),
+            "content" => JSON::Any.new("current")
+          }
+        )
+
+        result.should contain("success")
+
+        # Verify only 2 backups remain (since file_backup_count is 2)
+        backups = Dir.glob("#{target_path}.*.bak").sort
+        backups.size.should eq(2)
+
+        # The oldest backup should be gone, "middle" might also be gone or "base" might be the newest
+        # To be certain, the content of the remaining backups should NOT contain "oldest"
+        backup_contents = backups.map { |b| File.read(b) }
+        backup_contents.should_not contain("oldest")
+        backup_contents.should_not contain("middle")
+        backup_contents.should contain("newest")
+        backup_contents.should contain("base")
+      end
+
+      it "returns error for missing required parameter" do
+        config = Mantle::BuiltinToolConfig.new(
+          working_directory: temp_dir,
+          autonomous_zone_paths: [temp_dir]
+        )
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "write_file",
+          {"file_path" => JSON::Any.new("#{temp_dir}/test_file.txt")}
+        )
+
+        result.should contain("error")
+        result.should contain("Missing required parameter: content")
       end
     end
 

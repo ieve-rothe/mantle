@@ -6,7 +6,7 @@ require "../src/mantle/tools"
 
 describe "Mantle Response Types" do
   describe "ToolCall" do
-    it "deserializes from JSON correctly" do
+    it "deserializes from JSON correctly with string arguments (OpenAI format)" do
       json = %({"id":"call_123","type":"function","function":{"name":"read_file","arguments":"{\\"file_path\\":\\"test.txt\\"}"}})
       tool_call = Mantle::ToolCall.from_json(json)
 
@@ -14,6 +14,41 @@ describe "Mantle Response Types" do
       tool_call.type.should eq("function")
       tool_call.function.name.should eq("read_file")
       tool_call.function.arguments.should eq(%({"file_path":"test.txt"}))
+    end
+
+    it "deserializes from JSON correctly with object arguments (Ollama format)" do
+      json = %({"id":"call_456","type":"function","function":{"name":"list_directory","arguments":{"path":"."}}})
+      tool_call = Mantle::ToolCall.from_json(json)
+
+      tool_call.id.should eq("call_456")
+      tool_call.type.should eq("function")
+      tool_call.function.name.should eq("list_directory")
+      # Arguments should be converted to JSON string
+      tool_call.function.arguments.should eq(%({"path":"."}))
+    end
+
+    it "deserializes from JSON correctly with nested object arguments" do
+      json = %({"id":"call_789","type":"function","function":{"name":"complex_tool","arguments":{"config":{"enabled":true,"value":42},"name":"test"}}})
+      tool_call = Mantle::ToolCall.from_json(json)
+
+      tool_call.id.should eq("call_789")
+      tool_call.type.should eq("function")
+      tool_call.function.name.should eq("complex_tool")
+      # Arguments should be converted to JSON string, preserving structure
+      parsed_args = JSON.parse(tool_call.function.arguments)
+      parsed_args["name"].as_s.should eq("test")
+      parsed_args["config"]["enabled"].as_bool.should eq(true)
+      parsed_args["config"]["value"].as_i.should eq(42)
+    end
+
+    it "deserializes from JSON correctly without type field (defaults to 'function')" do
+      json = %({"id":"call_999","function":{"name":"test_tool","arguments":{"param":"value"}}})
+      tool_call = Mantle::ToolCall.from_json(json)
+
+      tool_call.id.should eq("call_999")
+      tool_call.type.should eq("function")  # Should default to "function"
+      tool_call.function.name.should eq("test_tool")
+      tool_call.function.arguments.should eq(%({"param":"value"}))
     end
 
     it "serializes to JSON correctly" do

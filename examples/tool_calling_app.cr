@@ -2,6 +2,7 @@
 
 # Tool Calling Example Application
 # Demonstrates Mantle's tool calling capabilities with both built-in and custom tools
+# This version uses JSON-backed context store and tests memory consolidation
 
 require "../src/mantle"
 
@@ -46,46 +47,66 @@ def custom_tool_handler(name : String, args : Hash(String, JSON::Any)) : String
   end
 end
 
+# Clean up any previous test files
+context_file = "/tmp/tool_example_context.json"
+memory_file = "/tmp/tool_example_memory.json"
+log_file = "/tmp/tool_example.log"
+
+File.delete(context_file) if File.exists?(context_file)
+File.delete(memory_file) if File.exists?(memory_file)
+File.delete(log_file) if File.exists?(log_file)
+
 # Main application
-puts "=" * 60
-puts "Mantle Tool Calling Example"
-puts "=" * 60
+puts "=" * 70
+puts "Mantle Tool Calling + Memory Consolidation Example"
+puts "=" * 70
+puts "This example demonstrates:"
+puts "  - Tool calling with both built-in and custom tools"
+puts "  - JSON-backed context persistence"
+puts "  - Memory consolidation when context limit is reached"
+puts "=" * 70
 puts
 
 # Setup Mantle components
 model_config = Mantle::ModelConfig.new(
-  "llama3.2:latest",   # model_name
-  false,                # stream
-  0.7,                  # temperature
-  0.9,                  # top_p
-  500,                  # max_tokens
+  "gemma4:e2b",                    # model_name
+  false,                            # stream
+  0.7,                              # temperature
+  0.9,                              # top_p
+  500,                              # max_tokens
   "http://localhost:11434/api/chat" # Ollama API URL
 )
 
 client = Mantle::LlamaClient.new(model_config)
 
-# Use ephemeral sliding window context (keeps last 50 messages)
-context_store = Mantle::EphemeralSlidingContextStore.new(
-  "You are a helpful assistant with access to tools. Use tools when appropriate.",
-  50 # messages_to_keep
+# Use JSON-backed context store for persistence
+context_store = Mantle::JSONContextStore.new(
+  "You are a helpful assistant with access to tools. Use tools when appropriate to answer user questions.",
+  context_file
 )
 
-# Memory store (not actively used in this short example)
+# Memory store with proper squishifier that uses the model
+summarizer_prompt = "You are an internal memory consolidation system for an AI assistant. Review the following conversation history and tool interactions. Synthesize them into a concise 2-3 sentence summary. Focus on key facts, tool results, and actionable information. Ignore casual conversation. Write from the assistant's perspective."
+squishifier = Mantle::Squishifiers.build_basic_summarizer(client, summarizer_prompt)
+
 memory_store = Mantle::JSONLayeredMemoryStore.new(
-  memory_file: "/tmp/tool_example_memory.json",
+  memory_file: memory_file,
   layer_capacity: 10,
   layer_target: 5,
-  squishifier: ->(messages : Array(String)) : String { messages.join(" | ") }
+  squishifier: squishifier
 )
 
+# Context manager with LOW msg_hardmax to trigger consolidation quickly
 context_manager = Mantle::ContextManager.new(
   context_store,
   memory_store,
   "User",
-  "Assistant"
+  "Assistant",
+  msg_target: 4,    # Keep 4 messages after consolidation
+  msg_hardmax: 8    # Trigger consolidation at 8 messages (low limit for testing)
 )
 
-logger = Mantle::FileLogger.new("/tmp/tool_example.log", "User", "Assistant")
+logger = Mantle::FileLogger.new(log_file, "User", "Assistant", include_thinking: true)
 
 # Create ToolEnabledChatFlow
 flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
@@ -93,83 +114,139 @@ flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
 # Configure built-in tool access
 builtin_config = Mantle::BuiltinToolConfig.new(
   working_directory: Dir.current,
-  allowed_paths: [Dir.current, "/tmp"]
+  allowed_paths: [Dir.current, "/tmp"],
+  notify_icon: File.expand_path("../assets/icon.png", __DIR__),
+  autonomous_zone_paths: [File.join(Dir.current, "examples", "sandbox")],
+  file_backup_count: 3
 )
 
 # Define which tools are available
 builtins = [
   Mantle::BuiltinTool::ReadFile,
-  Mantle::BuiltinTool::ListDirectory
+  Mantle::BuiltinTool::ListDirectory,
+  Mantle::BuiltinTool::NotifySend,
+  Mantle::BuiltinTool::WriteFile
 ]
 
 custom_tools = [
   create_time_tool
 ]
 
-# Example conversation demonstrating tool usage
-puts "Example 1: Using built-in list_directory tool"
-puts "-" * 60
+# Callback for displaying responses
+display_response = ->(response : Mantle::Response) {
+  if thinking = response.thinking
+    puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+  end
+  puts "Assistant: #{response.content}"
+  puts
+  puts "[Context messages: #{context_store.current_num_messages}/#{context_manager.msg_hardmax}]"
+  puts
+}
 
+# Extended conversation to trigger memory consolidation
+puts "Starting conversation with multiple interactions..."
+puts "=" * 70
+puts
+
+puts "[Turn 1] Basic greeting"
+puts "-" * 70
 flow.run(
-  "List the files in the current directory.",
-  builtins: builtins,
-  builtin_config: builtin_config,
-  on_response: ->(response : String) {
-    puts "Assistant: #{response}"
-    puts
-  }
+  "Hello! I need help exploring this project.",
+  on_response: display_response
 )
 
-puts "Example 2: Using custom get_current_time tool"
-puts "-" * 60
+puts "[Turn 2] Using list_directory tool"
+puts "-" * 70
+flow.run(
+  "Can you list the files in the current directory?",
+  builtins: builtins,
+  builtin_config: builtin_config,
+  on_response: display_response
+)
 
+puts "[Turn 3] Using get_current_time tool"
+puts "-" * 70
 flow.run(
   "What time is it in UTC?",
   custom_tools: custom_tools,
   tool_callback: ->custom_tool_handler(String, Hash(String, JSON::Any)),
-  on_response: ->(response : String) {
-    puts "Assistant: #{response}"
-    puts
-  }
+  on_response: display_response
 )
 
-puts "Example 3: Using built-in read_file tool"
-puts "-" * 60
+puts "[Turn 4] Asking about the project"
+puts "-" * 70
+flow.run(
+  "What kind of project is this based on the files you saw?",
+  on_response: display_response
+)
 
-# Create a test file to read
-test_file = File.join(Dir.current, "README.md")
-
-if File.exists?(test_file)
+puts "[Turn 5] Using read_file tool"
+puts "-" * 70
+if File.exists?(File.join(Dir.current, "README.md"))
   flow.run(
-    "Read the first few lines of README.md",
+    "Can you read the README.md file and tell me what this project does?",
     builtins: builtins,
     builtin_config: builtin_config,
-    on_response: ->(response : String) {
-      puts "Assistant: #{response}"
-      puts
-    }
+    on_response: display_response
   )
 else
-  puts "README.md not found, skipping this example"
-  puts
+  flow.run(
+    "Tell me more about the Mantle framework.",
+    on_response: display_response
+  )
 end
 
-puts "Example 4: Combining built-in and custom tools"
-puts "-" * 60
-
+puts "[Turn 6] Follow-up question"
+puts "-" * 70
 flow.run(
-  "List the files in the current directory and tell me what time it is in UTC.",
+  "That's interesting! What are the main components of this framework?",
+  on_response: display_response
+)
+
+puts "[Turn 7] Combining multiple tools"
+puts "-" * 70
+flow.run(
+  "Check the time again and also list any .cr files in the examples directory.",
   builtins: builtins,
   custom_tools: custom_tools,
   builtin_config: builtin_config,
   tool_callback: ->custom_tool_handler(String, Hash(String, JSON::Any)),
-  on_response: ->(response : String) {
-    puts "Assistant: #{response}"
-    puts
-  }
+  on_response: display_response
 )
 
-puts "=" * 60
-puts "Tool calling examples complete!"
-puts "Check /tmp/tool_example.log for detailed logs"
-puts "=" * 60
+puts "[Turn 8] Final question about consolidation"
+puts "-" * 70
+flow.run(
+  "Can you summarize what we've discussed so far?",
+  on_response: display_response
+)
+
+puts "[Turn 9] Notify Send Example"
+puts "-" * 70
+flow.run(
+  "Send me a desktop notification telling me the summary is complete.",
+  builtins: builtins,
+  builtin_config: builtin_config,
+  on_response: display_response
+)
+
+puts "[Turn 10] Write File Example"
+puts "-" * 70
+flow.run(
+  "Please write a small text file saying 'Hello from Mantle tools!' in the examples/sandbox folder.",
+  builtins: builtins,
+  builtin_config: builtin_config,
+  on_response: display_response
+)
+
+puts "=" * 70
+puts "Conversation complete!"
+puts
+puts "Files created:"
+puts "  - Context: #{context_file}"
+puts "  - Memory: #{memory_file}"
+puts "  - Logs: #{log_file}"
+puts
+puts "Note: Memory consolidation should have been triggered during this conversation"
+puts "      due to the low msg_hardmax (8 messages) setting."
+puts "=" * 70

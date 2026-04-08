@@ -5,6 +5,8 @@
 # Context store manages ... context. Not identity, not memory - just manages the ongoing chat and potentially functionality for storing chats when 'finished' and resuming previous chats.
 
 require "json"
+require "./app_logger"
+require "./status"
 
 module Mantle
   # ----------------------------------------------------------------------------
@@ -47,15 +49,17 @@ module Mantle
         "assistant"
       when "system"
         "system"
+      when "tool"
+        "tool"
       else
-        raise ArgumentError.new("Invalid role label: #{label}. Must be user, assistant, or system.")
+        raise ArgumentError.new("Invalid role label: #{label}. Must be user, assistant, system, or tool.")
       end
     end
 
     # Validate that role is one of the allowed values
     protected def validate_role(role : String)
-      unless ["user", "assistant", "system"].includes?(role)
-        raise ArgumentError.new("Invalid role: #{role}. Must be user, assistant, or system.")
+      unless ["user", "assistant", "system", "tool"].includes?(role)
+        raise ArgumentError.new("Invalid role: #{role}. Must be user, assistant, system, or tool.")
       end
     end
   end
@@ -144,21 +148,18 @@ module Mantle
           @messages << msg
         end
         @current_num_messages = @messages.size
-        puts "Loaded context from #{@context_file}"
+        Mantle::Log.info { "Loaded context from #{@context_file}" }
       rescue e : File::NotFoundError
         save_context_to_json
-        puts "Warning: Context file was not found - creating a new one."
+        Mantle::Log.warn { "Context file was not found - creating a new one." }
+        Mantle::Status.add(:new_context_file)
       end
     end
 
     def prune(num_to_prune : Int32) : Array(Hash(String, String))
       pruned_messages = [] of Hash(String, String)
 
-      if num_to_prune > @current_num_messages
-        count = @current_num_messages
-      else
-        count = num_to_prune
-      end
+      count = [num_to_prune, @current_num_messages].min
 
       count.times do
         pruned_messages << @messages.shift

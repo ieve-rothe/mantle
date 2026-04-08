@@ -11,7 +11,7 @@ describe Mantle::ChatFlow do
     flow = Mantle::ChatFlow.new(context_manager, client, logger)
 
     # Act
-    flow.run("Hello", ->(msg : String) { })
+    flow.run("Hello", ->(msg : Mantle::Response) { })
 
     # Assert
     view = store.current_view
@@ -39,7 +39,7 @@ describe Mantle::ChatFlow do
     logger = DummyLogger.new
     flow = Mantle::ChatFlow.new(context_manager, client, logger)
     captured_message = ""
-    callback = ->(msg : String) { captured_message = msg }
+    callback = ->(msg : Mantle::Response) { captured_message = msg.content.not_nil! }
 
     # Act
     flow.run("What is 2+2?", callback)
@@ -57,8 +57,8 @@ describe Mantle::ChatFlow do
     flow = Mantle::ChatFlow.new(context_manager, client, logger)
 
     # Act
-    flow.run("Turn 1", ->(msg : String) { })
-    flow.run("Turn 2", ->(msg : String) { })
+    flow.run("Turn 1", ->(msg : Mantle::Response) { })
+    flow.run("Turn 2", ->(msg : Mantle::Response) { })
 
     # Assert
     view = store.current_view

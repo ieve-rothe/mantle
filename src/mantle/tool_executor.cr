@@ -17,23 +17,24 @@ module Mantle
   # Handles both built-in tools (via BuiltinToolExecutor) and custom tools (via callback)
   class ToolExecutor
     # List of built-in tool names for routing
-    BUILTIN_TOOL_NAMES = ["read_file", "list_directory"]
+    BUILTIN_TOOL_NAMES = ["read_file", "list_directory", "notify_send", "write_file"]
 
     @builtin_executor : BuiltinToolExecutor?
     @custom_callback : Proc(String, Hash(String, JSON::Any), String)?
 
     def initialize(
       builtin_config : BuiltinToolConfig?,
-      @custom_callback : Proc(String, Hash(String, JSON::Any), String)?
+      @custom_callback : Proc(String, Hash(String, JSON::Any), String)?,
+      bot_name : String = "Assistant",
     )
-      @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config) : nil
+      @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config, bot_name) : nil
     end
 
     # Execute all tool calls and return their results
     # Routes each call to either built-in executor or custom callback
-    def execute_all(tool_calls : Array(ToolCall)) : Array(ToolResult)
+    def execute_all(tool_calls : Array(ToolCall), available_tool_names : Array(String)? = nil) : Array(ToolResult)
       tool_calls.map do |call|
-        result_json = execute_single(call)
+        result_json = execute_single(call, available_tool_names)
         ToolResult.new(
           tool_call_id: call.id,
           result: result_json
@@ -42,7 +43,7 @@ module Mantle
     end
 
     # Execute a single tool call
-    private def execute_single(tool_call : ToolCall) : String
+    private def execute_single(tool_call : ToolCall, available_tool_names : Array(String)?) : String
       function_name = tool_call.function.name
       arguments_json = tool_call.function.arguments
 
@@ -57,7 +58,7 @@ module Mantle
       if is_builtin_tool?(function_name)
         execute_builtin(function_name, arguments)
       else
-        execute_custom(function_name, arguments)
+        execute_custom(function_name, arguments, available_tool_names)
       end
     end
 
@@ -76,7 +77,7 @@ module Mantle
     end
 
     # Execute a custom tool via callback
-    private def execute_custom(name : String, arguments : Hash(String, JSON::Any)) : String
+    private def execute_custom(name : String, arguments : Hash(String, JSON::Any), available_tool_names : Array(String)?) : String
       if callback = @custom_callback
         begin
           callback.call(name, arguments)
@@ -84,7 +85,13 @@ module Mantle
           {error: "Custom tool #{name} failed: #{ex.message}"}.to_json
         end
       else
-        {error: "Custom tool #{name} requested but no custom_callback provided"}.to_json
+        error_msg = "Unknown tool '#{name}'."
+        if available_tool_names && !available_tool_names.empty?
+          error_msg += " Available tools: #{available_tool_names.join(", ")}"
+        else
+          error_msg += " No tools are currently available."
+        end
+        {error: error_msg}.to_json
       end
     end
   end

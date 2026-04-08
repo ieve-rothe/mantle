@@ -48,6 +48,29 @@ describe Mantle::EphemeralSlidingContextStore do
       view[3]["role"].should eq("assistant")
       view[3]["content"].should eq("Message4")
     end
+
+    it "supports 'tool' role for tool results" do
+      # Arrange
+      sys_prompt = "System Prompt"
+      messages_to_keep = 5
+      store = Mantle::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
+
+      # Act
+      store.add_message("User", "List files")
+      store.add_message("Assistant", "") # Tool call (content may be empty)
+      store.add_message("Tool", "Result: file1.txt, file2.txt")
+      store.add_message("Assistant", "Here are the files")
+
+      # Assert
+      view = store.current_view
+      view.size.should eq(5)  # system + 4 messages
+      view[0]["role"].should eq("system")
+      view[1]["role"].should eq("user")
+      view[2]["role"].should eq("assistant")
+      view[3]["role"].should eq("tool")
+      view[3]["content"].should eq("Result: file1.txt, file2.txt")
+      view[4]["role"].should eq("assistant")
+    end
   end
 
   describe "#clear" do

@@ -37,7 +37,7 @@ describe "Mantle ToolEnabledChatFlow" do
       response_received = nil
       flow.run(
         "Hi",
-        on_response: ->(r : String) { response_received = r }
+        on_response: ->(r : Mantle::Response) { response_received = r.content.not_nil! }
       )
 
       response_received.should eq("Hello!")
@@ -98,7 +98,7 @@ describe "Mantle ToolEnabledChatFlow" do
         "What time is it?",
         custom_tools: custom_tools,
         tool_callback: tool_callback,
-        on_response: ->(r : String) { final_response = r }
+        on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
       )
 
       final_response.should eq("The time is 12:00")
@@ -201,16 +201,17 @@ describe "Mantle ToolEnabledChatFlow" do
           "Read the file",
           builtins: [Mantle::BuiltinTool::ReadFile],
           builtin_config: builtin_config,
-          on_response: ->(r : String) { final_response = r }
+          on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
         )
 
         final_response.should eq("Got it!")
 
-        # Check that tool result was added to context
+        # Check that tool result was added to context with 'tool' role
         context_messages = context_store.messages
-        # Should have natural language representation of tool call and result
-        tool_messages = context_messages.select { |m| m["content"].includes?("read_file") }
+        tool_messages = context_messages.select { |m| m["role"] == "tool" }
         tool_messages.should_not be_empty
+        # Tool result should contain the file content
+        tool_messages[0]["content"].should contain("File contents")
       ensure
         File.delete(temp_file) if File.exists?(temp_file)
       end
@@ -292,7 +293,7 @@ describe "Mantle ToolEnabledChatFlow" do
           custom_tools: custom_tools,
           tool_callback: tool_callback,
           builtin_config: builtin_config,
-          on_response: ->(r : String) { final_response = r }
+          on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
         )
 
         final_response.should eq("Processed!")

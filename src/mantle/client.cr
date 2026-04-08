@@ -17,10 +17,35 @@ module Mantle
   class ToolCallFunction
     include JSON::Serializable
 
-    property name : String      # Function name (e.g., "read_file")
-    property arguments : String # JSON string of arguments
+    property name : String # Function name (e.g., "read_file")
+
+    # Custom converter to handle both string and object formats for arguments
+    # OpenAI format: arguments as JSON string
+    # Ollama format: arguments as JSON object
+    @[JSON::Field(converter: Mantle::ToolCallFunction::ArgumentsConverter)]
+    property arguments : String # JSON string of arguments (normalized)
 
     def initialize(@name : String, @arguments : String)
+    end
+
+    # Custom JSON converter that handles both string and object argument formats
+    module ArgumentsConverter
+      def self.from_json(pull : JSON::PullParser) : String
+        case pull.kind
+        when .string?
+          # OpenAI format: already a JSON string
+          pull.read_string
+        when .begin_object?
+          # Ollama format: JSON object, convert to string
+          JSON.parse(pull.read_raw).to_json
+        else
+          raise JSON::ParseException.new("Expected String or Object for arguments", pull.line_number, pull.column_number)
+        end
+      end
+
+      def self.to_json(value : String, builder : JSON::Builder)
+        builder.string(value)
+      end
     end
   end
 
@@ -29,11 +54,15 @@ module Mantle
   class ToolCall
     include JSON::Serializable
 
-    property id : String                      # Unique identifier for this tool call
-    property type : String                     # Always "function" for function tools
-    property function : ToolCallFunction      # The function to call
+    property id : String # Unique identifier for this tool call
 
-    def initialize(@id : String, @type : String, @function : ToolCallFunction)
+    # Type field defaults to "function" since some APIs (e.g., Ollama) omit it
+    @[JSON::Field(emit_null: false)]
+    property type : String = "function" # Always "function" for function tools
+
+    property function : ToolCallFunction # The function to call
+
+    def initialize(@id : String, @function : ToolCallFunction, @type : String = "function")
     end
   end
 
@@ -43,12 +72,21 @@ module Mantle
     include JSON::Serializable
 
     @[JSON::Field(emit_null: false)]
-    property content : String?              # Text response content (if any)
+    property content : String? # Text response content (if any)
+
+    @[JSON::Field(emit_null: false)]
+    property thinking : String? # Thinking process output (if any)
 
     @[JSON::Field(emit_null: false)]
     property tool_calls : Array(ToolCall)? # Tool calls requested (if any)
 
-    def initialize(@content : String?, @tool_calls : Array(ToolCall)?)
+    @[JSON::Field(ignore: true)]
+    property raw_request : String?
+
+    @[JSON::Field(ignore: true)]
+    property raw_response : String?
+
+    def initialize(@content : String?, @tool_calls : Array(ToolCall)?, @thinking : String? = nil)
     end
   end
 
@@ -116,6 +154,9 @@ module Mantle
         # Extract content (may be nil if only tool_calls present)
         content = message["content"]?.try(&.as_s?)
 
+        # Extract thinking process (if any)
+        thinking = message["thinking"]?.try(&.as_s?)
+
         # Extract tool_calls if present
         tool_calls_json = message["tool_calls"]?
         tool_calls = if tool_calls_json
@@ -124,7 +165,10 @@ module Mantle
                        nil
                      end
 
-        return Response.new(content: content, tool_calls: tool_calls)
+        return Response.new(content: content, tool_calls: tool_calls, thinking: thinking).tap do |r|
+          r.raw_request = body
+          r.raw_response = response.body
+        end
       else
         raise Exception.new("Error #{response.status_code}: #{response.body}")
       end
