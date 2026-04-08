@@ -148,7 +148,8 @@ module Mantle
 
           # Add tool results to context with 'tool' role (defer consolidation)
           tool_results.each do |result|
-            @context_manager.add_message("tool", result.result, check_consolidation: false)
+            content_with_id = "Result from #{result.tool_call_id}: #{result.result}"
+            @context_manager.add_message("tool", content_with_id, check_consolidation: false)
 
             # Log detailed tool result (natural language)
             formatted_result = ToolFormatter.format_tool_result(result.tool_call_id, result.result)
