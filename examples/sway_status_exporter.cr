@@ -66,23 +66,23 @@ puts "Simulating a workload to see the exporter in action..."
 sleep 1.seconds
 
 puts "1. Receiving user prompt, beginning to think..."
-Mantle::Status.add(:thinking)
+Mantle.emit_status(:thinking)
 sleep 2.seconds
 
 puts "2. Requesting a tool call..."
-Mantle::Status.add(:tool_loop)
+Mantle.emit_status(:tool_loop)
 sleep 2.seconds
 
 puts "3. Got tool response, thinking more..."
-Mantle::Status.add(:thinking)
+Mantle.emit_status(:thinking)
 sleep 2.seconds
 
 puts "4. Finished! Context got full, so consolidating memory..."
-Mantle::Status.add(:memory_consolidation)
+Mantle.emit_status(:memory_consolidation)
 sleep 2.seconds
 
 puts "5. Operation completely done, returning to idle..."
-Mantle::Status.add(:idle)
+Mantle.emit_status(:idle)
 sleep 1.seconds
 
 puts "\nExample complete! You can see the last written state in #{STATUS_FILE_PATH}"

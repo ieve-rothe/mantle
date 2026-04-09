@@ -53,7 +53,7 @@ module Mantle
       context_view = @context_manager.current_view
       @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
-      Mantle::Status.add(:thinking)
+      Mantle.emit_status(:thinking)
       response = @client.execute(context_view)
 
       if (req = response.raw_request) && (res = response.raw_response)
@@ -66,7 +66,7 @@ module Mantle
       @context_manager.handle_bot_message(response_text)
       updated_context = @context_manager.current_view
       @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
-      Mantle::Status.add(:idle)
+      Mantle.emit_status(:idle)
 
       on_response.call(response)
     end
@@ -110,7 +110,7 @@ module Mantle
         end
 
         # Execute LLM with tools
-        Mantle::Status.add(:thinking)
+        Mantle.emit_status(:thinking)
         response = @client.execute(context_view, all_tools)
 
         if (req = response.raw_request) && (res = response.raw_response)
@@ -128,7 +128,7 @@ module Mantle
 
           updated_context = @context_manager.current_view
           @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
-          Mantle::Status.add(:idle)
+          Mantle.emit_status(:idle)
 
           on_response.try(&.call(response))
           break
@@ -136,7 +136,7 @@ module Mantle
 
         # We have tool calls - process them
         if tool_calls = response.tool_calls
-          Mantle::Status.add(:tool_loop)
+          Mantle.emit_status(:tool_loop)
           # Log detailed tool call information (natural language)
           tool_calls.each do |call|
             formatted_call = ToolFormatter.format_tool_call(call)
@@ -169,7 +169,7 @@ module Mantle
 
           # Check consolidation now that the turn is complete
           @context_manager.check_and_consolidate
-          Mantle::Status.add(:idle)
+          Mantle.emit_status(:idle)
 
           on_response.try(&.call(response))
           break

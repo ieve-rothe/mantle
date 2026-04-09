@@ -109,7 +109,7 @@ module Mantle
         end
 
         if current_layer_index != -1
-          Mantle::Status.add(:memory_consolidation)
+          Mantle.emit_status(:memory_consolidation)
           Mantle::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_capacity}). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_target}." }
         end
 
