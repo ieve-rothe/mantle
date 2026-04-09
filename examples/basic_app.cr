@@ -102,11 +102,27 @@ flow = Mantle::ChatFlow.new(
 # 5. Execute a single turn
 puts "--- Starting Test Turn ---"
 
-# Print status flags if any occurred during setup (e.g., :new_context_file)
-if Mantle::Status.has?(:new_context_file)
-  puts "NOTICE: A fresh context file was created."
-  Mantle::Status.remove(:new_context_file)
+# Register callback for tracking events
+Mantle.on_status_update = ->(flag : Symbol) do
+  message = case flag
+            when :new_context_file
+              "NOTICE: A fresh context file was created."
+            when :new_memory_file
+              "NOTICE: A fresh memory file was created."
+            when :memory_consolidation
+              "UI UPDATE: Memory consolidation is currently running in the background..."
+            else
+              nil
+            end
+
+  if message
+    # In a real app this would probably send to a bus, we'll just print it asynchronously
+    spawn do
+      puts message
+    end
+  end
 end
+
 input_text = "Hello! Are you running correctly?"
 
 flow.run(

@@ -93,7 +93,7 @@ module Mantle
     end
 
     def consolidate_memory
-      Mantle::Status.add(:memory_consolidation)
+      Mantle.emit_status(:memory_consolidation)
       # If we're at msg_hardmax, prune msg_hardmax - msg_target messages from context_store using the .prune method, then we pump those messages into memory_store.ingest()
       num_to_prune = @msg_hardmax - @msg_target
 

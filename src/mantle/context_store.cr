@@ -152,7 +152,7 @@ module Mantle
       rescue e : File::NotFoundError
         save_context_to_json
         Mantle::Log.warn { "Context file was not found - creating a new one." }
-        Mantle::Status.add(:new_context_file)
+        Mantle.emit_status(:new_context_file)
       end
     end
 
