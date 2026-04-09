@@ -1,6 +1,8 @@
 require "../src/mantle.cr"
 
-# Basic example showing implementation of a ChatFlow using a JSONSlidingContextStore, LayeredMemoryStore coordinated with a ContextManager
+# This example demonstrates how to set up a custom memory summarization prompt.
+# It uses the `Squishifiers` module to build a summarizing callable, which
+# the MemoryStore uses to condense old messages into a smaller format.
 
 # 1. Setup Primitives
 CONTEXT_FILE = "examples/test_context.json"
@@ -27,12 +29,22 @@ bot_name = "Botname"
 
 client = Mantle::LlamaClient.new(model_config)
 logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
+
+# Define the system prompt for the context window
 context_store = Mantle::JSONContextStore.new(
   system_prompt: "You are an AI named Emma. You are speaking to Cam. We are running a diagnostic test within the LLM framework we built for which your main 'brain' application is a consumer.",
   context_file: CONTEXT_FILE
 )
+
+# Define a custom summarizing prompt
+# By default, Squishifiers.build_basic_summarizer uses a generic summary prompt.
+# Here we provide our own detailed prompt to enforce a specific POV ("Emma's first-person perspective").
 summarizer_prompt = "You are the internal subconscious of an AI named Emma. Review the following recent chat log with Cam. Synthesize the interaction into a concise, 2-3 sentence narrative memory. Extract only actionable tasks, personal facts, and significant project milestones. Ignore casual banter, technical troubleshooting details, and greetings. Write the summary from Emma's first-person perspective."
+
+# Build the squishifier using the prompt and client
 squishy = Mantle::Squishifiers.build_basic_summarizer(client, summarizer_prompt)
+
+# Feed the squishifier to the memory store
 memory_store = Mantle::JSONLayeredMemoryStore.new(
   memory_file: MEMORY_FILE,
   layer_capacity: 5,

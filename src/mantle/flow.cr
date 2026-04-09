@@ -106,7 +106,29 @@ module Mantle
         iteration += 1
 
         if iteration > max_iterations
-          raise Exception.new("Max iterations (#{max_iterations}) reached in tool calling loop")
+          error_msg = "System: Maximum number of tool iterations (#{max_iterations}) reached. Please provide a text response to the user now without using any more tools."
+          @context_manager.add_message("system", error_msg, check_consolidation: false)
+
+          # Force one last client call without tools to get the final text response
+          final_context = @context_manager.current_view
+          final_response = @client.execute(final_context, nil)
+
+          if (req = final_response.raw_request) && (res = final_response.raw_response)
+            @logger.log_api_payloads(req, res)
+          end
+
+          # Handle the text response
+          response_text = final_response.content || "Error: Failed to generate final response after hitting tool iteration limit."
+          @context_manager.handle_bot_message(response_text, check_consolidation: false)
+
+          # Check consolidation now that the full turn is complete
+          @context_manager.check_and_consolidate
+
+          updated_context = @context_manager.current_view
+          @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), final_response.thinking)
+
+          on_response.try(&.call(final_response))
+          break
         end
 
         # Execute LLM with tools
@@ -153,7 +175,8 @@ module Mantle
 
           # Add tool results to context with 'tool' role (defer consolidation)
           tool_results.each do |result|
-            @context_manager.add_message("tool", result.result, check_consolidation: false)
+            content_with_id = "Result from #{result.tool_call_id}: #{result.result}"
+            @context_manager.add_message("tool", content_with_id, check_consolidation: false)
 
             # Log detailed tool result (natural language)
             formatted_result = ToolFormatter.format_tool_result(result.tool_call_id, result.result)

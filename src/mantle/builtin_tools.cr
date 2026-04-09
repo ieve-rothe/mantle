@@ -9,6 +9,7 @@ module Mantle
     ListDirectory
     NotifySend
     WriteFile
+    SearchFiles
   end
 
   # Registry that provides tool definitions for built-in tools
@@ -25,6 +26,8 @@ module Mantle
         notify_send_definition
       when BuiltinTool::WriteFile
         write_file_definition
+      when BuiltinTool::SearchFiles
+        search_files_definition
       else
         raise "Unknown builtin tool: #{builtin}"
       end
@@ -60,6 +63,32 @@ module Mantle
       )
     end
 
+    private def self.search_files_definition : Tool
+      Tool.new(
+        function: FunctionDefinition.new(
+          name: "search_files",
+          description: "Search for a string in files using ripgrep or grep. Returns a heavily truncated list of matches.",
+          parameters: ParametersSchema.new(
+            properties: {
+              "query" => PropertyDefinition.new(
+                type: "string",
+                description: "The search string or regex to find."
+              ),
+              "directory_path" => PropertyDefinition.new(
+                type: "string",
+                description: "Path to the directory to search. Defaults to current directory if not specified."
+              ),
+              "file_pattern" => PropertyDefinition.new(
+                type: "string",
+                description: "Optional glob pattern to filter files (e.g., '*.cr', '*.md')."
+              ),
+            },
+            required: ["query"]
+          )
+        )
+      )
+    end
+
     private def self.write_file_definition : Tool
       Tool.new(
         function: FunctionDefinition.new(
@@ -74,7 +103,7 @@ module Mantle
               "content" => PropertyDefinition.new(
                 type: "string",
                 description: "Content to write to the file"
-              )
+              ),
             },
             required: ["file_path", "content"]
           )
@@ -133,7 +162,7 @@ module Mantle
       @allowed_paths : Array(String)? = nil,
       @notify_icon : String? = nil,
       @autonomous_zone_paths : Array(String)? = nil,
-      @file_backup_count : Int32 = 3
+      @file_backup_count : Int32 = 3,
     )
     end
   end
@@ -159,6 +188,8 @@ module Mantle
         execute_notify_send(arguments)
       when "write_file"
         execute_write_file(arguments)
+      when "search_files"
+        execute_search_files(arguments)
       else
         {error: "Unknown built-in tool: #{tool_name}"}.to_json
       end
@@ -275,6 +306,97 @@ module Mantle
         {success: true, entries: entries}.to_json
       rescue ex
         {error: "Error listing directory: #{ex.message}"}.to_json
+      end
+    end
+
+    private def execute_search_files(arguments : Hash(String, JSON::Any)) : String
+      query = arguments["query"]?.try(&.as_s)
+
+      unless query
+        return {error: "Missing required parameter: query"}.to_json
+      end
+
+      # Default to "." (working directory) if no path provided
+      dir_path = arguments["directory_path"]?.try(&.as_s) || "."
+      file_pattern = arguments["file_pattern"]?.try(&.as_s)
+
+      # Resolve to absolute path
+      absolute_path = resolve_path(dir_path)
+
+      # Check if path is allowed
+      unless path_allowed?(absolute_path)
+        return {error: "Access to path not allowed: #{absolute_path}"}.to_json
+      end
+
+      begin
+        # If absolute_path exists but is a file, we want to skip directory logic and just search the file
+        unless File.exists?(absolute_path)
+          return {error: "Path does not exist: #{absolute_path}"}.to_json
+        end
+
+        # Determine whether to use rg or grep
+        use_rg = !Process.find_executable("rg").nil?
+
+        output = String::Builder.new
+        error = String::Builder.new
+
+        if use_rg
+          args = ["-n", "-H", "--no-heading"]
+          if file_pattern
+            args << "-g"
+            args << file_pattern
+          end
+          args << "--"
+          args << query
+          args << absolute_path
+          status = Process.run("rg", args, output: output, error: error)
+        else
+          # grep: -r recursive, -n line numbers, -I ignore binary files, -H with filename
+          args = ["-rnIH"]
+          if file_pattern
+            args << "--include=#{file_pattern}"
+          end
+          args << "--"
+          args << query
+          args << absolute_path
+          status = Process.run("grep", args, output: output, error: error)
+        end
+
+        output_str = output.to_s
+
+        # Handle process failures (like bad regex)
+        if !status.success? && status.exit_code > 1
+          err_msg = error.to_s.strip
+          err_msg = "Command failed with exit code #{status.exit_code}" if err_msg.empty?
+          return {error: "Search failed: #{err_msg}"}.to_json
+        end
+
+        unless status.success? && !output_str.empty?
+          # grep/rg return 1 if no lines are found
+          return {success: true, matches: [] of String}.to_json
+        end
+
+        # Parse and truncate matches
+        matches = output_str.lines.map do |line|
+          parts = line.split(":", 3) # Split into file, line, and rest (content)
+          if parts.size >= 2
+            "#{parts[0]}:#{parts[1]}"
+          else
+            line
+          end
+        end
+
+        truncated_matches = matches.first(10)
+
+        result = {success: true, matches: truncated_matches}
+
+        if matches.size > 10
+          result = result.merge({warning: "Results truncated from #{matches.size} to 10."})
+        end
+
+        result.to_json
+      rescue ex
+        {error: "Error executing search: #{ex.message}"}.to_json
       end
     end
 

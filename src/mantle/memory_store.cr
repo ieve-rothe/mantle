@@ -92,44 +92,49 @@ module Mantle
       # For layer -1 (ingest_pending), process all messages immediately
       # For actual layers, batch by ingest_step_size
       chunk_size = current_layer_index == -1 ? source.size : @ingest_step_size
+      processed_count = 0
 
-      while source.size >= chunk_size && chunk_size > 0
-        # Before adding, check if target layer is already at capacity
-        # If so, consolidate it first to make room
-        while @layers[target_layer_index].size >= @layer_capacity
-          cascade(target_layer_index)
-          # If consolidation didn't free up space, we can't proceed
-          break if @layers[target_layer_index].size >= @layer_capacity
+begin
+        while source.size - processed_count >= chunk_size && chunk_size > 0
+          # Before adding, check if target layer is already at capacity
+          # If so, consolidate it first to make room
+          while @layers[target_layer_index].size >= @layer_capacity
+            cascade(target_layer_index)
+            # If consolidation didn't free up space, we can't proceed
+            break if @layers[target_layer_index].size >= @layer_capacity
+          end
+
+          # If target is still at capacity after consolidation, we can't add more
+          if @layers[target_layer_index].size >= @layer_capacity
+            Mantle::Log.warn { "Layer #{target_layer_index} still at capacity after consolidation" }
+            return
+          end
+
+          if current_layer_index != -1
+            Mantle.emit_status(:memory_consolidation) 
+            Mantle::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_capacity}). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_target}." }
+          end
+
+          chunk = source[processed_count, chunk_size]
+
+          begin
+            summary = @squishifier.call(chunk)
+            # Strip thinking tags from the squishified summary
+            summary = strip_thinking(summary)
+            # If no exception from squishifier, then successful response from LLM
+            timestamp = Time.utc.to_s("%Y-%m-%d %H:%M")
+            @layers[target_layer_index] << "[#{timestamp}] #{summary}"
+
+            processed_count += chunk_size
+            # Recalculate chunk_size for next iteration (only matters for layer -1)
+            chunk_size = current_layer_index == -1 ? source.size - processed_count : @ingest_step_size
+          rescue ex
+            Mantle::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
+            return
+          end
         end
-
-        # If target is still at capacity after consolidation, we can't add more
-        if @layers[target_layer_index].size >= @layer_capacity
-          Mantle::Log.warn { "Layer #{target_layer_index} still at capacity after consolidation" }
-          return
-        end
-
-        if current_layer_index != -1
-          Mantle.emit_status(:memory_consolidation)
-          Mantle::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_capacity}). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_target}." }
-        end
-
-        chunk = source.first(chunk_size)
-
-        begin
-          summary = @squishifier.call(chunk)
-          # Strip thinking tags from the squishified summary
-          summary = strip_thinking(summary)
-          # If no exception from squishifier, then successful response from LLM
-          source.shift(chunk_size) # Remove messages that we squished
-          timestamp = Time.utc.to_s("%Y-%m-%d %H:%M")
-          @layers[target_layer_index] << "[#{timestamp}] #{summary}"
-
-          # Recalculate chunk_size for next iteration (only matters for layer -1)
-          chunk_size = current_layer_index == -1 ? source.size : @ingest_step_size
-        rescue ex
-          Mantle::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
-          return
-        end
+      ensure
+        source.shift(processed_count) if processed_count > 0
       end
 
       save_memories_to_json
