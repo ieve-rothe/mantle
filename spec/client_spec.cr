@@ -202,7 +202,7 @@ describe Mantle::Client do
 
     # Check model config
     parsed_request["model"].should eq("test-model")
-    parsed_request["keep_alive"].should eq(10)
+    parsed_request["keep_alive"].should eq("10m")
     parsed_request["options"]["temperature"].should eq(0.6)
     parsed_request["options"]["top_p"].should eq(0.7)
     parsed_request["options"]["num_predict"].should eq(700)
@@ -272,7 +272,7 @@ describe Mantle::Client do
     tools_array[0]["function"]["name"].should eq("read_file")
 
     # Check keep_alive
-    parsed_request["keep_alive"].should eq(10)
+    parsed_request["keep_alive"].should eq("10m")
 
     # Cleanup
     server.close

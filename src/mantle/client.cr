@@ -10,7 +10,7 @@ require "./tools"
 module Mantle
   # Record is a macro that expands to define struct with initializer, getters and a copy_with and clone helper methods.
   # Reminder that it's positional, not named arguments
-  record ModelConfig, model_name : String, stream : Bool, temperature : Float64, top_p : Float64, max_tokens : Int32, api_url : String, keep_alive : Int32 | String = 10
+  record ModelConfig, model_name : String, stream : Bool, temperature : Float64, top_p : Float64, max_tokens : Int32, api_url : String, keep_alive : Int32 | String = "10m"
 
   # Represents a function call within a tool call
   # Contains the function name and its arguments as a JSON string
