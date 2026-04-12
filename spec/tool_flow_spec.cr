@@ -13,9 +13,12 @@ class ToolCallMockClient < Mantle::Client
   def initialize(@responses : Array(Mantle::Response))
   end
 
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil) : Mantle::Response
+  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
     response = @responses[@call_count]
     @call_count += 1
+    if content = response.content
+      on_chunk.call(content) unless content.empty?
+    end
     response
   end
 end
