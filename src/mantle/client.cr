@@ -94,8 +94,12 @@ module Mantle
   # Contract for Client class. Using a contract to allow for a dummy client class when unit testing other parts of codebase.
   # Now returns Response instead of String to support tool calling
   abstract class Client
+    # Accepts an optional block (the `&on_chunk` part) which lets consumer apps
+    # "listen" to pieces of the response as they arrive (like a typewriter effect)
     abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil, &on_chunk : String -> Nil) : Response
 
+    # A fallback version of `execute` for apps that don't want to deal with streaming.
+    # It just runs the request and throws away the partial chunks, waiting for the final response.
     def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil) : Response
       execute(messages, tools) { |chunk| }
     end
@@ -158,10 +162,14 @@ module Mantle
         status_code = 0
         error_body = ""
 
+        # By passing a `do |response|` block to `.post`, Crystal gives us a live data stream
+        # (`body_io`) instead of waiting for the whole download to finish.
         HTTP::Client.post(@api_url, headers: headers, body: body) do |response|
           status_code = response.status_code
           if response.status.success?
             if io = response.body_io
+              # Read the stream line-by-line as data arrives from Ollama.
+              # Ollama streams its responses as NDJSON (Newline Delimited JSON).
               io.each_line do |line|
                 next if line.empty?
                 raw_response_builder.puts(line)
@@ -169,6 +177,7 @@ module Mantle
                 parsed = JSON.parse(line)
                 msg = parsed["message"]
 
+                # As soon as we get a text chunk, tell the app about it right away!
                 if chunk = msg["content"]?.try(&.as_s?)
                   unless chunk.empty?
                     on_chunk.call(chunk)
@@ -176,12 +185,15 @@ module Mantle
                   end
                 end
 
+                # Record thinking tags if present
                 if chunk = msg["thinking"]?.try(&.as_s?)
                   unless chunk.empty?
                     full_thinking << chunk
                   end
                 end
 
+                # If the AI wants to use a tool, save it for later.
+                # (Tools don't need to be streamed to the user letter-by-letter).
                 if tc = msg["tool_calls"]?
                   tool_calls_json = tc
                 end
@@ -194,7 +206,8 @@ module Mantle
 
         if status_code >= 200 && status_code < 300
           tool_calls = if tool_calls_json
-                         # Ollama sometimes omits ID, inject one if missing
+                         # Some versions of Ollama forget to assign a unique ID to their tool calls.
+                         # We'll just generate our own random ID to prevent the app from crashing.
                          arr_json = tool_calls_json.as_a
                          arr_json.each do |t|
                            if !t.as_h.has_key?("id")
@@ -209,6 +222,7 @@ module Mantle
           final_content = full_content.empty? ? nil : full_content.to_s
           final_thinking = full_thinking.empty? ? nil : full_thinking.to_s
 
+          # Return the final stitched-together response at the very end
           return Response.new(content: final_content, tool_calls: tool_calls, thinking: final_thinking).tap do |r|
             r.raw_request = body
             r.raw_response = raw_response_builder.to_s
