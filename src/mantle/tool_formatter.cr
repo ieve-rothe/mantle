@@ -27,7 +27,7 @@ module Mantle
 
           "Called #{function_name}(#{args_str})"
         end
-      rescue
+      rescue JSON::ParseException
         # If JSON parsing fails, show raw arguments
         "Called #{function_name}(#{arguments})"
       end
@@ -61,7 +61,7 @@ module Mantle
           truncated = truncate_string(result, MAX_RESULT_LENGTH)
           return "Result from #{tool_call_id}: #{truncated}"
         end
-      rescue
+      rescue JSON::ParseException
         # If JSON parsing fails, use raw result
         truncated = truncate_string(result, MAX_RESULT_LENGTH)
         "Result from #{tool_call_id}: #{truncated}"
