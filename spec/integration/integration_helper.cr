@@ -11,7 +11,7 @@ class ScriptedClient < Mantle::Client
   def initialize(@responses : Array(Mantle::Response))
   end
 
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil) : Mantle::Response
+  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
     @recorded_messages << messages
 
     if @call_count >= @responses.size
@@ -20,6 +20,12 @@ class ScriptedClient < Mantle::Client
 
     response = @responses[@call_count]
     @call_count += 1
+
+    # Call on_chunk with content if present (to simulate streaming behavior)
+    if content = response.content
+      on_chunk.call(content)
+    end
+
     response
   end
 end

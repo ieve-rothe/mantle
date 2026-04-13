@@ -666,11 +666,11 @@ describe "Mantle Built-in Tools" do
         executor = Mantle::BuiltinToolExecutor.new(config)
 
         # Write test files
-        File.write("#{temp_dir}/search_target.txt", "line1\nline2 has MATCH\nline3")
+        File.write("#{temp_dir}/search_target.txt", "line1\nline2 has UNIQUEMATCH\nline3")
 
         result = executor.execute(
           "search_files",
-          {"query" => JSON::Any.new("MATCH")}
+          {"query" => JSON::Any.new("UNIQUEMATCH")}
         )
 
         result.should contain("success")
