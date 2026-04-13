@@ -157,13 +157,12 @@ module Mantle
     end
 
     def prune(num_to_prune : Int32) : Array(Hash(String, String))
-      pruned_messages = [] of Hash(String, String)
-
       count = [num_to_prune, @current_num_messages].min
+      return [] of Hash(String, String) if count <= 0
 
-      count.times do
-        pruned_messages << @messages.shift
-      end
+      pruned_messages = @messages.first(count)
+      @messages.shift(count)
+
       @current_num_messages = @messages.size
       save_context_to_json
       return pruned_messages
