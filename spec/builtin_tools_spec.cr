@@ -655,6 +655,22 @@ describe "Mantle Built-in Tools" do
         result.should contain("Security violation")
       end
 
+      it "rejects file_pattern with leading spaces before hyphen" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "search_files",
+          {
+            "query"        => JSON::Any.new("MATCH"),
+            "file_pattern" => JSON::Any.new("  -u"),
+          }
+        )
+
+        result.should contain("error")
+        result.should contain("Security violation")
+      end
+
       it "rejects file_pattern containing malicious control characters" do
         config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::BuiltinToolExecutor.new(config)
