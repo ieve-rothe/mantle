@@ -84,6 +84,7 @@ module Mantle
       tool_callback : Proc(String, Hash(String, JSON::Any), String)? = nil,
       builtin_config : BuiltinToolConfig? = nil,
       max_iterations : Int32 = DEFAULT_MAX_ITERATIONS,
+      on_chunk : Proc(String, Nil)? = nil,
       on_response : Proc(Mantle::Response, Nil)? = nil,
     )
       # Add user message to context
@@ -111,7 +112,11 @@ module Mantle
 
           # Force one last client call without tools to get the final text response
           final_context = @context_manager.current_view
-          final_response = @client.execute(final_context, nil)
+          final_response = if on_chunk
+                             @client.execute(final_context, nil, &on_chunk)
+                           else
+                             @client.execute(final_context, nil)
+                           end
 
           if (req = final_response.raw_request) && (res = final_response.raw_response)
             @logger.log_api_payloads(req, res)
@@ -133,7 +138,11 @@ module Mantle
 
         # Execute LLM with tools
         Mantle.emit_status(:thinking)
-        response = @client.execute(context_view, all_tools)
+        response = if on_chunk
+                     @client.execute(context_view, all_tools, &on_chunk)
+                   else
+                     @client.execute(context_view, all_tools)
+                   end
 
         if (req = response.raw_request) && (res = response.raw_response)
           @logger.log_api_payloads(req, res)
