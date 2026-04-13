@@ -322,7 +322,7 @@ module Mantle
 
       if file_pattern
         # Validate file_pattern to prevent argument injection and malicious payloads
-        if file_pattern.starts_with?("-")
+        if file_pattern.strip.starts_with?("-")
           return {error: "Security violation: file_pattern cannot start with a hyphen."}.to_json
         end
 
@@ -357,7 +357,7 @@ module Mantle
             args << "-g"
             args << file_pattern
           end
-          args << "--"
+          args << "--" # safely terminate option parsing for rg
           args << query
           args << absolute_path
           status = Process.run("rg", args, output: output, error: error)
@@ -367,7 +367,7 @@ module Mantle
           if file_pattern
             args << "--include=#{file_pattern}"
           end
-          args << "--"
+          args << "--" # safely terminate option parsing for grep
           args << query
           args << absolute_path
           status = Process.run("grep", args, output: output, error: error)
