@@ -53,7 +53,6 @@ module Mantle
       context_view = @context_manager.current_view
       @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
-      Mantle.emit_status(:thinking)
       response = @client.execute(context_view)
 
       if (req = response.raw_request) && (res = response.raw_response)
@@ -137,7 +136,6 @@ module Mantle
         end
 
         # Execute LLM with tools
-        Mantle.emit_status(:thinking)
         response = if on_chunk
                      @client.execute(context_view, all_tools, &on_chunk)
                    else
