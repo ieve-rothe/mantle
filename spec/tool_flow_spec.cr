@@ -13,8 +13,12 @@ class ToolCallMockClient < Mantle::Client
   def initialize(@responses : Array(Mantle::Response))
   end
 
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
+def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
+  if @call_count < @responses.size
     response = @responses[@call_count]
+  else
+    response = @responses.last
+  end
     @call_count += 1
     if content = response.content
       on_chunk.call(content) unless content.empty?
@@ -128,9 +132,9 @@ describe "Mantle ToolEnabledChatFlow" do
         ]
       )
 
-      client = ToolCallMockClient.new(
-        Array.new(20, tool_call_response) # More than max_iterations
-      )
+      responses = Array(Mantle::Response).new(3, tool_call_response)
+      responses << Mantle::Response.new(content: "Final text response after limit", tool_calls: nil)
+      client = ToolCallMockClient.new(responses)
 
       tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
         %({"result":"looping"})
@@ -150,17 +154,17 @@ describe "Mantle ToolEnabledChatFlow" do
 
       flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
 
-      expect_raises(Exception, /max.*iteration/i) do
-        flow.run(
-          "Loop forever",
-          custom_tools: custom_tools,
-          tool_callback: tool_callback,
-          max_iterations: 3
-        )
-      end
+      final_response = nil
+      flow.run(
+        "Loop forever",
+        custom_tools: custom_tools,
+        tool_callback: tool_callback,
+        max_iterations: 3,
+        on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
+      )
 
-      # Should stop after 3 iterations, not run all 20
-      client.call_count.should be <= 3
+      final_response.should eq("Final text response after limit")
+      client.call_count.should eq(4) # 3 tool calls + 1 final text call
     end
   end
 

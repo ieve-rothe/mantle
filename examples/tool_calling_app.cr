@@ -1,12 +1,16 @@
 #!/usr/bin/env crystal
 
 # Tool Calling Example Application
-# Demonstrates Mantle's tool calling capabilities with both built-in and custom tools
-# This version uses JSON-backed context store and tests memory consolidation
+# Demonstrates Mantle's tool calling capabilities with both built-in and custom tools.
+# It also uses JSON-backed context and memory stores with low limits to demonstrate
+# how `ToolEnabledChatFlow` handles context length limitations.
 
 require "../src/mantle"
 
-# Define a custom tool for getting the current time
+# 1. Define custom tools
+# A custom tool is defined by creating a `Mantle::Tool` object with a `FunctionDefinition`.
+# This defines the schema that the LLM uses to understand what the tool does and what
+# arguments to pass.
 def create_time_tool
   Mantle::Tool.new(
     function: Mantle::FunctionDefinition.new(
@@ -25,7 +29,8 @@ def create_time_tool
   )
 end
 
-# Custom tool callback implementation
+# The custom tool handler executes the actual code for custom tools.
+# It receives the name of the tool called by the model, and a Hash of arguments.
 def custom_tool_handler(name : String, args : Hash(String, JSON::Any)) : String
   case name
   when "get_current_time"
@@ -67,7 +72,7 @@ puts "  - Memory consolidation when context limit is reached"
 puts "=" * 70
 puts
 
-# Setup Mantle components
+# 2. Setup Mantle components
 model_config = Mantle::ModelConfig.new(
   "gemma4:e2b",                    # model_name
   false,                            # stream
@@ -108,10 +113,15 @@ context_manager = Mantle::ContextManager.new(
 
 logger = Mantle::FileLogger.new(log_file, "User", "Assistant", include_thinking: true)
 
-# Create ToolEnabledChatFlow
+# Create a ToolEnabledChatFlow.
+# This flow handles not just user messages, but parses tool call requests from the model,
+# executes the relevant tools, adds the results to the context, and re-prompts the model
+# in a loop until the model provides a final textual response.
 flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
 
-# Configure built-in tool access
+# Configure built-in tool access.
+# Built-in tools have security constraints like `allowed_paths` for reading
+# and `autonomous_zone_paths` for writing.
 builtin_config = Mantle::BuiltinToolConfig.new(
   working_directory: Dir.current,
   allowed_paths: [Dir.current, "/tmp"],
@@ -143,7 +153,8 @@ display_response = ->(response : Mantle::Response) {
   puts
 }
 
-# Extended conversation to trigger memory consolidation
+# 3. Start the flow
+# We simulate a long conversation to see how the system handles tools and context limits.
 puts "Starting conversation with multiple interactions..."
 puts "=" * 70
 puts

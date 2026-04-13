@@ -72,6 +72,24 @@ describe Mantle::EphemeralSlidingContextStore do
       view[4]["role"].should eq("assistant")
     end
   end
+
+  describe "#clear" do
+    it "removes all conversation messages" do
+      # Arrange
+      store = Mantle::EphemeralSlidingContextStore.new("System", 5)
+      store.add_message("User", "Msg1")
+      store.add_message("Assistant", "Msg2")
+
+      # Act
+      store.clear
+
+      # Assert
+      store.current_num_messages.should eq(0)
+      view = store.current_view
+      view.size.should eq(1) # Only system prompt remains
+      view[0]["role"].should eq("system")
+    end
+  end
 end
 
 # ------------------------------------------------------------------------------
@@ -228,6 +246,7 @@ describe Mantle::JSONContextStore do
       File.delete(test_file) if File.exists?(test_file)
     end
   end
+
   describe "#prune" do
     it "removes the oldest N messages and returns them" do
       # Arrange
@@ -289,8 +308,28 @@ describe Mantle::JSONContextStore do
       File.delete(test_file) if File.exists?(test_file)
     end
   end
-end
 
-# ------------------------------------------------------------------------------
-# Ephemeral Sliding Context Store
-# Should maintain last N messages in context, loading them from JSON backend store
+  describe "#clear" do
+    it "removes all conversation messages and updates the JSON file" do
+      # Arrange
+      test_file = "/tmp/mantle_test_clear_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::JSONContextStore.new("System", test_file)
+      store.add_message("User", "Msg1")
+
+      # Act
+      store.clear
+
+      # Assert
+      store.current_num_messages.should eq(0)
+      view = store.current_view
+      view.size.should eq(1) # Only system prompt remains
+
+      # Check persistence
+      json_content = JSON.parse(File.read(test_file))
+      json_content["messages"].as_a.size.should eq(0)
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+end

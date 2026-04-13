@@ -93,7 +93,7 @@ module Mantle
     end
 
     def consolidate_memory
-      Mantle::Status.add(:memory_consolidation)
+      Mantle.emit_status(:memory_consolidation)
       # If we're at msg_hardmax, prune msg_hardmax - msg_target messages from context_store using the .prune method, then we pump those messages into memory_store.ingest()
       num_to_prune = @msg_hardmax - @msg_target
 
@@ -118,9 +118,7 @@ module Mantle
     end
 
     def clear_context
-      # This method needs to be properly implemented based on the context store type
-      # For now, this is a placeholder that would need context_store to support clearing
-      # TODO: Add clear method to ContextStore interface
+      @context_store.clear
     end
 
     private def strip_thinking(msg : String) : String

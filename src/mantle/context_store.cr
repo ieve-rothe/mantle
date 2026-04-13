@@ -35,6 +35,10 @@ module Mantle
       # Implement in specific class.
     end
 
+    def clear
+      # Implement in specific class.
+    end
+
     # Normalize label to valid chat role
     protected def normalize_role(label : String) : String
       normalized = label.downcase
@@ -84,6 +88,11 @@ module Mantle
       @messages << {"role" => role, "content" => message}
       @messages.shift if @messages.size > @messages_to_keep
       @current_num_messages = @messages.size
+    end
+
+    def clear
+      @messages.clear
+      @current_num_messages = 0
     end
   end
 
@@ -143,18 +152,14 @@ module Mantle
       rescue e : File::NotFoundError
         save_context_to_json
         Mantle::Log.warn { "Context file was not found - creating a new one." }
-        Mantle::Status.add(:new_context_file)
+        Mantle.emit_status(:new_context_file)
       end
     end
 
     def prune(num_to_prune : Int32) : Array(Hash(String, String))
       pruned_messages = [] of Hash(String, String)
 
-      if num_to_prune > @current_num_messages
-        count = @current_num_messages
-      else
-        count = num_to_prune
-      end
+      count = [num_to_prune, @current_num_messages].min
 
       count.times do
         pruned_messages << @messages.shift
@@ -162,6 +167,12 @@ module Mantle
       @current_num_messages = @messages.size
       save_context_to_json
       return pruned_messages
+    end
+
+    def clear
+      @messages.clear
+      @current_num_messages = 0
+      save_context_to_json
     end
   end
 end

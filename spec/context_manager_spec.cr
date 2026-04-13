@@ -33,6 +33,11 @@ class TrackingContextStore < Mantle::ContextStore
     @current_num_messages = @messages.size
     pruned
   end
+
+  def clear
+    @messages.clear
+    @current_num_messages = 0
+  end
 end
 
 # Test-specific memory store that tracks ingestion calls
@@ -415,6 +420,23 @@ describe Mantle::ContextManager do
 
       # Assert
       context_store.messages.size.should eq(4)
+    end
+  end
+
+  describe "#clear_context" do
+    it "calls clear on the context store" do
+      # Arrange
+      context_store = TrackingContextStore.new("System")
+      memory_store = TrackingMemoryStore.new
+      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      context_store.add_message("User", "Hello")
+
+      # Act
+      manager.clear_context
+
+      # Assert
+      context_store.messages.size.should eq(0)
+      context_store.current_num_messages.should eq(0)
     end
   end
 

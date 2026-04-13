@@ -11,7 +11,7 @@ require "./tools"
 module Mantle
   # Record is a macro that expands to define struct with initializer, getters and a copy_with and clone helper methods.
   # Reminder that it's positional, not named arguments
-  record ModelConfig, model_name : String, stream : Bool, temperature : Float64, top_p : Float64, max_tokens : Int32, api_url : String
+  record ModelConfig, model_name : String, stream : Bool, temperature : Float64, top_p : Float64, max_tokens : Int32, api_url : String, keep_alive : Int32 | String = "10m"
 
   # Represents a function call within a tool call
   # Contains the function name and its arguments as a JSON string
@@ -113,6 +113,7 @@ module Mantle
     property top_p : Float64
     property max_tokens : Int32
     property api_url : String
+    property keep_alive : Int32 | String
 
     def initialize(model_config : ModelConfig)
       @model_name = model_config.model_name
@@ -121,6 +122,7 @@ module Mantle
       @top_p = model_config.top_p
       @max_tokens = model_config.max_tokens
       @api_url = model_config.api_url
+      @keep_alive = model_config.keep_alive
     end
 
     def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil, &on_chunk : String -> Nil) : Response
@@ -131,11 +133,12 @@ module Mantle
       # Build payload conditionally based on whether tools are provided
       body = if tools
                {
-                 model:    @model_name,
-                 messages: messages,
-                 stream:   @stream,
-                 tools:    tools,
-                 options:  {
+                 model:      @model_name,
+                 messages:   messages,
+                 stream:     @stream,
+                 tools:      tools,
+                 keep_alive: @keep_alive,
+                 options:    {
                    num_predict: @max_tokens,
                    temperature: @temperature,
                    top_p:       @top_p,
@@ -143,10 +146,11 @@ module Mantle
                }.to_json
              else
                {
-                 model:    @model_name,
-                 messages: messages,
-                 stream:   @stream,
-                 options:  {
+                 model:      @model_name,
+                 messages:   messages,
+                 stream:     @stream,
+                 keep_alive: @keep_alive,
+                 options:    {
                    num_predict: @max_tokens,
                    temperature: @temperature,
                    top_p:       @top_p,

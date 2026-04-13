@@ -202,6 +202,7 @@ describe Mantle::Client do
 
     # Check model config
     parsed_request["model"].should eq("test-model")
+    parsed_request["keep_alive"].should eq("10m")
     parsed_request["options"]["temperature"].should eq(0.6)
     parsed_request["options"]["top_p"].should eq(0.7)
     parsed_request["options"]["num_predict"].should eq(700)
@@ -269,6 +270,9 @@ describe Mantle::Client do
     tools_array.size.should eq(1)
     tools_array[0]["type"].should eq("function")
     tools_array[0]["function"]["name"].should eq("read_file")
+
+    # Check keep_alive
+    parsed_request["keep_alive"].should eq("10m")
 
     # Cleanup
     server.close
@@ -369,6 +373,46 @@ describe Mantle::Client do
     response.content.should eq("I'll read that file for you.")
     response.tool_calls.should_not be_nil
     response.tool_calls.not_nil!.size.should eq(1)
+
+    # Cleanup
+    server.close
+  end
+
+  it "includes custom keep_alive value when provided" do
+    model_config = Mantle::ModelConfig.new(
+      "test-model", false, 0.6, 0.7, 700, "http://localhost:43004/", keep_alive: "5m"
+    )
+    client = Mantle::LlamaClient.new(model_config)
+
+    api_response = {
+      "model": "test-model",
+      "message": {
+        "role": "assistant",
+        "content": "Keep alive test",
+      },
+      "done": true,
+    }.to_json
+
+    received_request_body : String? = nil
+    server = HTTP::Server.new do |context|
+      received_request_body = context.request.body.try(&.gets_to_end)
+      context.response.content_type = "application/json"
+      context.response.print api_response
+    end
+    address = server.bind_tcp 43004
+
+    spawn { server.listen }
+
+    test_messages = [{"role" => "user", "content" => "Test"}]
+
+    # Act
+    client.execute(test_messages)
+
+    # Assert
+    received_request_body.should_not be_nil
+    parsed_request = JSON.parse(received_request_body.not_nil!)
+
+    parsed_request["keep_alive"].should eq("5m")
 
     # Cleanup
     server.close
