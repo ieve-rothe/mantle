@@ -55,7 +55,8 @@ class DummyContextManager < Mantle::ContextManager
 end
 
 class DummyClient < Mantle::Client
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil) : Mantle::Response
+  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
+    on_chunk.call("Simulated response")
     Mantle::Response.new(content: "Simulated response", tool_calls: nil)
   end
 end

@@ -5,6 +5,7 @@
 require "http/headers"
 require "http/client"
 require "json"
+require "random/secure"
 require "./tools"
 
 module Mantle
@@ -93,7 +94,15 @@ module Mantle
   # Contract for Client class. Using a contract to allow for a dummy client class when unit testing other parts of codebase.
   # Now returns Response instead of String to support tool calling
   abstract class Client
-    abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil) : Response
+    # Accepts an optional block (the `&on_chunk` part) which lets consumer apps
+    # "listen" to pieces of the response as they arrive (like a typewriter effect)
+    abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil, &on_chunk : String -> Nil) : Response
+
+    # A fallback version of `execute` for apps that don't want to deal with streaming.
+    # It just runs the request and throws away the partial chunks, waiting for the final response.
+    def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil) : Response
+      execute(messages, tools) { |chunk| }
+    end
   end
 
   # Client for sending requests to ollama API
@@ -116,7 +125,7 @@ module Mantle
       @keep_alive = model_config.keep_alive
     end
 
-    def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil) : Response
+    def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil, &on_chunk : String -> Nil) : Response
       headers = HTTP::Headers{
         "Content-Type" => "application/json",
       }
@@ -149,32 +158,121 @@ module Mantle
                }.to_json
              end
 
-      response = HTTP::Client.post(@api_url, headers: headers, body: body)
+      if @stream
+        full_content = String::Builder.new
+        full_thinking = String::Builder.new
+        tool_calls_json = nil
+        raw_response_builder = String::Builder.new
+        status_code = 0
+        error_body = ""
 
-      if response.status.success?
-        response_data = JSON.parse(response.body)
-        message = response_data["message"]
+        # By passing a `do |response|` block to `.post`, Crystal gives us a live data stream
+        # (`body_io`) instead of waiting for the whole download to finish.
+        HTTP::Client.post(@api_url, headers: headers, body: body) do |response|
+          status_code = response.status_code
+          if response.status.success?
+            if io = response.body_io
+              # Read the stream line-by-line as data arrives from Ollama.
+              # Ollama streams its responses as NDJSON (Newline Delimited JSON).
+              io.each_line do |line|
+                next if line.empty?
+                raw_response_builder.puts(line)
 
-        # Extract content (may be nil if only tool_calls present)
-        content = message["content"]?.try(&.as_s?)
+                parsed = JSON.parse(line)
+                msg = parsed["message"]
 
-        # Extract thinking process (if any)
-        thinking = message["thinking"]?.try(&.as_s?)
+                # As soon as we get a text chunk, tell the app about it right away!
+                if chunk = msg["content"]?.try(&.as_s?)
+                  unless chunk.empty?
+                    on_chunk.call(chunk)
+                    full_content << chunk
+                  end
+                end
 
-        # Extract tool_calls if present
-        tool_calls_json = message["tool_calls"]?
-        tool_calls = if tool_calls_json
-                       Array(ToolCall).from_json(tool_calls_json.to_json)
-                     else
-                       nil
-                     end
+                # Record thinking tags if present
+                if chunk = msg["thinking"]?.try(&.as_s?)
+                  unless chunk.empty?
+                    full_thinking << chunk
+                  end
+                end
 
-        return Response.new(content: content, tool_calls: tool_calls, thinking: thinking).tap do |r|
-          r.raw_request = body
-          r.raw_response = response.body
+                # If the AI wants to use a tool, save it for later.
+                # (Tools don't need to be streamed to the user letter-by-letter).
+                if tc = msg["tool_calls"]?
+                  tool_calls_json = tc
+                end
+              end
+            end
+          else
+            error_body = response.body_io ? response.body_io.gets_to_end : ""
+          end
+        end
+
+        if status_code >= 200 && status_code < 300
+          tool_calls = if tool_calls_json
+                         # Some versions of Ollama forget to assign a unique ID to their tool calls.
+                         # We'll just generate our own random ID to prevent the app from crashing.
+                         arr_json = tool_calls_json.as_a
+                         arr_json.each do |t|
+                           if !t.as_h.has_key?("id")
+                             t.as_h["id"] = JSON::Any.new("call_" + Random::Secure.hex(4))
+                           end
+                         end
+                         Array(ToolCall).from_json(arr_json.to_json)
+                       else
+                         nil
+                       end
+
+          final_content = full_content.empty? ? nil : full_content.to_s
+          final_thinking = full_thinking.empty? ? nil : full_thinking.to_s
+
+          # Return the final stitched-together response at the very end
+          return Response.new(content: final_content, tool_calls: tool_calls, thinking: final_thinking).tap do |r|
+            r.raw_request = body
+            r.raw_response = raw_response_builder.to_s
+          end
+        else
+          raise Exception.new("Error #{status_code}: #{error_body}")
         end
       else
-        raise Exception.new("Error #{response.status_code}: #{response.body}")
+        response = HTTP::Client.post(@api_url, headers: headers, body: body)
+
+        if response.status.success?
+          response_data = JSON.parse(response.body)
+          message = response_data["message"]
+
+          # Extract content (may be nil if only tool_calls present)
+          content = message["content"]?.try(&.as_s?)
+
+          if content && !content.empty?
+            on_chunk.call(content)
+          end
+
+          # Extract thinking process (if any)
+          thinking = message["thinking"]?.try(&.as_s?)
+
+          # Extract tool_calls if present
+          tool_calls_json = message["tool_calls"]?
+          tool_calls = if tool_calls_json
+                         # Ollama sometimes omits ID, inject one if missing
+                         arr_json = tool_calls_json.as_a
+                         arr_json.each do |t|
+                           if !t.as_h.has_key?("id")
+                             t.as_h["id"] = JSON::Any.new("call_" + Random::Secure.hex(4))
+                           end
+                         end
+                         Array(ToolCall).from_json(arr_json.to_json)
+                       else
+                         nil
+                       end
+
+          return Response.new(content: content, tool_calls: tool_calls, thinking: thinking).tap do |r|
+            r.raw_request = body
+            r.raw_response = response.body
+          end
+        else
+          raise Exception.new("Error #{response.status_code}: #{response.body}")
+        end
       end
     end
   end
