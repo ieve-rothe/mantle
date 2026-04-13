@@ -8,6 +8,14 @@ module Mantle
   module MarkdownFormatter
     extend self
 
+    BOLD_REGEX        = /\*\*([^*]+)\*\*/
+    ITALIC_REGEX      = /(?<!\w)\*([^*]+)\*(?!\w)/
+    CODE_BLOCKS_REGEX = /```([\s\S]*?)```/
+    INLINE_CODE_REGEX = /`([^`]+)`/
+    HEADERS_REGEX     = /^(\#{1,6})\s+([^\n]+)$/m
+    LINKS_REGEX       = /\[([^\]\[]+)\]\(([^)]+)\)/
+    BLOCKQUOTES_REGEX = /^>\s+([^\n]+)$/m
+
     # Formats a markdown string by converting markdown syntax elements to ANSI escape codes.
     # Supported elements: **bold**, *italic*, # Headers, `inline code`, ```code blocks```,
     # > blockquotes, and [links](url).
@@ -15,25 +23,25 @@ module Mantle
       formatted = text.dup
 
       # **bold** -> Bright white, bold text
-      formatted = formatted.gsub(/\*\*([^*]+)\*\*/) { "\e[1;97m#{$~[1]}\e[0m" }
+      formatted = formatted.gsub(BOLD_REGEX) { "\e[1;97m#{$~[1]}\e[0m" }
 
       # *italic* -> Italicized text (avoids matching within words like snake_case or bold overlap)
-      formatted = formatted.gsub(/(?<!\w)\*([^*]+)\*(?!\w)/) { "\e[3m#{$~[1]}\e[0m" }
+      formatted = formatted.gsub(ITALIC_REGEX) { "\e[3m#{$~[1]}\e[0m" }
 
       # ```code blocks``` -> Muted gray background
-      formatted = formatted.gsub(/```([\s\S]*?)```/) { "\e[48;5;236m#{$~[1]}\e[0m" }
+      formatted = formatted.gsub(CODE_BLOCKS_REGEX) { "\e[48;5;236m#{$~[1]}\e[0m" }
 
       # `inline code` -> Muted gray background
-      formatted = formatted.gsub(/`([^`]+)`/) { "\e[48;5;236m#{$~[1]}\e[0m" }
+      formatted = formatted.gsub(INLINE_CODE_REGEX) { "\e[48;5;236m#{$~[1]}\e[0m" }
 
       # Headers -> Cyan, bold text
-      formatted = formatted.gsub(/^(\#{1,6})\s+([^\n]+)$/m) { "\e[1;36m#{$~[1]} #{$~[2]}\e[0m" }
+      formatted = formatted.gsub(HEADERS_REGEX) { "\e[1;36m#{$~[1]} #{$~[2]}\e[0m" }
 
       # [Links](url) -> Blue text with underlined URL
-      formatted = formatted.gsub(/\[([^\]\[]+)\]\(([^)]+)\)/) { "\e[34m#{$~[1]}\e[0m (\e[4;34m#{$~[2]}\e[0m)" }
+      formatted = formatted.gsub(LINKS_REGEX) { "\e[34m#{$~[1]}\e[0m (\e[4;34m#{$~[2]}\e[0m)" }
 
       # > Blockquotes -> Gray, italicized text
-      formatted = formatted.gsub(/^>\s+([^\n]+)$/m) { "\e[3;90m> #{$~[1]}\e[0m" }
+      formatted = formatted.gsub(BLOCKQUOTES_REGEX) { "\e[3;90m> #{$~[1]}\e[0m" }
 
       formatted
     end

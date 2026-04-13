@@ -6,7 +6,7 @@ require "../src/mantle.cr"
 
 # 1. Setup Primitives
 CONTEXT_FILE = "examples/test_context.json"
-MEMORY_FILE = "examples/test_memory.json"
+MEMORY_FILE  = "examples/test_memory.json"
 LOG_FILE     = "examples/test_log.txt"
 
 # Clean up previous test files
@@ -59,7 +59,7 @@ context_manager = Mantle::ContextManager.new(
   bot_name: bot_name,
   msg_target: 4,
   msg_hardmax: 8,
-  strip_thinking_tags: true  # Strip <think></think> blocks from model responses
+  strip_thinking_tags: true # Strip <think></think> blocks from model responses
 )
 
 # 3. Build the Flow
@@ -82,13 +82,13 @@ simulated_session = [
   "That makes sense. I'll probably just use the standard library's JSON::PullParser so it doesn't chew up memory.",
   "Did you see any weird errors in the dev log while I was working on that terminal stuff?",
   "Good to know. My brain is kind of fried from staring at hex codes.",
-  "Alright, I'm going to step away from the keyboard for a bit and grab some coffee."
+  "Alright, I'm going to step away from the keyboard for a bit and grab some coffee.",
 ]
 
 # Run the simulated conversation
 simulated_session.each_with_index do |input_text, index|
   puts "\n[Turn #{index + 1}/#{simulated_session.size}]"
-  
+
   flow.run(
     msg: input_text,
     on_response: ->(resp : Mantle::Response) {
@@ -99,15 +99,15 @@ simulated_session.each_with_index do |input_text, index|
       puts "Bot: #{resp.content}"
     }
   )
-  
-  # Optional: Sleep for a second so you can actually read the output 
+
+  # Optional: Sleep for a second so you can actually read the output
   # as it streams, making it feel more like a real chat log.
-  sleep(1.second) 
+  sleep(1.second)
 end
 
 puts "\n--- Forcing/Waiting for Consolidation ---"
-# If your threshold is higher than 9 messages, you might need to add a few 
-# more dummy strings to the array, or manually trigger your consolidation 
+# If your threshold is higher than 9 messages, you might need to add a few
+# more dummy strings to the array, or manually trigger your consolidation
 # method here if Mantle exposes it.
 
 puts "\n--- Final Context State (Layer 1 Check) ---"
