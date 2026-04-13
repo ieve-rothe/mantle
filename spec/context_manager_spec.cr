@@ -155,7 +155,7 @@ describe Mantle::ContextManager do
 
       # Assert
       view.should be_a(Array(Hash(String, String)))
-      view.size.should eq(3)  # system + 2 conversation messages
+      view.size.should eq(3) # system + 2 conversation messages
 
       # System message should include both prompt and memory
       view[0]["role"].should eq("system")

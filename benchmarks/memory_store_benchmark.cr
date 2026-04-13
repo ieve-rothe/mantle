@@ -66,7 +66,7 @@ Benchmark.bm do |x|
     # JSONLayeredMemoryStore doesn't expose layers easily but it's a property.
 
     100.times do
-       store.ingest(["message"])
+      store.ingest(["message"])
     end
   end
 end

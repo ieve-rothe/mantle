@@ -42,7 +42,7 @@ describe Mantle::Squishifiers do
       test_messages = [
         "[User] Hello there",
         "[Assistant] Hi back",
-        "[User] How are you?"
+        "[User] How are you?",
       ]
 
       # Act
@@ -52,7 +52,7 @@ describe Mantle::Squishifiers do
       client.captured_messages.should_not be_nil
       messages = client.captured_messages.not_nil!
 
-      messages.size.should eq(2)  # system + user message
+      messages.size.should eq(2) # system + user message
 
       # First message should be system prompt
       messages[0]["role"].should eq("system")
@@ -77,7 +77,7 @@ describe Mantle::Squishifiers do
       result = squishifier.call(test_messages)
 
       # Assert
-      result.should eq("Response with whitespace")  # stripped
+      result.should eq("Response with whitespace") # stripped
     end
 
     it "joins multiple messages with newlines in the user content" do
@@ -88,7 +88,7 @@ describe Mantle::Squishifiers do
       test_messages = [
         "Message 1",
         "Message 2",
-        "Message 3"
+        "Message 3",
       ]
 
       # Act
@@ -112,7 +112,7 @@ describe Mantle::Squishifiers do
       # Assert
       result.should eq("Empty summary")
       messages = client.captured_messages.not_nil!
-      messages[1]["content"].should eq("")  # Empty user content
+      messages[1]["content"].should eq("") # Empty user content
     end
 
     it "handles single message arrays" do

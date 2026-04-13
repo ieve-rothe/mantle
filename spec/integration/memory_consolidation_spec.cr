@@ -39,7 +39,7 @@ describe "Integration: Memory Consolidation" do
       client = ScriptedClient.new([
         Mantle::Response.new(content: "Response 1", tool_calls: nil),
         Mantle::Response.new(content: "Response 2", tool_calls: nil),
-        Mantle::Response.new(content: "Response 3", tool_calls: nil)
+        Mantle::Response.new(content: "Response 3", tool_calls: nil),
       ])
 
       logger = DummyLogger.new
