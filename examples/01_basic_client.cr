@@ -31,7 +31,7 @@ client = Mantle::LlamaClient.new(config)
 # The client expects an array of messages representing the conversation history.
 messages = [
   {"role" => "system", "content" => "You are a helpful assistant. Reply in exactly one sentence."},
-  {"role" => "user", "content" => "Why is the sky blue?"}
+  {"role" => "user", "content" => "Why is the sky blue?"},
 ]
 
 puts "Sending request to the model..."

@@ -46,7 +46,7 @@ describe "Mantle Response Types" do
       tool_call = Mantle::ToolCall.from_json(json)
 
       tool_call.id.should eq("call_999")
-      tool_call.type.should eq("function")  # Should default to "function"
+      tool_call.type.should eq("function") # Should default to "function"
       tool_call.function.name.should eq("test_tool")
       tool_call.function.arguments.should eq(%({"param":"value"}))
     end
@@ -151,7 +151,7 @@ describe Mantle::Client do
     api_response = {
       "model":      "test-model",
       "created_at": "2023-08-04T19:22:45.499127Z",
-      "message": {
+      "message":    {
         "role":    "assistant",
         "content": "The sky is blue because it is the color of the sky.",
       },
@@ -237,9 +237,9 @@ describe Mantle::Client do
 
     # Mock response
     api_response = {
-      "model": "test-model",
+      "model":   "test-model",
       "message": {
-        "role": "assistant",
+        "role":    "assistant",
         "content": "Let me read that file for you.",
       },
       "done": true,
@@ -287,20 +287,20 @@ describe Mantle::Client do
 
     # Mock response with tool_calls
     api_response = {
-      "model": "test-model",
+      "model":   "test-model",
       "message": {
-        "role": "assistant",
-        "content": nil,
+        "role":       "assistant",
+        "content":    nil,
         "tool_calls": [
           {
-            "id": "call_123",
-            "type": "function",
+            "id":       "call_123",
+            "type":     "function",
             "function": {
-              "name": "read_file",
-              "arguments": %({"file_path":"test.txt"})
-            }
-          }
-        ]
+              "name":      "read_file",
+              "arguments": %({"file_path":"test.txt"}),
+            },
+          },
+        ],
       },
       "done": true,
     }.to_json
@@ -338,20 +338,20 @@ describe Mantle::Client do
 
     # Mock response with both
     api_response = {
-      "model": "test-model",
+      "model":   "test-model",
       "message": {
-        "role": "assistant",
-        "content": "I'll read that file for you.",
+        "role":       "assistant",
+        "content":    "I'll read that file for you.",
         "tool_calls": [
           {
-            "id": "call_456",
-            "type": "function",
+            "id":       "call_456",
+            "type":     "function",
             "function": {
-              "name": "read_file",
-              "arguments": %({"file_path":"test.txt"})
-            }
-          }
-        ]
+              "name":      "read_file",
+              "arguments": %({"file_path":"test.txt"}),
+            },
+          },
+        ],
       },
       "done": true,
     }.to_json
@@ -385,9 +385,9 @@ describe Mantle::Client do
     client = Mantle::LlamaClient.new(model_config)
 
     api_response = {
-      "model": "test-model",
+      "model":   "test-model",
       "message": {
-        "role": "assistant",
+        "role":    "assistant",
         "content": "Keep alive test",
       },
       "done": true,

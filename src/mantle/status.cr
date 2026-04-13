@@ -11,5 +11,4 @@ module Mantle
   def self.emit_status(flag : Symbol)
     on_status_update.try &.call(flag)
   end
-
 end

@@ -58,7 +58,7 @@ flow = Mantle::ToolEnabledChatFlow.new(
 # You must configure security boundaries to prevent the AI from accessing sensitive files.
 builtin_config = Mantle::BuiltinToolConfig.new(
   working_directory: Dir.current,
-  allowed_paths: [Dir.current], # Only allow reading within this repo
+  allowed_paths: [Dir.current],                                           # Only allow reading within this repo
   autonomous_zone_paths: [File.join(Dir.current, "examples", "sandbox")], # Allow writing only in the sandbox folder
   file_backup_count: 3
 )
@@ -66,7 +66,7 @@ builtin_config = Mantle::BuiltinToolConfig.new(
 # Specify which built-in tools we want to give the model access to
 builtins = [
   Mantle::BuiltinTool::ReadFile,
-  Mantle::BuiltinTool::ListDirectory
+  Mantle::BuiltinTool::ListDirectory,
 ]
 
 # 4. Define a Custom Tool
@@ -79,7 +79,7 @@ def create_random_number_tool
       parameters: Mantle::ParametersSchema.new(
         properties: {
           "min" => Mantle::PropertyDefinition.new(type: "integer", description: "The minimum value"),
-          "max" => Mantle::PropertyDefinition.new(type: "integer", description: "The maximum value")
+          "max" => Mantle::PropertyDefinition.new(type: "integer", description: "The maximum value"),
         },
         required: ["min", "max"]
       )
