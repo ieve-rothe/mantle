@@ -320,6 +320,17 @@ module Mantle
       dir_path = arguments["directory_path"]?.try(&.as_s) || "."
       file_pattern = arguments["file_pattern"]?.try(&.as_s)
 
+      if file_pattern
+        # Validate file_pattern to prevent argument injection and malicious payloads
+        if file_pattern.starts_with?("-")
+          return {error: "Security violation: file_pattern cannot start with a hyphen."}.to_json
+        end
+
+        if file_pattern =~ /[;\n\r&|`$]/
+          return {error: "Security violation: file_pattern contains invalid characters."}.to_json
+        end
+      end
+
       # Resolve to absolute path
       absolute_path = resolve_path(dir_path)
 
