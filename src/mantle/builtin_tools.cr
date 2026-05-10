@@ -418,12 +418,20 @@ module Mantle
         return {error: "Missing required parameter: message"}.to_json
       end
 
+      # Validate message to prevent argument injection and malicious payloads
+      if message.strip.starts_with?("-")
+        return {error: "Security violation: message cannot start with a hyphen."}.to_json
+      end
+
       # Build notify-send arguments
-      args = [@bot_name, message]
+      args = [@bot_name]
 
       if icon = @config.notify_icon
         args << "--icon=#{icon}"
       end
+
+      args << "--"
+      args << message
 
       begin
         status = Process.run("notify-send", args)

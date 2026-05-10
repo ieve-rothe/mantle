@@ -803,6 +803,36 @@ describe "Mantle Built-in Tools" do
       end
     end
 
+    describe "notify_send" do
+      it "returns missing message error" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "notify_send",
+          {} of String => JSON::Any
+        )
+
+        result.should contain("error")
+        result.should contain("Missing required parameter")
+      end
+
+      it "prevents argument injection" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "notify_send",
+          {
+            "message" => JSON::Any.new("-u critical"),
+          }
+        )
+
+        result.should contain("error")
+        result.should contain("Security violation")
+      end
+    end
+
     describe "unknown tools" do
       it "returns error for unknown tool" do
         config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
