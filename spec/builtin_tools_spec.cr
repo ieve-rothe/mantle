@@ -88,6 +88,68 @@ describe "Mantle Built-in Tools" do
         end
       end
 
+      it "returns Tool definition for NotifySend" do
+        tool = Mantle::BuiltinToolRegistry.definition_for(Mantle::BuiltinTool::NotifySend)
+
+        tool.should be_a(Mantle::Tool)
+        tool.type.should eq("function")
+        tool.function.name.should eq("notify_send")
+        tool.function.description.should_not be_empty
+      end
+
+      it "NotifySend has correct parameters" do
+        tool = Mantle::BuiltinToolRegistry.definition_for(Mantle::BuiltinTool::NotifySend)
+
+        params = tool.function.parameters
+        params.type.should eq("object")
+        params.properties.has_key?("message").should be_true
+        params.properties["message"].type.should eq("string")
+
+        required = params.required
+        required.should_not be_nil
+        if required
+          required.should contain("message")
+        end
+      end
+
+      it "returns Tool definition for SearchFiles" do
+        tool = Mantle::BuiltinToolRegistry.definition_for(Mantle::BuiltinTool::SearchFiles)
+
+        tool.should be_a(Mantle::Tool)
+        tool.type.should eq("function")
+        tool.function.name.should eq("search_files")
+        tool.function.description.should_not be_empty
+      end
+
+      it "SearchFiles has correct parameters" do
+        tool = Mantle::BuiltinToolRegistry.definition_for(Mantle::BuiltinTool::SearchFiles)
+
+        params = tool.function.parameters
+        params.type.should eq("object")
+        params.properties.has_key?("query").should be_true
+        params.properties["query"].type.should eq("string")
+        params.properties.has_key?("directory_path").should be_true
+        params.properties["directory_path"].type.should eq("string")
+        params.properties.has_key?("file_pattern").should be_true
+        params.properties["file_pattern"].type.should eq("string")
+
+        required = params.required
+        required.should_not be_nil
+        if required
+          required.should contain("query")
+          required.should_not contain("directory_path")
+          required.should_not contain("file_pattern")
+        end
+      end
+
+      it "raises error for unknown builtin tool" do
+        expect_raises(Exception, "Unknown builtin tool") do
+          # Create an invalid enum value by casting an integer that doesn't correspond to any tool
+          invalid_tool = Mantle::BuiltinTool.new(99)
+          Mantle::BuiltinToolRegistry.definition_for(invalid_tool)
+        end
+      end
+
       it "tool definitions serialize to valid JSON" do
         tool = Mantle::BuiltinToolRegistry.definition_for(Mantle::BuiltinTool::ReadFile)
         json = tool.to_json
