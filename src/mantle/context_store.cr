@@ -11,7 +11,7 @@ require "./status"
 module Mantle
   # ----------------------------------------------------------------------------
   # Base class context store, not usable by itself.
-  class ContextStore
+  abstract class ContextStore
     property system_prompt : String
     property current_num_messages : Int32
 
@@ -22,22 +22,13 @@ module Mantle
 
     # Returns messages in chat format: Array(Hash(String, String))
     # Each hash has "role" and "content" keys
-    def current_view : Array(Hash(String, String))
-      # Implement in specific class
-      [] of Hash(String, String)
-    end
+    abstract def current_view : Array(Hash(String, String))
 
-    def add_message(label : String, message : String)
-      # Implement in specific class
-    end
+    abstract def add_message(label : String, message : String)
 
-    def prune(num_to_prune : Int32)
-      # Implement in specific class.
-    end
+    abstract def prune(num_to_prune : Int32) : Array(Hash(String, String))
 
-    def clear
-      # Implement in specific class.
-    end
+    abstract def clear
 
     # Normalize label to valid chat role
     protected def normalize_role(label : String) : String
@@ -88,6 +79,17 @@ module Mantle
       @messages << {"role" => role, "content" => message}
       @messages.shift if @messages.size > @messages_to_keep
       @current_num_messages = @messages.size
+    end
+
+    def prune(num_to_prune : Int32) : Array(Hash(String, String))
+      pruned_messages = [] of Hash(String, String)
+      count = [num_to_prune, @messages.size].min
+
+      count.times do
+        pruned_messages << @messages.shift
+      end
+      @current_num_messages = @messages.size
+      pruned_messages
     end
 
     def clear

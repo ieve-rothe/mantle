@@ -27,9 +27,9 @@ class TrackingContextStore < Mantle::ContextStore
     @current_num_messages = @messages.size
   end
 
-  def prune(num : Int32) : Array(Hash(String, String))
-    num_to_prune = Math.min(num, @messages.size)
-    pruned = @messages.shift(num_to_prune)
+  def prune(num_to_prune : Int32) : Array(Hash(String, String))
+    count = Math.min(num_to_prune, @messages.size)
+    pruned = @messages.shift(count)
     @current_num_messages = @messages.size
     pruned
   end
@@ -155,7 +155,7 @@ describe Mantle::ContextManager do
 
       # Assert
       view.should be_a(Array(Hash(String, String)))
-      view.size.should eq(3)  # system + 2 conversation messages
+      view.size.should eq(3) # system + 2 conversation messages
 
       # System message should include both prompt and memory
       view[0]["role"].should eq("system")

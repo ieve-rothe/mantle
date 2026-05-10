@@ -23,6 +23,18 @@ class DummyContextStore < Mantle::ContextStore
     @messages << {"role" => role, "content" => message}
     @current_num_messages = @messages.size
   end
+
+  def prune(num_to_prune : Int32) : Array(Hash(String, String))
+    count = [num_to_prune, @messages.size].min
+    pruned = @messages.shift(count)
+    @current_num_messages = @messages.size
+    pruned
+  end
+
+  def clear
+    @messages.clear
+    @current_num_messages = 0
+  end
 end
 
 class DummyMemoryStore < Mantle::JSONLayeredMemoryStore
