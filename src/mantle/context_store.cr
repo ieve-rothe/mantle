@@ -100,24 +100,24 @@ module Mantle
       @current_num_messages = @messages.size
     end
 
-def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
-  pruned_messages = [] of Hash(String, String)
+    def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+      pruned_messages = [] of Hash(String, String)
 
-  while current_num_tokens > target_tokens && !@messages.empty?
-    if @messages.first["role"] == "system" && @messages.size > 1
-      system_msg = @messages.shift
-      pruned_messages << @messages.shift
-      @messages.unshift(system_msg)
-    else
-      pruned_messages << @messages.shift
+      while current_num_tokens > target_tokens && !@messages.empty?
+        if @messages.first["role"] == "system" && @messages.size > 1
+          system_msg = @messages.shift
+          pruned_messages << @messages.shift
+          @messages.unshift(system_msg)
+        else
+          pruned_messages << @messages.shift
+        end
+      end
+
+      @current_num_messages = @messages.size
+      return pruned_messages
     end
-  end
 
-  @current_num_messages = @messages.size
-  return pruned_messages
-end
-
-def clear
+    def clear
       @messages.clear
       @current_num_messages = 0
     end
@@ -187,25 +187,25 @@ def clear
       end
     end
 
-def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
-  pruned_messages = [] of Hash(String, String)
+    def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+      pruned_messages = [] of Hash(String, String)
 
-  while current_num_tokens > target_tokens && !@messages.empty?
-    if @messages.first["role"] == "system" && @messages.size > 1
-      system_msg = @messages.shift
-      pruned_messages << @messages.shift
-      @messages.unshift(system_msg)
-    else
-      pruned_messages << @messages.shift
+      while current_num_tokens > target_tokens && !@messages.empty?
+        if @messages.first["role"] == "system" && @messages.size > 1
+          system_msg = @messages.shift
+          pruned_messages << @messages.shift
+          @messages.unshift(system_msg)
+        else
+          pruned_messages << @messages.shift
+        end
+      end
+
+      @current_num_messages = @messages.size
+      save_context_to_json
+      return pruned_messages
     end
-  end
 
-  @current_num_messages = @messages.size
-  save_context_to_json
-  return pruned_messages
-end
-
-def prune(num_to_prune : Int32) : Array(Hash(String, String))
+    def prune(num_to_prune : Int32) : Array(Hash(String, String))
       pruned_messages = [] of Hash(String, String)
 
       count = [num_to_prune, @current_num_messages].min

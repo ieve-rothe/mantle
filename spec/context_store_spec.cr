@@ -18,7 +18,7 @@ describe Mantle::EphemeralSlidingContextStore do
       store.system_prompt.should eq(sys_prompt)
       view = store.current_view
       view.should be_a(Array(Hash(String, String)))
-      view.size.should eq(1)  # Only system message
+      view.size.should eq(1) # Only system message
       view[0]["role"].should eq("system")
       view[0]["content"].should eq(sys_prompt)
       store.messages_to_keep.should eq(messages_to_keep)
@@ -38,7 +38,7 @@ describe Mantle::EphemeralSlidingContextStore do
 
       # Assert - Should have system message + last 3 conversation messages
       view = store.current_view
-      view.size.should eq(4)  # system + 3 messages (oldest dropped)
+      view.size.should eq(4) # system + 3 messages (oldest dropped)
       view[0]["role"].should eq("system")
       view[0]["content"].should eq(sys_prompt)
       view[1]["role"].should eq("assistant")
@@ -63,7 +63,7 @@ describe Mantle::EphemeralSlidingContextStore do
 
       # Assert
       view = store.current_view
-      view.size.should eq(5)  # system + 4 messages
+      view.size.should eq(5) # system + 4 messages
       view[0]["role"].should eq("system")
       view[1]["role"].should eq("user")
       view[2]["role"].should eq("assistant")
@@ -131,7 +131,7 @@ describe Mantle::JSONContextStore do
       store.system_prompt.should eq(sys_prompt)
       view = store.current_view
       view.should be_a(Array(Hash(String, String)))
-      view.size.should eq(1)  # Only system message
+      view.size.should eq(1) # Only system message
       view[0]["role"].should eq("system")
       view[0]["content"].should eq(sys_prompt)
       File.exists?(test_file).should be_true
@@ -150,7 +150,7 @@ describe Mantle::JSONContextStore do
         "system_prompt" => sys_prompt,
         "messages"      => [
           {"role" => "user", "content" => "Hello"},
-          {"role" => "assistant", "content" => "Hi there"}
+          {"role" => "assistant", "content" => "Hi there"},
         ],
       }
       File.write(test_file, existing_data.to_json)
@@ -160,7 +160,7 @@ describe Mantle::JSONContextStore do
 
       # Assert
       view = store.current_view
-      view.size.should eq(3)  # system + 2 messages
+      view.size.should eq(3) # system + 2 messages
       view[0]["role"].should eq("system")
       view[0]["content"].should eq(sys_prompt)
       view[1]["role"].should eq("user")
@@ -184,7 +184,7 @@ describe Mantle::JSONContextStore do
 
       # Assert
       view = store.current_view
-      view.size.should eq(2)  # system + 1 message
+      view.size.should eq(2) # system + 1 message
       view[0]["role"].should eq("system")
       view[0]["content"].should eq("System:")
       view[1]["role"].should eq("user")
@@ -227,12 +227,12 @@ describe Mantle::JSONContextStore do
 
       # Assert
       view = store.current_view
-      view.size.should eq(3)  # system + 2 messages
+      view.size.should eq(3) # system + 2 messages
       view[0]["role"].should eq("system")
       view[0]["content"].should eq("SysPrompt")
       view[1]["role"].should eq("user")
       view[1]["content"].should eq("Msg1")
-      view[2]["role"].should eq("assistant")  # Bot normalized to assistant
+      view[2]["role"].should eq("assistant") # Bot normalized to assistant
       view[2]["content"].should eq("Msg2")
 
       # Cleanup
@@ -256,7 +256,7 @@ describe Mantle::JSONContextStore do
 
       # Assert - Second instance should have same context
       view = store2.current_view
-      view.size.should eq(3)  # system + 2 messages
+      view.size.should eq(3) # system + 2 messages
       view[0]["role"].should eq("system")
       view[0]["content"].should eq(sys_prompt)
       view[1]["role"].should eq("user")
@@ -292,7 +292,7 @@ describe Mantle::JSONContextStore do
 
       # Assert - Check current state (only the last 2 should remain)
       view = store.current_view
-      view.size.should eq(3)  # system + 2 remaining messages
+      view.size.should eq(3) # system + 2 remaining messages
       view[0]["role"].should eq("system")
       view[1]["role"].should eq("user")
       view[1]["content"].should eq("Three")
@@ -323,7 +323,7 @@ describe Mantle::JSONContextStore do
       pruned[0]["content"].should eq("Only Message")
 
       view = store.current_view
-      view.size.should eq(1)  # Only system message remains
+      view.size.should eq(1) # Only system message remains
       view[0]["role"].should eq("system")
 
       # Cleanup
