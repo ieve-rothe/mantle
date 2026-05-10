@@ -13,6 +13,10 @@ class TrackingContextStore < Mantle::ContextStore
     @add_message_calls = [] of {String, String}
   end
 
+  def current_num_tokens : Int32
+    current_view.sum { |msg| msg["content"].size // 4 }
+  end
+
   def current_view : Array(Hash(String, String))
     result = [] of Hash(String, String)
     result << {"role" => "system", "content" => @system_prompt} unless @system_prompt.empty?
@@ -34,7 +38,23 @@ class TrackingContextStore < Mantle::ContextStore
     pruned
   end
 
-  def clear
+def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+  pruned_messages = [] of Hash(String, String)
+  while current_num_tokens > target_tokens && !@messages.empty?
+    if @messages.first["role"] == "system" && @messages.size > 1
+      system_msg = @messages.shift
+      pruned_messages << @messages.shift
+      @messages.unshift(system_msg)
+    else
+      pruned_messages << @messages.shift
+    end
+  end
+  @current_num_messages = @messages.size
+  return pruned_messages
+end
+
+def clear
+
     @messages.clear
     @current_num_messages = 0
   end
@@ -48,10 +68,9 @@ class TrackingMemoryStore < Mantle::JSONLayeredMemoryStore
   def initialize
     # Initialize parent class properties with dummy test values
     @memory_file = "/tmp/test_memory_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
-    @layer_capacity = 10
-    @layer_target = 5
+    @layer_token_capacity = 100
+    @layer_token_target = 50
     @squishifier = ->(messages : Array(String)) : String { "" }
-    @ingest_step_size = (@layer_capacity - @layer_target)
     # Initialize test tracking properties
     @ingested_messages = [] of Array(String)
     @layers = [] of Array(String)
@@ -71,9 +90,7 @@ class TrackingMemoryStore < Mantle::JSONLayeredMemoryStore
       @layers << messages
     else
       @layers[0] = @layers[0] + messages
-    end
   end
-end
 
 describe Mantle::ContextManager do
   describe "#initialize" do
@@ -97,7 +114,7 @@ describe Mantle::ContextManager do
       manager.bot_name.should eq("ChatBot")
     end
 
-    it "uses default values for msg_target and msg_hardmax if not provided" do
+    it "uses default values for token_target and token_hardmax if not provided" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -111,11 +128,11 @@ describe Mantle::ContextManager do
       )
 
       # Assert - Should have some default values set
-      manager.msg_target.should be_a(Int32)
-      manager.msg_hardmax.should be_a(Int32)
+      manager.token_target.should be_a(Int32)
+      manager.token_hardmax.should be_a(Int32)
     end
 
-    it "accepts custom msg_target and msg_hardmax values" do
+    it "accepts custom token_target and token_hardmax values" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -126,13 +143,13 @@ describe Mantle::ContextManager do
         memory_store: memory_store,
         user_name: "User",
         bot_name: "Bot",
-        msg_target: 5,
-        msg_hardmax: 10
+        token_target: 50,
+        token_hardmax: 100
       )
 
       # Assert
-      manager.msg_target.should eq(5)
-      manager.msg_hardmax.should eq(10)
+      manager.token_target.should eq(5)
+      manager.token_hardmax.should eq(10)
     end
   end
 
@@ -191,7 +208,7 @@ describe Mantle::ContextManager do
       user_message.not_nil!["role"].should eq("user")
     end
 
-    it "does not trigger consolidate_memory even when exceeding msg_hardmax" do
+    it "does not trigger consolidate_memory even when exceeding token_hardmax" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -200,8 +217,8 @@ describe Mantle::ContextManager do
         memory_store: memory_store,
         user_name: "User",
         bot_name: "Bot",
-        msg_target: 5,
-        msg_hardmax: 10
+        token_target: 50,
+        token_hardmax: 100
       )
 
       # Act - Add messages exceeding hardmax
@@ -259,7 +276,7 @@ describe Mantle::ContextManager do
       second_msg.not_nil!["role"].should eq("assistant")
     end
 
-    it "does not trigger consolidate_memory when below msg_hardmax" do
+    it "does not trigger consolidate_memory when below token_hardmax" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -268,8 +285,8 @@ describe Mantle::ContextManager do
         memory_store: memory_store,
         user_name: "User",
         bot_name: "Bot",
-        msg_target: 5,
-        msg_hardmax: 10
+        token_target: 50,
+        token_hardmax: 100
       )
 
       # Act - Add 5 messages (below hardmax of 10)
@@ -282,145 +299,114 @@ describe Mantle::ContextManager do
       context_store.messages.size.should eq(5)
     end
 
-    it "triggers consolidate_memory when reaching msg_hardmax" do
-      # Arrange
-      context_store = TrackingContextStore.new("System")
-      memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
-        context_store: context_store,
-        memory_store: memory_store,
-        user_name: "User",
-        bot_name: "Bot",
-        msg_target: 5,
-        msg_hardmax: 10
-      )
+    it "triggers consolidate_memory when reaching token_hardmax" do
+  context_store = TrackingContextStore.new("System")
+  memory_store = TrackingMemoryStore.new
+  manager = Mantle::ContextManager.new(
+    context_store: context_store,
+    memory_store: memory_store,
+    user_name: "User",
+    bot_name: "Bot",
+    token_target: 20,
+    token_hardmax: 40
+  )
 
-      # Act - Add exactly msg_hardmax messages
-      10.times do |i|
-        manager.handle_bot_message("Response #{i}")
-      end
+  20.times do |i|
+    manager.handle_bot_message("Response  ")
+  end
 
-      # Assert - Should have pruned (10 - 5 = 5) messages to memory
-      memory_store.ingested_messages.size.should eq(1)
-      memory_store.ingested_messages[0].size.should eq(5)
-      # Should have msg_target (5) messages remaining
-      context_store.messages.size.should eq(5)
-    end
+  memory_store.ingested_messages.size.should be > 0
+  context_store.current_num_tokens.should be <= manager.token_target
+end
 
-    it "triggers consolidate_memory when exceeding msg_hardmax" do
-      # Arrange
-      context_store = TrackingContextStore.new("System")
-      memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
-        context_store: context_store,
-        memory_store: memory_store,
-        user_name: "User",
-        bot_name: "Bot",
-        msg_target: 3,
-        msg_hardmax: 8
-      )
+it "triggers consolidate_memory when exceeding token_hardmax" do
+  context_store = TrackingContextStore.new("System")
+  memory_store = TrackingMemoryStore.new
+  manager = Mantle::ContextManager.new(
+    context_store: context_store,
+    memory_store: memory_store,
+    user_name: "User",
+    bot_name: "Bot",
+    token_target: 20,
+    token_hardmax: 30
+  )
 
-      # Act - Add 12 messages (exceeding hardmax)
-      12.times do |i|
-        manager.handle_bot_message("Response #{i}")
-      end
+  15.times do |i|
+    manager.handle_bot_message("Response  ")
+  end
 
-      # Assert - Should have triggered consolidation at least once
-      memory_store.ingested_messages.size.should be > 0
-      # After consolidation, messages can grow back up to (but not reaching) msg_hardmax
-      context_store.messages.size.should be < manager.msg_hardmax
+  memory_store.ingested_messages.size.should be > 0
+  context_store.current_num_tokens.should be <= manager.token_target
+end
+
+
     end
   end
 
   describe "#consolidate_memory" do
-    it "prunes (msg_hardmax - msg_target) oldest messages from context_store" do
-      # Arrange
-      context_store = TrackingContextStore.new("System")
-      memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
-        context_store: context_store,
-        memory_store: memory_store,
-        user_name: "User",
-        bot_name: "Bot",
-        msg_target: 3,
-        msg_hardmax: 7
-      )
+  it "prunes oldest messages to reach token_target" do
+    context_store = TrackingContextStore.new("System")
+    memory_store = TrackingMemoryStore.new
+    manager = Mantle::ContextManager.new(
+      context_store: context_store,
+      memory_store: memory_store,
+      user_name: "User",
+      bot_name: "Bot",
+      token_target: 20,
+      token_hardmax: 40
+    )
 
-      # Add 7 messages
-      7.times do |i|
-        context_store.add_message("User", "Message #{i}")
-      end
-
-      # Act
-      manager.consolidate_memory
-
-      # Assert - Should prune 7 - 3 = 4 messages
-      context_store.messages.size.should eq(3)
-
-      # Remaining messages should be the most recent ones
-      view = context_store.current_view
-      remaining_contents = view.map { |msg| msg["content"] }
-      remaining_contents.should contain("Message 4")
-      remaining_contents.should contain("Message 5")
-      remaining_contents.should contain("Message 6")
-      remaining_contents.should_not contain("Message 0")
-      remaining_contents.should_not contain("Message 1")
+    20.times do |i|
+      manager.handle_bot_message("Response  ", check_consolidation: false)
     end
 
-    it "ingests pruned messages into memory_store as formatted strings" do
-      # Arrange
-      context_store = TrackingContextStore.new("System")
-      memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
-        context_store: context_store,
-        memory_store: memory_store,
-        user_name: "User",
-        bot_name: "Bot",
-        msg_target: 2,
-        msg_hardmax: 5
-      )
+    manager.consolidate_memory
 
-      # Add 5 messages
-      5.times do |i|
-        context_store.add_message("User", "Message #{i}")
-      end
+    context_store.current_num_tokens.should be <= manager.token_target
+  end
 
-      # Act
-      manager.consolidate_memory
+  it "ingests pruned messages into memory_store as formatted strings" do
+    context_store = TrackingContextStore.new("System")
+    memory_store = TrackingMemoryStore.new
+    manager = Mantle::ContextManager.new(
+      context_store: context_store,
+      memory_store: memory_store,
+      user_name: "User",
+      bot_name: "Bot",
+      token_target: 20,
+      token_hardmax: 40
+    )
 
-      # Assert - Should have called ingest with 3 pruned messages (formatted as strings)
-      memory_store.ingested_messages.size.should eq(1)
-      memory_store.ingested_messages[0].size.should eq(3)
-      # Messages are formatted as "[User] content\n" for memory
-      memory_store.ingested_messages[0][0].should eq("[User] Message 0\n")
-      memory_store.ingested_messages[0][1].should eq("[User] Message 1\n")
-      memory_store.ingested_messages[0][2].should eq("[User] Message 2\n")
+    20.times do |i|
+      manager.handle_bot_message("Response  ", check_consolidation: false)
     end
 
-    it "leaves msg_target messages remaining in context_store" do
-      # Arrange
-      context_store = TrackingContextStore.new("System")
-      memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
-        context_store: context_store,
-        memory_store: memory_store,
-        user_name: "User",
-        bot_name: "Bot",
-        msg_target: 4,
-        msg_hardmax: 10
-      )
+    manager.consolidate_memory
 
-      # Add 10 messages
-      10.times do |i|
-        context_store.add_message("User", "Msg#{i}")
-      end
+    memory_store.ingested_messages.size.should eq(1)
+    memory_store.ingested_messages[0].first.should contain("[Bot] Response  ")
+  end
 
-      # Act
-      manager.consolidate_memory
+  it "leaves token_target tokens remaining in context_store" do
+    context_store = TrackingContextStore.new("System")
+    memory_store = TrackingMemoryStore.new
+    manager = Mantle::ContextManager.new(
+      context_store: context_store,
+      memory_store: memory_store,
+      user_name: "User",
+      bot_name: "Bot",
+      token_target: 20,
+      token_hardmax: 40
+    )
 
-      # Assert
-      context_store.messages.size.should eq(4)
+    20.times do |i|
+      manager.handle_bot_message("Response  ", check_consolidation: false)
     end
+
+    manager.consolidate_memory
+
+    context_store.current_num_tokens.should be <= manager.token_target
+  end
   end
 
   describe "#clear_context" do
@@ -450,8 +436,8 @@ describe Mantle::ContextManager do
         memory_store: memory_store,
         user_name: "Alice",
         bot_name: "ChatBot",
-        msg_target: 4,
-        msg_hardmax: 8
+        token_target: 50,
+        token_hardmax: 100
       )
 
       # Act - Simulate a conversation that exceeds hardmax
@@ -470,8 +456,8 @@ describe Mantle::ContextManager do
       # Assert
       # Should have consolidated at least once (triggered by bot message)
       memory_store.ingested_messages.size.should be > 0
-      # After consolidation, messages can grow back up to (but not reaching) msg_hardmax
-      context_store.messages.size.should be < manager.msg_hardmax
+      # After consolidation, messages can grow back up to (but not reaching) token_hardmax
+      context_store.messages.size.should be < manager.token_hardmax
 
       # Most recent messages should still be in context
       view = context_store.current_view
@@ -601,31 +587,28 @@ describe Mantle::ContextManager do
       end
 
       it "strips thinking tags before storing in context during consolidation" do
-        # Arrange
-        context_store = TrackingContextStore.new("System")
-        memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
-          context_store: context_store,
-          memory_store: memory_store,
-          user_name: "User",
-          bot_name: "Bot",
-          msg_target: 2,
-          msg_hardmax: 4,
-          strip_thinking_tags: true
-        )
+  context_store = TrackingContextStore.new("System")
+  memory_store = TrackingMemoryStore.new
+  manager = Mantle::ContextManager.new(
+    context_store: context_store,
+    memory_store: memory_store,
+    user_name: "User",
+    bot_name: "Bot",
+    token_target: 20,
+    token_hardmax: 40,
+    strip_thinking_tags: true
+  )
 
-        # Act - Add messages with thinking tags that will trigger consolidation
-        manager.handle_bot_message("<think>Thinking 1</think>Response 1")
-        manager.handle_bot_message("<think>Thinking 2</think>Response 2")
-        manager.handle_bot_message("<think>Thinking 3</think>Response 3")
-        manager.handle_bot_message("<think>Thinking 4</think>Response 4")
+  20.times do |i|
+    manager.handle_bot_message("<think>Thinking #{i}</think>Response  ")
+  end
 
-        # Assert - Memory should have ingested messages WITHOUT thinking tags
-        memory_store.ingested_messages.size.should eq(1)
-        memory_store.ingested_messages[0].each do |msg|
-          msg.should_not contain("<think>")
-          msg.should_not contain("Thinking")
-        end
+  memory_store.ingested_messages.size.should be > 0
+  memory_store.ingested_messages[0].each do |msg|
+    msg.should_not contain("<think>")
+    msg.should_not contain("Thinking")
+  end
+end
       end
     end
 

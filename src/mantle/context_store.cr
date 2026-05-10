@@ -20,6 +20,11 @@ module Mantle
       @current_num_messages = 0
     end
 
+    def current_num_tokens : Int32
+      # Derived via current_view
+      current_view.sum { |msg| msg["content"].size // 4 }
+    end
+
     # Returns messages in chat format: Array(Hash(String, String))
     # Each hash has "role" and "content" keys
     def current_view : Array(Hash(String, String))
@@ -29,6 +34,11 @@ module Mantle
 
     def add_message(label : String, message : String)
       # Implement in specific class
+    end
+
+    def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+      # Implement in specific class.
+      [] of Hash(String, String)
     end
 
     def prune(num_to_prune : Int32)
@@ -90,7 +100,24 @@ module Mantle
       @current_num_messages = @messages.size
     end
 
-    def clear
+def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+  pruned_messages = [] of Hash(String, String)
+
+  while current_num_tokens > target_tokens && !@messages.empty?
+    if @messages.first["role"] == "system" && @messages.size > 1
+      system_msg = @messages.shift
+      pruned_messages << @messages.shift
+      @messages.unshift(system_msg)
+    else
+      pruned_messages << @messages.shift
+    end
+  end
+
+  @current_num_messages = @messages.size
+  return pruned_messages
+end
+
+def clear
       @messages.clear
       @current_num_messages = 0
     end
@@ -156,7 +183,25 @@ module Mantle
       end
     end
 
-    def prune(num_to_prune : Int32) : Array(Hash(String, String))
+def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+  pruned_messages = [] of Hash(String, String)
+
+  while current_num_tokens > target_tokens && !@messages.empty?
+    if @messages.first["role"] == "system" && @messages.size > 1
+      system_msg = @messages.shift
+      pruned_messages << @messages.shift
+      @messages.unshift(system_msg)
+    else
+      pruned_messages << @messages.shift
+    end
+  end
+
+  @current_num_messages = @messages.size
+  save_context_to_json
+  return pruned_messages
+end
+
+def prune(num_to_prune : Int32) : Array(Hash(String, String))
       pruned_messages = [] of Hash(String, String)
 
       count = [num_to_prune, @current_num_messages].min
