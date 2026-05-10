@@ -42,4 +42,16 @@ describe Mantle::MarkdownFormatter do
     result = Mantle::MarkdownFormatter.format(text)
     result.should eq("Here is \e[1;97mbold\e[0m and \e[48;5;236mcode\e[0m")
   end
+
+  it "handles nested formatting in blockquotes" do
+    text = "> This is **bold** in a blockquote"
+    result = Mantle::MarkdownFormatter.format(text)
+    result.should eq("\e[3;90m> This is \e[1;97mbold\e[0m in a blockquote\e[0m")
+  end
+
+  it "handles bold within headers" do
+    text = "# Header with **bold**"
+    result = Mantle::MarkdownFormatter.format(text)
+    result.should eq("\e[1;36m# Header with \e[1;97mbold\e[0m\e[0m")
+  end
 end
