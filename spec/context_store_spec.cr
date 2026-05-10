@@ -96,6 +96,28 @@ end
 # JSON Context Store
 # Should maintain last N messages in context, loading them from JSON backend store
 describe Mantle::JSONContextStore do
+  describe "error handling" do
+    it "logs an error when saving to an invalid path" do
+      # Arrange
+      test_file = "/sys/class/something_read_only.json"
+      backend = Log::MemoryBackend.new
+      Log.setup("mantle", :debug, backend)
+
+      # Act
+      # Using a read-only path will raise File::AccessDeniedError or similar,
+      # which inherits from File::Error, so we expect an error log but no crash.
+      store = Mantle::JSONContextStore.new("System", test_file)
+
+      # Assert
+      log_entries = backend.entries.select { |e| e.severity == Log::Severity::Error }
+      log_entries.size.should be > 0
+      log_entries[0].message.should contain("Failed to save context to #{test_file}")
+
+      # Reset logger so other tests aren't affected
+      Log.setup("mantle", :info, Log::IOBackend.new)
+    end
+  end
+
   describe "#initialize" do
     it "creates a new context store with a new JSON file if file doesn't exist" do
       # Arrange
