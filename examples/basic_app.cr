@@ -73,8 +73,8 @@ squishy = Mantle::Squishifiers.build_basic_summarizer(client)
 # MemoryStore tracks long-term, summarized history.
 memory_store = Mantle::JSONLayeredMemoryStore.new(
   memory_file: MEMORY_FILE,
-  layer_capacity: 10,
-  layer_target: 5,
+  layer_token_capacity: 100,
+  layer_token_target: 50,
   squishifier: squishy
 )
 
@@ -85,8 +85,8 @@ context_manager = Mantle::ContextManager.new(
   memory_store: memory_store,
   user_name: user_name,
   bot_name: bot_name,
-  msg_target: 6,
-  msg_hardmax: 12,
+  token_target: 60,
+  token_hardmax: 120,
   strip_thinking_tags: true  # Strip <think></think> blocks from model responses
 )
 
@@ -159,17 +159,18 @@ puts "--- Starting Multi-Test Turn ---"
     )
 end
 
-# 7. Clear the context
+# 7. Display Stats
+puts "\n--- Final Stats ---"
+stats = context_manager.stats
+puts "Context Tokens: #{stats[:context_tokens]} / #{stats[:context_hardmax]} (Softmax: #{stats[:context_softmax]})"
+puts "Memory Layers: #{stats[:memory_layers]}"
+stats[:memory_layer_stats].each do |layer_stat|
+  puts "  Layer #{layer_stat[:layer]}: #{layer_stat[:tokens]} / #{layer_stat[:capacity]} tokens"
+end
+
+# 8. Clear the context
 puts "\n--- Clearing Context ---"
 context_manager.clear_context
 
 puts "\n--- Final Context State After Clearing ---"
 puts context_store.current_view
-  )
-
-  # Consumer UI can watch Mantle::Status to know when background tasks occur
-  if Mantle::Status.has?(:memory_consolidation)
-    puts "UI UPDATE: Memory consolidation is currently running in the background..."
-    Mantle::Status.remove(:memory_consolidation)
-  end
-end

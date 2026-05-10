@@ -75,8 +75,9 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 **Purpose**: Higher-level interface combining context and memory
 
 **Configuration Options**:
-- `msg_target`: Target context size after consolidation
-- `msg_hardmax`: Maximum context size before triggering consolidation
+- `token_target`: Target token count after consolidation
+- `token_softmax`: Target token count to broadcast context warning flag to application layer
+- `token_hardmax`: Maximum token count before triggering consolidation
 - `user_name` & `bot_name`: Labels for users and agents
 - `strip_thinking_tags`: Optional flag to strip `<think>...</think>` tags from stored context
 
@@ -84,6 +85,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 - Bridges ContextStore (short-term) and MemoryStore (long-term)
 - Provides `handle_user_message(msg : String)` and `handle_bot_message(msg : String, check_consolidation : Bool = true)` convenience methods
 - Assembles complete context view (system prompt + memory + conversation)
+- Exposes `stats` method to access real-time diagnostic information on context window usage and internal memory layers capacity.
 
 ---
 

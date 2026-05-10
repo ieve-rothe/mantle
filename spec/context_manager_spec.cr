@@ -90,7 +90,9 @@ class TrackingMemoryStore < Mantle::JSONLayeredMemoryStore
       @layers << messages
     else
       @layers[0] = @layers[0] + messages
+    end
   end
+end
 
 describe Mantle::ContextManager do
   describe "#initialize" do
@@ -148,8 +150,8 @@ describe Mantle::ContextManager do
       )
 
       # Assert
-      manager.token_target.should eq(5)
-      manager.token_hardmax.should eq(10)
+      manager.token_target.should eq(50)
+      manager.token_hardmax.should eq(100)
     end
   end
 
@@ -436,8 +438,8 @@ end
         memory_store: memory_store,
         user_name: "Alice",
         bot_name: "ChatBot",
-        token_target: 50,
-        token_hardmax: 100
+        token_target: 20,
+        token_hardmax: 40
       )
 
       # Act - Simulate a conversation that exceeds hardmax
@@ -456,13 +458,52 @@ end
       # Assert
       # Should have consolidated at least once (triggered by bot message)
       memory_store.ingested_messages.size.should be > 0
-      # After consolidation, messages can grow back up to (but not reaching) token_hardmax
-      context_store.messages.size.should be < manager.token_hardmax
+      # After consolidation, tokens can grow back up to (but not reaching) token_hardmax
+      context_store.current_num_tokens.should be < manager.token_hardmax
 
       # Most recent messages should still be in context
       view = context_store.current_view
+      # At token_target=5, many messages will be pruned. Let's make sure the last message is there
       last_message = view.find { |msg| msg["content"] == "Happy to help!" }
       last_message.should_not be_nil
+    end
+  end
+
+  describe "#stats" do
+    it "returns correctly populated stats NamedTuple" do
+      context_store = TrackingContextStore.new("System")
+      memory_store = TrackingMemoryStore.new
+
+      # Mock the layers sizes so we have something to check
+      memory_store.layers = [["mock memory"], ["mock memory 2", "mock memory 3"]]
+
+      manager = Mantle::ContextManager.new(
+        context_store: context_store,
+        memory_store: memory_store,
+        user_name: "User",
+        bot_name: "Bot",
+        token_target: 20,
+        token_softmax: 30,
+        token_hardmax: 40
+      )
+
+      manager.handle_user_message("Hello there")
+      manager.handle_bot_message("Hi!")
+
+      stats = manager.stats
+
+      stats[:context_tokens].should be > 0
+      stats[:context_softmax].should eq(30)
+      stats[:context_hardmax].should eq(40)
+      stats[:memory_layers].should eq(2)
+      stats[:memory_layer_stats].size.should eq(2)
+
+      stats[:memory_layer_stats][0][:layer].should eq(0)
+      stats[:memory_layer_stats][0][:tokens].should be >= 0
+      stats[:memory_layer_stats][0][:capacity].should eq(memory_store.layer_token_capacity)
+
+      stats[:memory_layer_stats][1][:layer].should eq(1)
+      stats[:memory_layer_stats][1][:tokens].should be >= 0
     end
   end
 
@@ -608,7 +649,6 @@ end
     msg.should_not contain("<think>")
     msg.should_not contain("Thinking")
   end
-end
       end
     end
 
@@ -727,4 +767,3 @@ end
       end
     end
   end
-end

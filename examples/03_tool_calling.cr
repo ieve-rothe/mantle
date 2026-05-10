@@ -32,14 +32,14 @@ context_manager = Mantle::ContextManager.new(
   ),
   memory_store: Mantle::JSONLayeredMemoryStore.new(
     memory_file: "examples/03_memory.json",
-    layer_capacity: 10,
-    layer_target: 5,
+    layer_token_capacity: 100,
+    layer_token_target: 50,
     squishifier: Mantle::Squishifiers.build_basic_summarizer(client)
   ),
   user_name: "User",
   bot_name: "Assistant",
-  msg_target: 6,
-  msg_hardmax: 12
+  token_target: 600,
+  token_hardmax: 1200
 )
 
 logger = Mantle::FileLogger.new("examples/03_chat.log", "User", "Assistant")
