@@ -206,7 +206,7 @@ describe "Mantle Tool Executor" do
       results = executor.execute_all(tool_calls)
 
       results.size.should eq(2)
-      results[0].result.should contain("Test content")      # Built-in
+      results[0].result.should contain("Test content")               # Built-in
       results[1].result.should contain("result from my_custom_tool") # Custom
     end
   end

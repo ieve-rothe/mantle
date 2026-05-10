@@ -100,7 +100,7 @@ describe "Mantle Tool Formatter" do
             name: "read_file",
             arguments: %({"file_path":"test.txt"})
           )
-        )
+        ),
       ]
 
       result = Mantle::ToolFormatter.format_assistant_message_with_tool_calls(nil, tool_calls)
@@ -118,7 +118,7 @@ describe "Mantle Tool Formatter" do
             name: "read_file",
             arguments: %({"file_path":"test.txt"})
           )
-        )
+        ),
       ]
 
       result = Mantle::ToolFormatter.format_assistant_message_with_tool_calls(
@@ -148,7 +148,7 @@ describe "Mantle Tool Formatter" do
             name: "read_file",
             arguments: %({"file_path":"file2.txt"})
           )
-        )
+        ),
       ]
 
       result = Mantle::ToolFormatter.format_assistant_message_with_tool_calls(nil, tool_calls)
