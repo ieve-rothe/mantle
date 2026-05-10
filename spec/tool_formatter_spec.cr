@@ -88,6 +88,37 @@ describe "Mantle Tool Formatter" do
       result.size.should be < long_content.size + 100
       result.should contain("...")
     end
+
+    it "formats tool result with message" do
+      result = Mantle::ToolFormatter.format_tool_result(
+        "call_abc",
+        %({"success":true,"message":"File written successfully."})
+      )
+
+      result.should contain("call_abc")
+      result.should contain("File written successfully.")
+    end
+
+    it "formats tool result with matches" do
+      result = Mantle::ToolFormatter.format_tool_result(
+        "call_def",
+        %({"success":true,"matches":["file1.cr:10","file2.cr:20"]})
+      )
+
+      result.should contain("call_def")
+      result.should contain("[file1.cr:10, file2.cr:20]")
+    end
+
+    it "formats tool result with warning" do
+      result = Mantle::ToolFormatter.format_tool_result(
+        "call_ghi",
+        %({"success":true,"matches":["a","b"],"warning":"Truncated"})
+      )
+
+      result.should contain("call_ghi")
+      result.should contain("[a, b]")
+      result.should contain("Warning: Truncated")
+    end
   end
 
   describe "format_assistant_message_with_tool_calls" do
@@ -100,7 +131,7 @@ describe "Mantle Tool Formatter" do
             name: "read_file",
             arguments: %({"file_path":"test.txt"})
           )
-        )
+        ),
       ]
 
       result = Mantle::ToolFormatter.format_assistant_message_with_tool_calls(nil, tool_calls)
@@ -118,7 +149,7 @@ describe "Mantle Tool Formatter" do
             name: "read_file",
             arguments: %({"file_path":"test.txt"})
           )
-        )
+        ),
       ]
 
       result = Mantle::ToolFormatter.format_assistant_message_with_tool_calls(
@@ -148,7 +179,7 @@ describe "Mantle Tool Formatter" do
             name: "read_file",
             arguments: %({"file_path":"file2.txt"})
           )
-        )
+        ),
       ]
 
       result = Mantle::ToolFormatter.format_assistant_message_with_tool_calls(nil, tool_calls)

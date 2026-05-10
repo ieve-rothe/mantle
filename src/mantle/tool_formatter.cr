@@ -40,27 +40,31 @@ module Mantle
       begin
         result_json = JSON.parse(result)
 
-        # Check for error
-        if error = result_json["error"]?
-          return "Result from #{tool_call_id}: Error - #{error}"
+        # Identify and extract the core result message
+        message = if error = result_json["error"]?
+                    "Error - #{error}"
+                  elsif content = result_json["content"]?
+                    content.to_s
+                  elsif msg = result_json["message"]?
+                    msg.to_s
+                  elsif entries = result_json["entries"]?
+                    format_list(entries.as_a)
+                  elsif matches = result_json["matches"]?
+                    format_list(matches.as_a)
+                  elsif result_json["success"]?
+                    "Success"
+                  else
+                    result
+                  end
+
+        # Include warnings if present (e.g. from search truncation)
+        if warning = result_json["warning"]?
+          message = "#{message} (Warning: #{warning})"
         end
 
-        # Check for content or entries
-        if content = result_json["content"]?
-          content_str = content.to_s
-          truncated = truncate_string(content_str, MAX_RESULT_LENGTH)
-          return "Result from #{tool_call_id}: #{truncated}"
-        elsif entries = result_json["entries"]?
-          entries_str = entries.as_a.join(", ")
-          truncated = truncate_string(entries_str, MAX_RESULT_LENGTH)
-          return "Result from #{tool_call_id}: [#{truncated}]"
-        elsif success = result_json["success"]?
-          return "Result from #{tool_call_id}: Success"
-        else
-          # Generic result
-          truncated = truncate_string(result, MAX_RESULT_LENGTH)
-          return "Result from #{tool_call_id}: #{truncated}"
-        end
+        # Always truncate the natural language representation to prevent context overflow
+        truncated = truncate_string(message, MAX_RESULT_LENGTH)
+        "Result from #{tool_call_id}: #{truncated}"
       rescue
         # If JSON parsing fails, use raw result
         truncated = truncate_string(result, MAX_RESULT_LENGTH)
@@ -86,6 +90,11 @@ module Mantle
       end
 
       parts.join(" | ")
+    end
+
+    # Helper: Format an array of JSON values as a bracketed list
+    private def self.format_list(list : Array(JSON::Any)) : String
+      "[#{list.join(", ")}]"
     end
 
     # Helper: Format a JSON::Any value for display
