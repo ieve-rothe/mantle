@@ -102,11 +102,15 @@ module Mantle
 
     # Helper: Truncate string to max length with ellipsis
     private def self.truncate_string(str : String, max_length : Int32) : String
-      if str.size <= max_length
-        str
-      else
-        str[0, max_length - 3] + "..."
+      return str if str.size <= max_length
+
+      # If max_length is too small to even hold ellipsis, just return a substring
+      # or empty string if max_length is 0.
+      if max_length <= 3
+        return str[0, Math.max(0, max_length)]
       end
+
+      str[0, max_length - 3] + "..."
     end
   end
 end
