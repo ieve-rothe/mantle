@@ -41,6 +41,27 @@ describe "Mantle Response Types" do
       parsed_args["config"]["value"].as_i.should eq(42)
     end
 
+    it "raises JSON::ParseException when arguments is an array" do
+      json = %({"id":"call_101","type":"function","function":{"name":"bad_tool","arguments":["an","array"]}})
+      expect_raises(JSON::ParseException, "Expected String or Object for arguments") do
+        Mantle::ToolCall.from_json(json)
+      end
+    end
+
+    it "raises JSON::ParseException when arguments is a number" do
+      json = %({"id":"call_102","type":"function","function":{"name":"bad_tool","arguments":42}})
+      expect_raises(JSON::ParseException, "Expected String or Object for arguments") do
+        Mantle::ToolCall.from_json(json)
+      end
+    end
+
+    it "raises JSON::ParseException when arguments is null" do
+      json = %({"id":"call_103","type":"function","function":{"name":"bad_tool","arguments":null}})
+      expect_raises(JSON::ParseException, "Expected String or Object for arguments") do
+        Mantle::ToolCall.from_json(json)
+      end
+    end
+
     it "deserializes from JSON correctly without type field (defaults to 'function')" do
       json = %({"id":"call_999","function":{"name":"test_tool","arguments":{"param":"value"}}})
       tool_call = Mantle::ToolCall.from_json(json)
