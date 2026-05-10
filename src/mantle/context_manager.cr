@@ -105,27 +105,53 @@ module Mantle
       end
     end
 
-def consolidate_memory
-  Mantle.emit_status(:memory_consolidation)
+    def consolidate_memory
+      Mantle.emit_status(:memory_consolidation)
 
-  Mantle::Log.info { "Context hit tokens #{@context_store.current_num_tokens} (threshold: #{@token_hardmax}). Consolidating Context -> Memory. Target context tokens: #{@token_target}." }
+      Mantle::Log.info { "Context hit tokens #{@context_store.current_num_tokens} (threshold: #{@token_hardmax}). Consolidating Context -> Memory. Target context tokens: #{@token_target}." }
 
-  pruned_messages = @context_store.prune_to_tokens(@token_target)
+      pruned_messages = @context_store.prune_to_tokens(@token_target)
 
-  if pruned_messages && pruned_messages.size >= 1
-    # Convert message hashes to formatted strings for memory store
-    formatted_messages = pruned_messages.map do |msg|
-      role_label = msg["role"] == "user" ? @user_name : @bot_name
-      "[#{role_label}] #{msg["content"]}\n"
+      if pruned_messages && pruned_messages.size >= 1
+        # Convert message hashes to formatted strings for memory store
+        formatted_messages = pruned_messages.map do |msg|
+          role_label = msg["role"] == "user" ? @user_name : @bot_name
+          "[#{role_label}] #{msg["content"]}\n"
+        end
+        @memory_store.ingest(formatted_messages)
+      else
+        Mantle::Log.error { "Tried to ingest to memory store with an invalid pruned_messages array" }
+      end
     end
-    @memory_store.ingest(formatted_messages)
-  else
-    Mantle::Log.error { "Tried to ingest to memory store with an invalid pruned_messages array" }
-  end
-end
 
     def clear_context
       @context_store.clear
+    end
+
+    def stats : NamedTuple(
+      context_tokens: Int32,
+      context_softmax: Int32,
+      context_hardmax: Int32,
+      memory_layers: Int32,
+      memory_layer_stats: Array(NamedTuple(layer: Int32, tokens: Int32, capacity: Int32)))
+      memory_stats = [] of NamedTuple(layer: Int32, tokens: Int32, capacity: Int32)
+      layer_count = @memory_store.layers.size
+
+      (0...layer_count).each do |i|
+        memory_stats << {
+          layer:    i,
+          tokens:   @memory_store.current_num_tokens(i),
+          capacity: @memory_store.layer_token_capacity,
+        }
+      end
+
+      {
+        context_tokens:     @context_store.current_num_tokens,
+        context_softmax:    @token_softmax,
+        context_hardmax:    @token_hardmax,
+        memory_layers:      layer_count,
+        memory_layer_stats: memory_stats,
+      }
     end
 
     private def strip_thinking(msg : String) : String
