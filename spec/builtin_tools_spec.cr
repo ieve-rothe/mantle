@@ -655,6 +655,22 @@ describe "Mantle Built-in Tools" do
         result.should contain("Security violation")
       end
 
+      it "rejects file_pattern starting with hyphen even with leading whitespace" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "search_files",
+          {
+            "query"        => JSON::Any.new("MATCH"),
+            "file_pattern" => JSON::Any.new("  -u"),
+          }
+        )
+
+        result.should contain("error")
+        result.should contain("Security violation")
+      end
+
       it "rejects file_pattern containing malicious control characters" do
         config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::BuiltinToolExecutor.new(config)
@@ -671,19 +687,30 @@ describe "Mantle Built-in Tools" do
         result.should contain("Security violation")
       end
 
-      it "executes safely when query starts with a hyphen" do
+      it "rejects query starting with a hyphen" do
         config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::BuiltinToolExecutor.new(config)
-
-        File.write("#{temp_dir}/hyphen_test.txt", "line with -e match")
 
         result = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("-e")}
         )
 
-        result.should contain("success")
-        result.should contain("hyphen_test.txt:1")
+        result.should contain("error")
+        result.should contain("Security violation")
+      end
+
+      it "rejects query starting with a hyphen even with leading whitespace" do
+        config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::BuiltinToolExecutor.new(config)
+
+        result = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("  -e")}
+        )
+
+        result.should contain("error")
+        result.should contain("Security violation")
       end
 
       it "truncates exactly at 11 matches" do

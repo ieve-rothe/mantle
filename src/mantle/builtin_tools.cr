@@ -316,13 +316,18 @@ module Mantle
         return {error: "Missing required parameter: query"}.to_json
       end
 
+      # Validate query to prevent argument injection
+      if query.strip.starts_with?("-")
+        return {error: "Security violation: query cannot start with a hyphen."}.to_json
+      end
+
       # Default to "." (working directory) if no path provided
       dir_path = arguments["directory_path"]?.try(&.as_s) || "."
       file_pattern = arguments["file_pattern"]?.try(&.as_s)
 
       if file_pattern
         # Validate file_pattern to prevent argument injection and malicious payloads
-        if file_pattern.starts_with?("-")
+        if file_pattern.strip.starts_with?("-")
           return {error: "Security violation: file_pattern cannot start with a hyphen."}.to_json
         end
 
