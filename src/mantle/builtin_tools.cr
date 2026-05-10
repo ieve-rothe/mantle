@@ -474,8 +474,9 @@ module Mantle
 
     # Helper to check if a path is a subpath of a base directory
     private def is_subpath?(path : String, base : String) : Bool
-      expanded_path = File.expand_path(path)
-      expanded_base = File.expand_path(base)
+      # Use safe_realpath to resolve symlinks before checking subpath
+      expanded_path = safe_realpath(path)
+      expanded_base = safe_realpath(base)
 
       # Equal path is allowed
       return true if expanded_path == expanded_base
@@ -484,6 +485,26 @@ module Mantle
       # and not just a path that shares a prefix (e.g., /tmp/allowed_secret vs /tmp/allowed)
       base_with_separator = expanded_base.ends_with?(File::SEPARATOR) ? expanded_base : expanded_base + File::SEPARATOR
       expanded_path.starts_with?(base_with_separator)
+    end
+
+    # Safely resolve a path to its real path, even if it or its parents don't exist yet.
+    # This is crucial for preventing symlink-based path traversal.
+    private def safe_realpath(path : String) : String
+      if File.exists?(path) || File.symlink?(path)
+        begin
+          File.realpath(path)
+        rescue
+          # Fallback if realpath fails for some reason (e.g. broken symlink)
+          File.expand_path(path)
+        end
+      else
+        parent = File.dirname(path)
+        if parent == path
+          File.expand_path(path)
+        else
+          File.join(safe_realpath(parent), File.basename(path))
+        end
+      end
     end
   end
 end
