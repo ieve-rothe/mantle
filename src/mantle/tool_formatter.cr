@@ -16,16 +16,19 @@ module Mantle
       # Parse arguments JSON
       begin
         args_json = JSON.parse(arguments)
+        args_h = args_json.as_h
 
-        if args_json.as_h.empty?
-          "Called #{function_name}()"
-        else
-          # Format arguments as key: value pairs
-          args_str = args_json.as_h.map do |key, value|
-            "#{key}: #{format_json_value(value)}"
-          end.join(", ")
-
-          "Called #{function_name}(#{args_str})"
+        # Use String.build to efficiently construct the string without creating
+        # many small intermediate pieces in memory.
+        String.build do |io|
+          io << "Called " << function_name << "("
+          # We iterate through each argument and write it directly to the output buffer
+          args_h.each_with_index do |(key, value), i|
+            io << ", " if i > 0
+            io << key << ": "
+            format_json_value(value, io)
+          end
+          io << ")"
         end
       rescue
         # If JSON parsing fails, show raw arguments
@@ -90,13 +93,21 @@ module Mantle
 
     # Helper: Format a JSON::Any value for display
     private def self.format_json_value(value : JSON::Any) : String
-      case value.raw
+      String.build do |io|
+        format_json_value(value, io)
+      end
+    end
+
+    # Helper: Format a JSON::Any value for display directly to an IO buffer
+    # This avoids extra string allocations for each value being formatted.
+    private def self.format_json_value(value : JSON::Any, io : IO) : Nil
+      case raw = value.raw
       when String
-        %("#{value.as_s}")
+        io << '"' << raw << '"'
       when Bool, Int64, Float64
-        value.to_s
+        raw.to_s(io)
       else
-        value.to_json
+        value.to_json(io)
       end
     end
 
