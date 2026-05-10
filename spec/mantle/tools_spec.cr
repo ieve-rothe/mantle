@@ -1,5 +1,5 @@
-require "./spec_helper"
-require "../src/mantle/tools"
+require "../spec_helper"
+require "../../src/mantle/tools"
 
 describe "Mantle Tools" do
   describe "PropertyDefinition" do
