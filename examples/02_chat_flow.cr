@@ -37,23 +37,23 @@ context_store = Mantle::JSONContextStore.new(
 # We use JSONLayeredMemoryStore to save long-term summaries to a file.
 memory_store = Mantle::JSONLayeredMemoryStore.new(
   memory_file: "examples/02_memory.json",
-  layer_capacity: 10,
-  layer_target: 5,
+  layer_token_capacity: 100,
+  layer_token_target: 50,
   # We use a built-in squishifier that uses our client to summarize old messages.
   squishifier: Mantle::Squishifiers.build_basic_summarizer(client)
 )
 
 # 4. Setup the Context Manager
 # The ContextManager ties the ContextStore and MemoryStore together.
-# - msg_hardmax: When the context reaches this many messages, it triggers consolidation.
-# - msg_target: After consolidation, this many recent messages are kept in context.
+# - token_hardmax: When the context reaches this many tokens, it triggers consolidation.
+# - token_target: After consolidation, this many recent tokens are kept in context.
 context_manager = Mantle::ContextManager.new(
   context_store: context_store,
   memory_store: memory_store,
   user_name: "User",
   bot_name: "Assistant",
-  msg_target: 4,
-  msg_hardmax: 8
+  token_target: 400,
+  token_hardmax: 800
 )
 
 # 5. Setup Logging
