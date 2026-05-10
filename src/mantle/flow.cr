@@ -39,11 +39,13 @@ module Mantle
 
     # Convert message array to human-readable string for logging
     protected def format_messages_for_log(messages : Array(Hash(String, String))) : String
-      messages.map do |msg|
-        role = msg["role"].capitalize
-        content = msg["content"]
-        "[#{role}] #{content}\n"
-      end.join
+      String.build do |io|
+        messages.join(io, "") do |msg, i|
+          role = msg["role"].capitalize
+          content = msg["content"]
+          i << "[" << role << "] " << content << "\n"
+        end
+      end
     end
   end
 
