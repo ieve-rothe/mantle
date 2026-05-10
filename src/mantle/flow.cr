@@ -108,105 +108,133 @@ module Mantle
         iteration += 1
 
         if iteration > max_iterations
-          error_msg = "System: Maximum number of tool iterations (#{max_iterations}) reached. Please provide a text response to the user now without using any more tools."
-          @context_manager.add_message("system", error_msg, check_consolidation: false)
-
-          # Force one last client call without tools to get the final text response
-          final_context = @context_manager.current_view
-          final_response = if on_chunk
-                             @client.execute(final_context, nil, &on_chunk)
-                           else
-                             @client.execute(final_context, nil)
-                           end
-
-          if (req = final_response.raw_request) && (res = final_response.raw_response)
-            @logger.log_api_payloads(req, res)
-          end
-
-          # Handle the text response
-          response_text = final_response.content || "Error: Failed to generate final response after hitting tool iteration limit."
-          @context_manager.handle_bot_message(response_text, check_consolidation: false)
-
-          # Check consolidation now that the full turn is complete
-          @context_manager.check_and_consolidate
-
-          updated_context = @context_manager.current_view
-          @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), final_response.thinking)
-
-          on_response.try(&.call(final_response))
+          handle_tool_limit(max_iterations, on_chunk, on_response)
           break
         end
 
         # Execute LLM with tools
-        response = if on_chunk
-                     @client.execute(context_view, all_tools, &on_chunk)
-                   else
-                     @client.execute(context_view, all_tools)
-                   end
-
-        if (req = response.raw_request) && (res = response.raw_response)
-          @logger.log_api_payloads(req, res)
-        end
+        response = execute_and_parse(context_view, all_tools, on_chunk)
 
         # Check if we have a text response (end of loop)
         if response.content && (response.tool_calls.nil? || response.tool_calls.not_nil!.empty?)
-          # Final text response - add to context without consolidation check
-          response_text = response.content.not_nil!
-          @context_manager.handle_bot_message(response_text, check_consolidation: false)
-
-          # Check consolidation now that the full turn is complete
-          @context_manager.check_and_consolidate
-
-          updated_context = @context_manager.current_view
-          @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
-          Mantle.emit_status(:idle)
-
-          on_response.try(&.call(response))
+          handle_final_response(response, on_response)
           break
         end
 
         # We have tool calls - process them
         if tool_calls = response.tool_calls
-          Mantle.emit_status(:tool_loop)
-          # Log detailed tool call information (natural language)
-          tool_calls.each do |call|
-            formatted_call = ToolFormatter.format_tool_call(call)
-            @logger.log_message(:bot, formatted_call, format_messages_for_log(context_view), response.thinking)
-          end
-
-          # Add assistant message to context if there's content (defer consolidation)
-          if response.content && !response.content.not_nil!.empty?
-            @context_manager.handle_bot_message(response.content.not_nil!, check_consolidation: false)
-          end
-
-          # Execute tools
-          tool_results = tool_executor.execute_all(tool_calls, tool_names)
-
-          # Add tool results to context with 'tool' role (defer consolidation)
-          tool_results.each do |result|
-            content_with_id = "Result from #{result.tool_call_id}: #{result.result}"
-            @context_manager.add_message("tool", content_with_id, check_consolidation: false)
-
-            # Log detailed tool result (natural language)
-            formatted_result = ToolFormatter.format_tool_result(result.tool_call_id, result.result)
-            @logger.log_message(:bot, formatted_result, format_messages_for_log(@context_manager.current_view))
-          end
-
-          # Update context view for next iteration
-          context_view = @context_manager.current_view
+          context_view = process_tools(tool_calls, tool_names, tool_executor, response, context_view)
         else
           # No content and no tool calls - shouldn't happen, but handle it
-          response_text = ""
-          @context_manager.handle_bot_message(response_text, check_consolidation: false)
-
-          # Check consolidation now that the turn is complete
-          @context_manager.check_and_consolidate
-          Mantle.emit_status(:idle)
-
-          on_response.try(&.call(response))
+          handle_empty_response(response, on_response)
           break
         end
       end
+    end
+
+    private def handle_tool_limit(max_iterations : Int32, on_chunk : Proc(String, Nil)?, on_response : Proc(Mantle::Response, Nil)?)
+      error_msg = "System: Maximum number of tool iterations (#{max_iterations}) reached. Please provide a text response to the user now without using any more tools."
+      @context_manager.add_message("system", error_msg, check_consolidation: false)
+
+      # Force one last client call without tools to get the final text response
+      final_context = @context_manager.current_view
+      final_response = if on_chunk
+                         @client.execute(final_context, nil, &on_chunk)
+                       else
+                         @client.execute(final_context, nil)
+                       end
+
+      if (req = final_response.raw_request) && (res = final_response.raw_response)
+        @logger.log_api_payloads(req, res)
+      end
+
+      # Handle the text response
+      response_text = final_response.content || "Error: Failed to generate final response after hitting tool iteration limit."
+      @context_manager.handle_bot_message(response_text, check_consolidation: false)
+
+      # Check consolidation now that the full turn is complete
+      @context_manager.check_and_consolidate
+
+      updated_context = @context_manager.current_view
+      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), final_response.thinking)
+
+      on_response.try(&.call(final_response))
+    end
+
+    private def execute_and_parse(context_view : Array(Hash(String, String)), all_tools : Array(Tool)?, on_chunk : Proc(String, Nil)?) : Mantle::Response
+      response = if on_chunk
+                   @client.execute(context_view, all_tools, &on_chunk)
+                 else
+                   @client.execute(context_view, all_tools)
+                 end
+
+      if (req = response.raw_request) && (res = response.raw_response)
+        @logger.log_api_payloads(req, res)
+      end
+
+      response
+    end
+
+    private def handle_final_response(response : Mantle::Response, on_response : Proc(Mantle::Response, Nil)?)
+      # Final text response - add to context without consolidation check
+      response_text = response.content.not_nil!
+      @context_manager.handle_bot_message(response_text, check_consolidation: false)
+
+      # Check consolidation now that the full turn is complete
+      @context_manager.check_and_consolidate
+
+      updated_context = @context_manager.current_view
+      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
+      Mantle.emit_status(:idle)
+
+      on_response.try(&.call(response))
+    end
+
+    private def process_tools(
+      tool_calls : Array(ToolCall),
+      tool_names : Array(String)?,
+      tool_executor : ToolExecutor,
+      response : Mantle::Response,
+      context_view : Array(Hash(String, String)),
+    ) : Array(Hash(String, String))
+      Mantle.emit_status(:tool_loop)
+      # Log detailed tool call information (natural language)
+      tool_calls.each do |call|
+        formatted_call = ToolFormatter.format_tool_call(call)
+        @logger.log_message(:bot, formatted_call, format_messages_for_log(context_view), response.thinking)
+      end
+
+      # Add assistant message to context if there's content (defer consolidation)
+      if response.content && !response.content.not_nil!.empty?
+        @context_manager.handle_bot_message(response.content.not_nil!, check_consolidation: false)
+      end
+
+      # Execute tools
+      tool_results = tool_executor.execute_all(tool_calls, tool_names)
+
+      # Add tool results to context with 'tool' role (defer consolidation)
+      tool_results.each do |result|
+        content_with_id = "Result from #{result.tool_call_id}: #{result.result}"
+        @context_manager.add_message("tool", content_with_id, check_consolidation: false)
+
+        # Log detailed tool result (natural language)
+        formatted_result = ToolFormatter.format_tool_result(result.tool_call_id, result.result)
+        @logger.log_message(:bot, formatted_result, format_messages_for_log(@context_manager.current_view))
+      end
+
+      # Update context view for next iteration
+      @context_manager.current_view
+    end
+
+    private def handle_empty_response(response : Mantle::Response, on_response : Proc(Mantle::Response, Nil)?)
+      response_text = ""
+      @context_manager.handle_bot_message(response_text, check_consolidation: false)
+
+      # Check consolidation now that the turn is complete
+      @context_manager.check_and_consolidate
+      Mantle.emit_status(:idle)
+
+      on_response.try(&.call(response))
     end
 
     # Merge built-in and custom tool definitions
