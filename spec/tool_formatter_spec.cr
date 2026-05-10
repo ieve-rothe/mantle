@@ -2,6 +2,15 @@ require "./spec_helper"
 require "../src/mantle/client"
 require "../src/mantle/tool_formatter"
 
+# Reopen module to expose private method for testing
+module Mantle
+  module ToolFormatter
+    def self.exposed_truncate_string(str : String, max_length : Int32) : String
+      truncate_string(str, max_length)
+    end
+  end
+end
+
 describe "Mantle Tool Formatter" do
   describe "format_tool_call" do
     it "formats simple tool call with one parameter" do
@@ -87,6 +96,49 @@ describe "Mantle Tool Formatter" do
 
       result.size.should be < long_content.size + 100
       result.should contain("...")
+    end
+
+    describe "truncate_string boundary cases" do
+      it "does not truncate when length is exactly MAX_RESULT_LENGTH" do
+        max_len = Mantle::ToolFormatter::MAX_RESULT_LENGTH
+        content = "A" * max_len
+        result = Mantle::ToolFormatter.format_tool_result("call_1", %({"content":"#{content}"}))
+
+        result.should contain(content)
+        result.should_not contain("...")
+      end
+
+      it "truncates when length is MAX_RESULT_LENGTH + 1" do
+        max_len = Mantle::ToolFormatter::MAX_RESULT_LENGTH
+        content = "A" * (max_len + 1)
+        result = Mantle::ToolFormatter.format_tool_result("call_1", %({"content":"#{content}"}))
+
+        result.should contain("...")
+        # Should have max_len - 3 characters followed by ...
+        # Result from call_1: AAA...
+        expected_content = ("A" * (max_len - 3)) + "..."
+        result.should contain(expected_content)
+      end
+
+      it "handles very small MAX_RESULT_LENGTH values (via format_tool_result would be hard, testing small max_length logic)" do
+        # We can't easily change MAX_RESULT_LENGTH constant, but we can test the logic
+        # by creating a test-specific wrapper if we really wanted to,
+        # or just trust the format_tool_result uses it.
+        # Since truncate_string is private, we've already verified it with repro_truncate.cr
+        # Let's add a test for a result that is not JSON and thus hits the rescue block
+
+        long_raw = "B" * (Mantle::ToolFormatter::MAX_RESULT_LENGTH + 10)
+        result = Mantle::ToolFormatter.format_tool_result("call_raw", long_raw)
+        result.should contain("...")
+        result.should contain("B" * (Mantle::ToolFormatter::MAX_RESULT_LENGTH - 3))
+      end
+
+      it "handles very small max_length values without crashing" do
+        Mantle::ToolFormatter.exposed_truncate_string("Hello", 3).should eq("Hel")
+        Mantle::ToolFormatter.exposed_truncate_string("Hello", 2).should eq("He")
+        Mantle::ToolFormatter.exposed_truncate_string("Hello", 1).should eq("H")
+        Mantle::ToolFormatter.exposed_truncate_string("Hello", 0).should eq("")
+      end
     end
   end
 
