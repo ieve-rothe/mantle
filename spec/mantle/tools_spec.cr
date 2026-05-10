@@ -41,7 +41,7 @@ describe "Mantle Tools" do
       schema = Mantle::ParametersSchema.new(
         properties: {
           "name" => Mantle::PropertyDefinition.new("string", "User's name"),
-          "age" => Mantle::PropertyDefinition.new("integer", "User's age")
+          "age"  => Mantle::PropertyDefinition.new("integer", "User's age"),
         }
       )
 
@@ -54,7 +54,7 @@ describe "Mantle Tools" do
     it "serializes with required fields" do
       schema = Mantle::ParametersSchema.new(
         properties: {
-          "name" => Mantle::PropertyDefinition.new("string", "User's name")
+          "name" => Mantle::PropertyDefinition.new("string", "User's name"),
         },
         required: ["name"]
       )
@@ -67,13 +67,14 @@ describe "Mantle Tools" do
     it "serializes without required fields when nil" do
       schema = Mantle::ParametersSchema.new(
         properties: {
-          "name" => Mantle::PropertyDefinition.new("string", "User's name")
+          "name" => Mantle::PropertyDefinition.new("string", "User's name"),
         }
       )
 
       json = schema.to_json
       # When required is nil, it should either be absent or null
       # Crystal's JSON serialization typically omits nil fields with emit_null: false
+      json.should_not contain("required")
     end
 
     it "deserializes from JSON correctly" do
@@ -89,8 +90,8 @@ describe "Mantle Tools" do
     it "round-trips complex schema through JSON" do
       original = Mantle::ParametersSchema.new(
         properties: {
-          "path" => Mantle::PropertyDefinition.new("string", "File path"),
-          "recursive" => Mantle::PropertyDefinition.new("boolean", "Search recursively")
+          "path"      => Mantle::PropertyDefinition.new("string", "File path"),
+          "recursive" => Mantle::PropertyDefinition.new("boolean", "Search recursively"),
         },
         required: ["path"]
       )
@@ -111,7 +112,7 @@ describe "Mantle Tools" do
         description: "Read contents of a file",
         parameters: Mantle::ParametersSchema.new(
           properties: {
-            "file_path" => Mantle::PropertyDefinition.new("string", "Path to file")
+            "file_path" => Mantle::PropertyDefinition.new("string", "Path to file"),
           },
           required: ["file_path"]
         )
@@ -139,7 +140,7 @@ describe "Mantle Tools" do
         description: "A test function",
         parameters: Mantle::ParametersSchema.new(
           properties: {
-            "arg1" => Mantle::PropertyDefinition.new("string", "First arg")
+            "arg1" => Mantle::PropertyDefinition.new("string", "First arg"),
           }
         )
       )
@@ -161,7 +162,7 @@ describe "Mantle Tools" do
           description: "Read a file",
           parameters: Mantle::ParametersSchema.new(
             properties: {
-              "file_path" => Mantle::PropertyDefinition.new("string", "Path")
+              "file_path" => Mantle::PropertyDefinition.new("string", "Path"),
             }
           )
         )
@@ -201,9 +202,9 @@ describe "Mantle Tools" do
           description: "Search for pattern in files",
           parameters: Mantle::ParametersSchema.new(
             properties: {
-              "pattern" => Mantle::PropertyDefinition.new("string", "Search pattern"),
-              "path" => Mantle::PropertyDefinition.new("string", "Search path"),
-              "case_sensitive" => Mantle::PropertyDefinition.new("boolean", "Case sensitive")
+              "pattern"        => Mantle::PropertyDefinition.new("string", "Search pattern"),
+              "path"           => Mantle::PropertyDefinition.new("string", "Search path"),
+              "case_sensitive" => Mantle::PropertyDefinition.new("boolean", "Case sensitive"),
             },
             required: ["pattern"]
           )
@@ -236,7 +237,7 @@ describe "Mantle Tools" do
             description: "Second tool",
             parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition)
           )
-        )
+        ),
       ]
 
       json = tools.to_json
