@@ -130,150 +130,127 @@ module Mantle
         "Content-Type" => "application/json",
       }
 
-      # Build payload conditionally based on whether tools are provided
-      body = if tools
-               {
-                 model:      @model_name,
-                 messages:   messages,
-                 stream:     @stream,
-                 tools:      tools,
-                 keep_alive: @keep_alive,
-                 options:    {
-                   num_predict: @max_tokens,
-                   temperature: @temperature,
-                   top_p:       @top_p,
-                 },
-               }.to_json
-             else
-               {
-                 model:      @model_name,
-                 messages:   messages,
-                 stream:     @stream,
-                 keep_alive: @keep_alive,
-                 options:    {
-                   num_predict: @max_tokens,
-                   temperature: @temperature,
-                   top_p:       @top_p,
-                 },
-               }.to_json
-             end
+      body = build_request_body(messages, tools)
 
       if @stream
-        full_content = String::Builder.new
-        full_thinking = String::Builder.new
-        tool_calls_json = nil
-        raw_response_builder = String::Builder.new
-        status_code = 0
-        error_body = ""
+        execute_stream(headers, body, &on_chunk)
+      else
+        execute_standard(headers, body, &on_chunk)
+      end
+    end
 
-        # By passing a `do |response|` block to `.post`, Crystal gives us a live data stream
-        # (`body_io`) instead of waiting for the whole download to finish.
-        HTTP::Client.post(@api_url, headers: headers, body: body) do |response|
-          status_code = response.status_code
-          if response.status.success?
-            if io = response.body_io
-              # Read the stream line-by-line as data arrives from Ollama.
-              # Ollama streams its responses as NDJSON (Newline Delimited JSON).
-              io.each_line do |line|
-                next if line.empty?
-                raw_response_builder.puts(line)
+    private def build_request_body(messages : Array(Hash(String, String)), tools : Array(Tool)?) : String
+      base_options = {
+        model:      @model_name,
+        messages:   messages,
+        stream:     @stream,
+        keep_alive: @keep_alive,
+        options:    {
+          num_predict: @max_tokens,
+          temperature: @temperature,
+          top_p:       @top_p,
+        },
+      }
 
-                parsed = JSON.parse(line)
-                msg = parsed["message"]
+      if tools
+        base_options.merge({tools: tools}).to_json
+      else
+        base_options.to_json
+      end
+    end
 
-                # As soon as we get a text chunk, tell the app about it right away!
-                if chunk = msg["content"]?.try(&.as_s?)
-                  unless chunk.empty?
-                    on_chunk.call(chunk)
-                    full_content << chunk
-                  end
-                end
+    private def execute_stream(headers : HTTP::Headers, body : String, &on_chunk : String -> Nil) : Response
+      full_content = String::Builder.new
+      full_thinking = String::Builder.new
+      tool_calls_json = nil
+      raw_response_builder = String::Builder.new
+      status_code = 0
+      error_body = ""
 
-                # Record thinking tags if present
-                if chunk = msg["thinking"]?.try(&.as_s?)
-                  unless chunk.empty?
-                    full_thinking << chunk
-                  end
-                end
+      HTTP::Client.post(@api_url, headers: headers, body: body) do |response|
+        status_code = response.status_code
+        if response.status.success?
+          if io = response.body_io
+            io.each_line do |line|
+              next if line.empty?
+              raw_response_builder.puts(line)
 
-                # If the AI wants to use a tool, save it for later.
-                # (Tools don't need to be streamed to the user letter-by-letter).
-                if tc = msg["tool_calls"]?
-                  tool_calls_json = tc
+              parsed = JSON.parse(line)
+              msg = parsed["message"]
+
+              if chunk = msg["content"]?.try(&.as_s?)
+                unless chunk.empty?
+                  on_chunk.call(chunk)
+                  full_content << chunk
                 end
               end
+
+              if chunk = msg["thinking"]?.try(&.as_s?)
+                unless chunk.empty?
+                  full_thinking << chunk
+                end
+              end
+
+              if tc = msg["tool_calls"]?
+                tool_calls_json = tc
+              end
             end
-          else
-            error_body = response.body_io ? response.body_io.gets_to_end : ""
-          end
-        end
-
-        if status_code >= 200 && status_code < 300
-          tool_calls = if tool_calls_json
-                         # Some versions of Ollama forget to assign a unique ID to their tool calls.
-                         # We'll just generate our own random ID to prevent the app from crashing.
-                         arr_json = tool_calls_json.as_a
-                         arr_json.each do |t|
-                           if !t.as_h.has_key?("id")
-                             t.as_h["id"] = JSON::Any.new("call_" + Random::Secure.hex(4))
-                           end
-                         end
-                         Array(ToolCall).from_json(arr_json.to_json)
-                       else
-                         nil
-                       end
-
-          final_content = full_content.empty? ? nil : full_content.to_s
-          final_thinking = full_thinking.empty? ? nil : full_thinking.to_s
-
-          # Return the final stitched-together response at the very end
-          return Response.new(content: final_content, tool_calls: tool_calls, thinking: final_thinking).tap do |r|
-            r.raw_request = body
-            r.raw_response = raw_response_builder.to_s
           end
         else
-          raise Exception.new("Error #{status_code}: #{error_body}")
-        end
-      else
-        response = HTTP::Client.post(@api_url, headers: headers, body: body)
-
-        if response.status.success?
-          response_data = JSON.parse(response.body)
-          message = response_data["message"]
-
-          # Extract content (may be nil if only tool_calls present)
-          content = message["content"]?.try(&.as_s?)
-
-          if content && !content.empty?
-            on_chunk.call(content)
-          end
-
-          # Extract thinking process (if any)
-          thinking = message["thinking"]?.try(&.as_s?)
-
-          # Extract tool_calls if present
-          tool_calls_json = message["tool_calls"]?
-          tool_calls = if tool_calls_json
-                         # Ollama sometimes omits ID, inject one if missing
-                         arr_json = tool_calls_json.as_a
-                         arr_json.each do |t|
-                           if !t.as_h.has_key?("id")
-                             t.as_h["id"] = JSON::Any.new("call_" + Random::Secure.hex(4))
-                           end
-                         end
-                         Array(ToolCall).from_json(arr_json.to_json)
-                       else
-                         nil
-                       end
-
-          return Response.new(content: content, tool_calls: tool_calls, thinking: thinking).tap do |r|
-            r.raw_request = body
-            r.raw_response = response.body
-          end
-        else
-          raise Exception.new("Error #{response.status_code}: #{response.body}")
+          error_body = response.body_io ? response.body_io.gets_to_end : ""
         end
       end
+
+      if status_code >= 200 && status_code < 300
+        tool_calls = parse_tool_calls(tool_calls_json)
+
+        final_content = full_content.empty? ? nil : full_content.to_s
+        final_thinking = full_thinking.empty? ? nil : full_thinking.to_s
+
+        return Response.new(content: final_content, tool_calls: tool_calls, thinking: final_thinking).tap do |r|
+          r.raw_request = body
+          r.raw_response = raw_response_builder.to_s
+        end
+      else
+        raise Exception.new("Error #{status_code}: #{error_body}")
+      end
+    end
+
+    private def execute_standard(headers : HTTP::Headers, body : String, &on_chunk : String -> Nil) : Response
+      response = HTTP::Client.post(@api_url, headers: headers, body: body)
+
+      if response.status.success?
+        response_data = JSON.parse(response.body)
+        message = response_data["message"]
+
+        content = message["content"]?.try(&.as_s?)
+        if content && !content.empty?
+          on_chunk.call(content)
+        end
+
+        thinking = message["thinking"]?.try(&.as_s?)
+        tool_calls_json = message["tool_calls"]?
+        tool_calls = parse_tool_calls(tool_calls_json)
+
+        return Response.new(content: content, tool_calls: tool_calls, thinking: thinking).tap do |r|
+          r.raw_request = body
+          r.raw_response = response.body
+        end
+      else
+        raise Exception.new("Error #{response.status_code}: #{response.body}")
+      end
+    end
+
+    private def parse_tool_calls(tool_calls_json : JSON::Any?) : Array(ToolCall)?
+      return nil unless tool_calls_json
+
+      arr_json = tool_calls_json.as_a
+      arr_json.each do |t|
+        if !t.as_h.has_key?("id")
+          t.as_h["id"] = JSON::Any.new("call_" + Random::Secure.hex(4))
+        end
+      end
+      Array(ToolCall).from_json(arr_json.to_json)
     end
   end
 end
