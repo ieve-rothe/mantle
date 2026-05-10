@@ -20,8 +20,8 @@ describe "Integration: Memory Consolidation" do
 
       memory_store = Mantle::JSONLayeredMemoryStore.new(
         memory_file: memory_file,
-        layer_capacity: 4,
-        layer_target: 2,
+        layer_token_capacity: 100,
+        layer_token_target: 50,
         squishifier: squishifier
       )
 
@@ -30,8 +30,8 @@ describe "Integration: Memory Consolidation" do
         memory_store,
         "User",
         "Assistant",
-        msg_target: 2,
-        msg_hardmax: 4
+        token_target: 4,
+        token_hardmax: 8
       )
 
       # 3. Create scripted client
@@ -55,7 +55,7 @@ describe "Integration: Memory Consolidation" do
       # Interaction 2: Context messages = 4 (at msg_hardmax)
       flow.run("User message 2", on_response: ->(r : Mantle::Response) { final_responses << r.content.not_nil! })
 
-      # Interaction 3: Context messages = 6 (triggers consolidation back to msg_target: 2)
+      # Interaction 3: Context messages = 6 (triggers consolidation back to token_target: 2)
       flow.run("User message 3", on_response: ->(r : Mantle::Response) { final_responses << r.content.not_nil! })
 
       # 5. Assertions

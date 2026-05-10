@@ -29,10 +29,9 @@ class DummyMemoryStore < Mantle::JSONLayeredMemoryStore
   def initialize
     # Initialize parent class properties with dummy test values
     @memory_file = "/tmp/dummy_memory_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
-    @layer_capacity = 10
-    @layer_target = 5
+    @layer_token_capacity = 100
+    @layer_token_target = 50
     @squishifier = ->(messages : Array(String)) : String { "" }
-    @ingest_step_size = (@layer_capacity - @layer_target)
   end
 
   def current_view
