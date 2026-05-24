@@ -1,5 +1,5 @@
 # examples/logger_test.cr
-# Copyright (C) 2025 Cameron Carroll
+# Copyright (C) 2025 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
 # Basic example / test harness for the FileLogger.

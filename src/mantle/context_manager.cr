@@ -1,5 +1,5 @@
 # mantle/context_manager.cr
-# Copyright (C) 2026 Cameron Carroll
+# Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
 # Coordinates context routing from flow to ContextStore and MemoryStore

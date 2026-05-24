@@ -1,5 +1,5 @@
 # mantle/squishifiers.cr
-# Copyright (C) 2026 Cameron Carroll
+# Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
 # Creates 'squishifier' procs for use in memory management.

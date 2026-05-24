@@ -1,3 +1,7 @@
+# examples/summarizer_test.cr
+# Copyright (C) 2025 Cam Carroll
+# Licensed under the AGPL-3.0. See LICENSE for details.
+
 require "../src/mantle.cr"
 
 # This example demonstrates how to set up a custom memory summarization prompt.

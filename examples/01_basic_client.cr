@@ -1,5 +1,5 @@
 # examples/01_basic_client.cr
-# Copyright (C) 2026 Cameron Carroll
+# Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
 # Level 1: Basic Client
@@ -13,8 +13,8 @@ require "../src/mantle"
 puts "--- Level 1: Basic Client ---"
 
 # 1. Configure the model
-# You need to define which model you want to talk to and what URL the API lives at.
-# We are assuming you have Ollama running locally.
+# Define model parameters.
+# Currently we only support Ollama API. Because that's what ieve uses.
 config = Mantle::ModelConfig.new(
   model_name: "gpt-oss:20b",
   stream: false,

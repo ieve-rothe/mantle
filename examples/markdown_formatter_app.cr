@@ -1,4 +1,6 @@
-#!/usr/bin/env crystal
+# examples/markdown_formatter_app.cr
+# Copyright (C) 2025 Cam Carroll
+# Licensed under the AGPL-3.0. See LICENSE for details.
 
 # Markdown Formatter Example Application
 # Demonstrates Mantle's MarkdownFormatter module utility

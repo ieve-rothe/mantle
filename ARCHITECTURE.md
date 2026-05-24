@@ -1,3 +1,7 @@
+ARCHITECTURE.md
+Copyright (C) 2026 Cam Carroll
+Licensed under the AGPL-3.0. See LICENSE for details.
+
 # Mantle Architecture
 
 This document describes the internal architecture of the Mantle framework.
@@ -309,31 +313,3 @@ The layered memory consolidation uses recursive `cascade()` calls to move summar
 - Tests with unrealistic parameters revealed edge cases but were harder to reason about
 - Deterministic squishifier in tests preserves message content in summaries
 - When testing consolidation, check specific layer sections, not entire view
-
----
-
-## Breaking Changes
-
-### v0.2.x → v0.3.0: Tool Calling Support
-
-**Client Interface Change**:
-- `Client.execute()` now returns `Response` instead of `String`
-- `Response` contains optional `content : String?` and `tool_calls : Array(ToolCall)?`
-- Tool parameter added: `execute(messages, tools : Array(Tool)? = nil)`
-
-**Migration**:
-```crystal
-# Before (v0.2.x)
-response = client.execute(messages)
-puts response  # String
-
-# After (v0.3.0)
-response = client.execute(messages)
-puts response.content  # String?
-puts response.tool_calls  # Array(ToolCall)?
-```
-
-**Impact**:
-- `ChatFlow` automatically handles this (extracts `content` from Response)
-- Custom Client implementations must update their return type
-- Applications directly using Client need to update response handling

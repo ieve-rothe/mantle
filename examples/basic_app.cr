@@ -1,3 +1,9 @@
+# # examples/basic_app.cr
+# Copyright (C) 2025 Cam Carroll
+# Licensed under the AGPL-3.0. See LICENSE for details.
+#
+# Hmm. If we have 01_basic_client.cr, is this duplicate?
+
 require "../src/mantle.cr"
 
 # Basic example showing implementation of a ChatFlow using a JSONContextStore,

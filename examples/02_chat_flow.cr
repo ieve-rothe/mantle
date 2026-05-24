@@ -1,5 +1,5 @@
 # examples/02_chat_flow.cr
-# Copyright (C) 2026 Cameron Carroll
+# Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
 # Level 2: Chat Flow

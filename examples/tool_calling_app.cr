@@ -1,4 +1,6 @@
-#!/usr/bin/env crystal
+# examples/tool_calling_app.cr
+# Copyright (C) 2025 Cam Carroll
+# Licensed under the AGPL-3.0. See LICENSE for details.
 
 # Tool Calling Example Application
 # Demonstrates Mantle's tool calling capabilities with both built-in and custom tools.
