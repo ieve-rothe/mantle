@@ -60,8 +60,8 @@ module Mantle::Flows
     # Runs the chat flow by sending conversation messages to the client and handling the response.
     #
     # Custom callback *on_response* is executed with the final `Response` payload.
-    def run(msg : String, on_response : Proc(Mantle::Clients::Response, Nil), ephemeral_blocks : Array(String) = [] of String)
-      @context_manager.handle_user_message(msg)
+    def run(msg : String, on_response : Proc(Mantle::Clients::Response, Nil), ephemeral_blocks : Array(String) = [] of String, invisible_append : String? = nil)
+      @context_manager.handle_user_message(msg, invisible_append)
       context_view = @context_manager.current_view(ephemeral_blocks)
       @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
@@ -121,9 +121,10 @@ module Mantle::Flows
       on_chunk : Proc(String, Nil)? = nil,
       on_response : Proc(Mantle::Clients::Response, Nil)? = nil,
       ephemeral_blocks : Array(String) = [] of String,
+      invisible_append : String? = nil,
     )
       # Add user message to context
-      @context_manager.handle_user_message(msg)
+      @context_manager.handle_user_message(msg, invisible_append)
       context_view = @context_manager.current_view(ephemeral_blocks)
       @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
