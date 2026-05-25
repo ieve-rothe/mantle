@@ -2,11 +2,11 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 
-require "./client"
+require "../clients/client"
 require "./builtin_tools"
 require "json"
 
-module Mantle
+module Mantle::Tools
   # Represents the result of executing a tool call.
   #
   # Links the tool call ID to its execution result.
@@ -50,7 +50,7 @@ module Mantle
     #
     # Routes each call to either the built-in executor or the custom callback.
     # Optionally uses *available_tool_names* to format helpful error messages.
-    def execute_all(tool_calls : Array(ToolCall), available_tool_names : Array(String)? = nil) : Array(ToolResult)
+    def execute_all(tool_calls : Array(Mantle::Clients::ToolCall), available_tool_names : Array(String)? = nil) : Array(ToolResult)
       tool_calls.map do |call|
         result_json = execute_single(call, available_tool_names)
 
@@ -74,7 +74,7 @@ module Mantle
     end
 
     # Execute a single tool call
-    private def execute_single(tool_call : ToolCall, available_tool_names : Array(String)?) : String
+    private def execute_single(tool_call : Mantle::Clients::ToolCall, available_tool_names : Array(String)?) : String
       function_name = tool_call.function.name
       arguments_json = tool_call.function.arguments
 

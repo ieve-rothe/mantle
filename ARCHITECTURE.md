@@ -12,7 +12,7 @@ Mantle is a Crystal framework for abstracting LLM interactions into composable F
 
 ## Core Components
 
-### Flow (`src/mantle/flow.cr`)
+### Flow (`src/mantle/flows/flow.cr`)
 
 **Purpose**: Base abstraction for LLM inference operations
 
@@ -23,14 +23,14 @@ Mantle is a Crystal framework for abstracting LLM interactions into composable F
 
 **Responsibilities**:
 - Represents self-contained blocks of work (planning, reflection, tool execution, etc.)
-- Each flow has a `run(msg : String, on_response : Proc(Mantle::Response, Nil))` method that assembles context, sends to client, and handles response
+- Each flow has a `run(msg : String, on_response : Proc(Mantle::Clients::Response, Nil))` method that assembles context, sends to client, and handles response
 - Coordinates between: context store (manages conversation), client (API communication), and logger (output tracking)
 
 **Design**: Uses composition over inheritance - Flow composes context_manager, client, and logger rather than inheriting functionality
 
 ---
 
-### Client (`src/mantle/client.cr`)
+### Client (`src/mantle/clients/client.cr`)
 
 **Purpose**: Abstraction for LLM API communication
 
@@ -44,7 +44,7 @@ Mantle is a Crystal framework for abstracting LLM interactions into composable F
 
 **API**:
 ```crystal
-abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil) : Response
+abstract def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil) : Response
 ```
 
 **Design Notes**:
@@ -55,7 +55,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ---
 
-### ContextStore (`src/mantle/context_store.cr`)
+### ContextStore (`src/mantle/storage/context_store.cr`)
 
 **Purpose**: Manages ongoing conversation context (short-term memory only, not identity or long-term memory)
 
@@ -75,7 +75,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ---
 
-### ContextManager (`src/mantle/context_manager.cr`)
+### ContextManager (`src/mantle/storage/context_manager.cr`)
 
 **Purpose**: Higher-level interface combining context and memory
 
@@ -122,7 +122,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ---
 
-### Logger (`src/mantle/logger.cr`)
+### Logger (`src/mantle/support/logger.cr`)
 
 **Purpose**: Pluggable logging for tracking conversations
 
@@ -135,7 +135,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ---
 
-### MemoryStore (`src/mantle/memory_store.cr`)
+### MemoryStore (`src/mantle/storage/memory_store.cr`)
 
 **Purpose**: Hierarchical long-term memory with automatic consolidation
 
@@ -159,7 +159,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ## Tool Calling System
 
-### Tool Definitions (`src/mantle/tools.cr`)
+### Tool Definitions (`src/mantle/tools/tools.cr`)
 
 **Purpose**: Type-safe schema for defining tools that LLMs can invoke
 
@@ -173,7 +173,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ---
 
-### Built-in Tools (`src/mantle/builtin_tools.cr`)
+### Built-in Tools (`src/mantle/tools/builtin_tools.cr`)
 
 **Purpose**: Framework-provided tools with safety controls
 
@@ -194,7 +194,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ---
 
-### Tool Executor (`src/mantle/tool_executor.cr`)
+### Tool Executor (`src/mantle/tools/tool_executor.cr`)
 
 **Purpose**: Coordinates execution of both built-in and custom tools
 
@@ -221,7 +221,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ---
 
-### Tool Formatter (`src/mantle/tool_formatter.cr`)
+### Tool Formatter (`src/mantle/tools/tool_formatter.cr`)
 
 **Purpose**: Converts structured tool interactions to natural language for context storage
 
@@ -238,7 +238,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ---
 
-### ToolEnabledChatFlow (`src/mantle/flow.cr`)
+### ToolEnabledChatFlow (`src/mantle/flows/flow.cr`)
 
 **Purpose**: Extends ChatFlow with automatic tool calling loop
 
@@ -301,17 +301,25 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 ```
 src/mantle/
-├── flow.cr              # Flow abstractions, ChatFlow, and ToolEnabledChatFlow
-├── client.cr            # LLM client abstractions, Response types, and Ollama implementation
-├── tools.cr             # Tool definition structs (Tool, FunctionDefinition, etc.)
-├── builtin_tools.cr     # Built-in tool enum, registry, executor, and safety config
-├── tool_executor.cr     # Coordinates built-in and custom tool execution
-├── tool_formatter.cr    # Converts tool interactions to natural language
-├── context_store.cr     # Context management with multiple strategies
-├── context_manager.cr   # High-level interface combining context and memory
-├── logger.cr            # Logging abstractions and file-based implementations
-├── memory_store.cr      # Hierarchical long-term memory with consolidation
-└── squishifiers.cr      # Helper functions for building summarization procs
+├── flows/
+│   └── flow.cr              # Flow abstractions, ChatFlow, and ToolEnabledChatFlow
+├── clients/
+│   └── client.cr            # LLM client abstractions, Response types, and Ollama implementation
+├── tools/
+│   ├── tools.cr             # Tool definition structs (Tool, FunctionDefinition, etc.)
+│   ├── builtin_tools.cr     # Built-in tool enum, registry, executor, and safety config
+│   ├── tool_executor.cr     # Coordinates built-in and custom tool execution
+│   └── tool_formatter.cr    # Converts tool interactions to natural language
+├── storage/
+│   ├── context_store.cr     # Context management with multiple strategies
+│   ├── context_manager.cr   # High-level interface combining context and memory
+│   └── memory_store.cr      # Hierarchical long-term memory with consolidation
+└── support/
+    ├── app_logger.cr        # Provides the default log for the library
+    ├── logger.cr            # Logging abstractions and file-based implementations
+    ├── markdown_formatter.cr # Light terminal markdown to ANSI formatter
+    ├── squishifiers.cr      # Helper functions for building summarization procs
+    └── status.cr            # Status emission system
 
 spec/
 ├── context_store_spec.cr    # Comprehensive context store tests

@@ -5,7 +5,7 @@
 require "./tools"
 require "json"
 
-module Mantle
+module Mantle::Tools
   # Represents the list of available built-in tools.
   #
   # Consumer applications opt into these by passing the enum values.

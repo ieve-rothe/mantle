@@ -1,19 +1,14 @@
 require "./spec_helper"
-require "../src/mantle/flow"
-require "../src/mantle/tools"
-require "../src/mantle/builtin_tools"
-require "../src/mantle/tool_executor"
-require "../src/mantle/tool_formatter"
 
 # Mock client that simulates tool calling behavior
-class ToolCallMockClient < Mantle::Client
-  property responses : Array(Mantle::Response)
+class ToolCallMockClient < Mantle::Clients::Client
+  property responses : Array(Mantle::Clients::Response)
   property call_count : Int32 = 0
 
-  def initialize(@responses : Array(Mantle::Response))
+  def initialize(@responses : Array(Mantle::Clients::Response))
   end
 
-def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
+def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
   if @call_count < @responses.size
     response = @responses[@call_count]
   else
@@ -36,15 +31,15 @@ describe "Mantle ToolEnabledChatFlow" do
 
       # Client returns simple text response
       client = ToolCallMockClient.new([
-        Mantle::Response.new(content: "Hello!", tool_calls: nil)
+        Mantle::Clients::Response.new(content: "Hello!", tool_calls: nil)
       ])
 
-      flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
 
       response_received = nil
       flow.run(
         "Hi",
-        on_response: ->(r : Mantle::Response) { response_received = r.content.not_nil! }
+        on_response: ->(r : Mantle::Clients::Response) { response_received = r.content.not_nil! }
       )
 
       response_received.should eq("Hello!")
@@ -61,13 +56,13 @@ describe "Mantle ToolEnabledChatFlow" do
       # Simulate: LLM calls tool, then responds with text
       client = ToolCallMockClient.new([
         # First response: tool call
-        Mantle::Response.new(
+        Mantle::Clients::Response.new(
           content: nil,
           tool_calls: [
-            Mantle::ToolCall.new(
+            Mantle::Clients::ToolCall.new(
               id: "call_1",
               type: "function",
-              function: Mantle::ToolCallFunction.new(
+              function: Mantle::Clients::ToolCallFunction.new(
                 name: "get_time",
                 arguments: "{}"
               )
@@ -75,7 +70,7 @@ describe "Mantle ToolEnabledChatFlow" do
           ]
         ),
         # Second response: text (after tool result)
-        Mantle::Response.new(
+        Mantle::Clients::Response.new(
           content: "The time is 12:00",
           tool_calls: nil
         )
@@ -87,25 +82,25 @@ describe "Mantle ToolEnabledChatFlow" do
       }
 
       custom_tools = [
-        Mantle::Tool.new(
-          function: Mantle::FunctionDefinition.new(
+        Mantle::Tools::Tool.new(
+          function: Mantle::Tools::FunctionDefinition.new(
             name: "get_time",
             description: "Get current time",
-            parameters: Mantle::ParametersSchema.new(
-              properties: {} of String => Mantle::PropertyDefinition
+            parameters: Mantle::Tools::ParametersSchema.new(
+              properties: {} of String => Mantle::Tools::PropertyDefinition
             )
           )
         )
       ]
 
-      flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
 
       final_response = nil
       flow.run(
         "What time is it?",
         custom_tools: custom_tools,
         tool_callback: tool_callback,
-        on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
+        on_response: ->(r : Mantle::Clients::Response) { final_response = r.content.not_nil! }
       )
 
       final_response.should eq("The time is 12:00")
@@ -118,13 +113,13 @@ describe "Mantle ToolEnabledChatFlow" do
       logger = DummyLogger.new
 
       # Client always returns tool calls (infinite loop scenario)
-      tool_call_response = Mantle::Response.new(
+      tool_call_response = Mantle::Clients::Response.new(
         content: nil,
         tool_calls: [
-          Mantle::ToolCall.new(
+          Mantle::Clients::ToolCall.new(
             id: "call_loop",
             type: "function",
-            function: Mantle::ToolCallFunction.new(
+            function: Mantle::Clients::ToolCallFunction.new(
               name: "loop_tool",
               arguments: "{}"
             )
@@ -132,8 +127,8 @@ describe "Mantle ToolEnabledChatFlow" do
         ]
       )
 
-      responses = Array(Mantle::Response).new(3, tool_call_response)
-      responses << Mantle::Response.new(content: "Final text response after limit", tool_calls: nil)
+      responses = Array(Mantle::Clients::Response).new(3, tool_call_response)
+      responses << Mantle::Clients::Response.new(content: "Final text response after limit", tool_calls: nil)
       client = ToolCallMockClient.new(responses)
 
       tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
@@ -141,18 +136,18 @@ describe "Mantle ToolEnabledChatFlow" do
       }
 
       custom_tools = [
-        Mantle::Tool.new(
-          function: Mantle::FunctionDefinition.new(
+        Mantle::Tools::Tool.new(
+          function: Mantle::Tools::FunctionDefinition.new(
             name: "loop_tool",
             description: "A tool",
-            parameters: Mantle::ParametersSchema.new(
-              properties: {} of String => Mantle::PropertyDefinition
+            parameters: Mantle::Tools::ParametersSchema.new(
+              properties: {} of String => Mantle::Tools::PropertyDefinition
             )
           )
         )
       ]
 
-      flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
 
       final_response = nil
       flow.run(
@@ -160,7 +155,7 @@ describe "Mantle ToolEnabledChatFlow" do
         custom_tools: custom_tools,
         tool_callback: tool_callback,
         max_iterations: 3,
-        on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
+        on_response: ->(r : Mantle::Clients::Response) { final_response = r.content.not_nil! }
       )
 
       final_response.should eq("Final text response after limit")
@@ -180,35 +175,35 @@ describe "Mantle ToolEnabledChatFlow" do
         logger = DummyLogger.new
 
         client = ToolCallMockClient.new([
-          Mantle::Response.new(
+          Mantle::Clients::Response.new(
             content: nil,
             tool_calls: [
-              Mantle::ToolCall.new(
+              Mantle::Clients::ToolCall.new(
                 id: "call_read",
                 type: "function",
-                function: Mantle::ToolCallFunction.new(
+                function: Mantle::Clients::ToolCallFunction.new(
                   name: "read_file",
                   arguments: %({"file_path":"#{temp_file}"})
                 )
               )
             ]
           ),
-          Mantle::Response.new(content: "Got it!", tool_calls: nil)
+          Mantle::Clients::Response.new(content: "Got it!", tool_calls: nil)
         ])
 
-        builtin_config = Mantle::BuiltinToolConfig.new(
+        builtin_config = Mantle::Tools::BuiltinToolConfig.new(
           working_directory: "/tmp",
           allowed_paths: ["/tmp"]
         )
 
-        flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+        flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
 
         final_response = nil
         flow.run(
           "Read the file",
-          builtins: [Mantle::BuiltinTool::ReadFile],
+          builtins: [Mantle::Tools::BuiltinTool::ReadFile],
           builtin_config: builtin_config,
-          on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
+          on_response: ->(r : Mantle::Clients::Response) { final_response = r.content.not_nil! }
         )
 
         final_response.should eq("Got it!")
@@ -237,13 +232,13 @@ describe "Mantle ToolEnabledChatFlow" do
 
         client = ToolCallMockClient.new([
           # Call built-in tool
-          Mantle::Response.new(
+          Mantle::Clients::Response.new(
             content: nil,
             tool_calls: [
-              Mantle::ToolCall.new(
+              Mantle::Clients::ToolCall.new(
                 id: "call_builtin",
                 type: "function",
-                function: Mantle::ToolCallFunction.new(
+                function: Mantle::Clients::ToolCallFunction.new(
                   name: "read_file",
                   arguments: %({"file_path":"#{temp_file}"})
                 )
@@ -251,13 +246,13 @@ describe "Mantle ToolEnabledChatFlow" do
             ]
           ),
           # Call custom tool
-          Mantle::Response.new(
+          Mantle::Clients::Response.new(
             content: nil,
             tool_calls: [
-              Mantle::ToolCall.new(
+              Mantle::Clients::ToolCall.new(
                 id: "call_custom",
                 type: "function",
-                function: Mantle::ToolCallFunction.new(
+                function: Mantle::Clients::ToolCallFunction.new(
                   name: "process_data",
                   arguments: %({"data":"Data"})
                 )
@@ -265,7 +260,7 @@ describe "Mantle ToolEnabledChatFlow" do
             ]
           ),
           # Final response
-          Mantle::Response.new(content: "Processed!", tool_calls: nil)
+          Mantle::Clients::Response.new(content: "Processed!", tool_calls: nil)
         ])
 
         tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
@@ -273,34 +268,34 @@ describe "Mantle ToolEnabledChatFlow" do
         }
 
         custom_tools = [
-          Mantle::Tool.new(
-            function: Mantle::FunctionDefinition.new(
+          Mantle::Tools::Tool.new(
+            function: Mantle::Tools::FunctionDefinition.new(
               name: "process_data",
               description: "Process data",
-              parameters: Mantle::ParametersSchema.new(
+              parameters: Mantle::Tools::ParametersSchema.new(
                 properties: {
-                  "data" => Mantle::PropertyDefinition.new("string", "Data to process")
+                  "data" => Mantle::Tools::PropertyDefinition.new("string", "Data to process")
                 }
               )
             )
           )
         ]
 
-        builtin_config = Mantle::BuiltinToolConfig.new(
+        builtin_config = Mantle::Tools::BuiltinToolConfig.new(
           working_directory: "/tmp",
           allowed_paths: ["/tmp"]
         )
 
-        flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+        flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
 
         final_response = nil
         flow.run(
           "Read and process",
-          builtins: [Mantle::BuiltinTool::ReadFile],
+          builtins: [Mantle::Tools::BuiltinTool::ReadFile],
           custom_tools: custom_tools,
           tool_callback: tool_callback,
           builtin_config: builtin_config,
-          on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
+          on_response: ->(r : Mantle::Clients::Response) { final_response = r.content.not_nil! }
         )
 
         final_response.should eq("Processed!")
@@ -318,33 +313,33 @@ describe "Subagent depth kill-switch" do
     context_store = DummyContextStore.new
     context_manager = DummyContextManager.new(context_store)
     
-    tool_call = Mantle::ToolCall.new(
+    tool_call = Mantle::Clients::ToolCall.new(
       id: "call_1",
       type: "function",
-      function: Mantle::ToolCallFunction.new(
+      function: Mantle::Clients::ToolCallFunction.new(
         name: "get_time",
         arguments: "{}"
       )
     )
     
     client = ToolCallMockClient.new([
-      Mantle::Response.new(content: nil, tool_calls: [tool_call]),
-      Mantle::Response.new(content: "The time is 3:00 PM", tool_calls: nil)
+      Mantle::Clients::Response.new(content: nil, tool_calls: [tool_call]),
+      Mantle::Clients::Response.new(content: "The time is 3:00 PM", tool_calls: nil)
     ])
     
     logger = DummyLogger.new
-    flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 0)
+    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 0)
     
     # Act
     tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
       %({"content":"Current time: 3:00 PM"})
     }
     
-    custom_tools = [Mantle::Tool.new(
-      function: Mantle::FunctionDefinition.new(
+    custom_tools = [Mantle::Tools::Tool.new(
+      function: Mantle::Tools::FunctionDefinition.new(
         name: "get_time",
         description: "Get current time",
-        parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition, required: [] of String)
+        parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition, required: [] of String)
       )
     )]
     
@@ -352,7 +347,7 @@ describe "Subagent depth kill-switch" do
       "What time is it?",
       custom_tools: custom_tools,
       tool_callback: tool_callback,
-      on_response: ->(response : Mantle::Response) {}
+      on_response: ->(response : Mantle::Clients::Response) {}
     )
     
     # Assert - Tool should have been executed
@@ -368,14 +363,14 @@ describe "Subagent depth kill-switch" do
     client = DummyClient.new
     
     logger = DummyLogger.new
-    flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 1)
+    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 1)
     
     # Act
-    custom_tools = [Mantle::Tool.new(
-      function: Mantle::FunctionDefinition.new(
+    custom_tools = [Mantle::Tools::Tool.new(
+      function: Mantle::Tools::FunctionDefinition.new(
         name: "get_time",
         description: "Get current time",
-        parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition, required: [] of String)
+        parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition, required: [] of String)
       )
     )]
     
@@ -383,7 +378,7 @@ describe "Subagent depth kill-switch" do
       "What time is it?",
       custom_tools: custom_tools,
       tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { "" },
-      on_response: ->(response : Mantle::Response) {}
+      on_response: ->(response : Mantle::Clients::Response) {}
     )
     
     # Assert - No tool calls should have been executed (tools were stripped)
@@ -397,14 +392,14 @@ describe "Subagent depth kill-switch" do
     
     client = DummyClient.new
     logger = DummyLogger.new
-    flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 2)
+    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 2)
     
     # Act
-    custom_tools = [Mantle::Tool.new(
-      function: Mantle::FunctionDefinition.new(
+    custom_tools = [Mantle::Tools::Tool.new(
+      function: Mantle::Tools::FunctionDefinition.new(
         name: "spawn_agent",
         description: "Spawn a subagent",
-        parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition, required: [] of String)
+        parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition, required: [] of String)
       )
     )]
     
@@ -412,7 +407,7 @@ describe "Subagent depth kill-switch" do
       "Spawn an agent",
       custom_tools: custom_tools,
       tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { "" },
-      on_response: ->(response : Mantle::Response) {}
+      on_response: ->(response : Mantle::Clients::Response) {}
     )
     
     # Assert - No tool calls should have been executed
@@ -424,30 +419,30 @@ describe "Subagent depth kill-switch" do
     context_store = DummyContextStore.new
     context_manager = DummyContextManager.new(context_store)
     
-    tool_call = Mantle::ToolCall.new(
+    tool_call = Mantle::Clients::ToolCall.new(
       id: "call_1",
       type: "function",
-      function: Mantle::ToolCallFunction.new(
+      function: Mantle::Clients::ToolCallFunction.new(
         name: "test_tool",
         arguments: "{}"
       )
     )
     
     client = ToolCallMockClient.new([
-      Mantle::Response.new(content: nil, tool_calls: [tool_call]),
-      Mantle::Response.new(content: "Done", tool_calls: nil)
+      Mantle::Clients::Response.new(content: nil, tool_calls: [tool_call]),
+      Mantle::Clients::Response.new(content: "Done", tool_calls: nil)
     ])
     
     logger = DummyLogger.new
     # Don't pass depth parameter - should default to 0
-    flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
     
     # Act
-    custom_tools = [Mantle::Tool.new(
-      function: Mantle::FunctionDefinition.new(
+    custom_tools = [Mantle::Tools::Tool.new(
+      function: Mantle::Tools::FunctionDefinition.new(
         name: "test_tool",
         description: "Test tool",
-        parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition, required: [] of String)
+        parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition, required: [] of String)
       )
     )]
     
@@ -455,7 +450,7 @@ describe "Subagent depth kill-switch" do
       "Test",
       custom_tools: custom_tools,
       tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { %({"success":true}) },
-      on_response: ->(response : Mantle::Response) {}
+      on_response: ->(response : Mantle::Clients::Response) {}
     )
     
     # Assert - Tools should work at default depth 0

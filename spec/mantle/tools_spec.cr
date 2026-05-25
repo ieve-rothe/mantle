@@ -1,10 +1,9 @@
 require "../spec_helper"
-require "../../src/mantle/tools"
 
 describe "Mantle Tools" do
   describe "PropertyDefinition" do
     it "serializes to JSON correctly" do
-      prop = Mantle::PropertyDefinition.new(
+      prop = Mantle::Tools::PropertyDefinition.new(
         type: "string",
         description: "A test property"
       )
@@ -16,20 +15,20 @@ describe "Mantle Tools" do
 
     it "deserializes from JSON correctly" do
       json = %({"type":"integer","description":"A number value"})
-      prop = Mantle::PropertyDefinition.from_json(json)
+      prop = Mantle::Tools::PropertyDefinition.from_json(json)
 
       prop.type.should eq("integer")
       prop.description.should eq("A number value")
     end
 
     it "round-trips through JSON" do
-      original = Mantle::PropertyDefinition.new(
+      original = Mantle::Tools::PropertyDefinition.new(
         type: "boolean",
         description: "A flag"
       )
 
       json = original.to_json
-      restored = Mantle::PropertyDefinition.from_json(json)
+      restored = Mantle::Tools::PropertyDefinition.from_json(json)
 
       restored.type.should eq(original.type)
       restored.description.should eq(original.description)
@@ -38,10 +37,10 @@ describe "Mantle Tools" do
 
   describe "ParametersSchema" do
     it "serializes to JSON with properties" do
-      schema = Mantle::ParametersSchema.new(
+      schema = Mantle::Tools::ParametersSchema.new(
         properties: {
-          "name" => Mantle::PropertyDefinition.new("string", "User's name"),
-          "age"  => Mantle::PropertyDefinition.new("integer", "User's age"),
+          "name" => Mantle::Tools::PropertyDefinition.new("string", "User's name"),
+          "age"  => Mantle::Tools::PropertyDefinition.new("integer", "User's age"),
         }
       )
 
@@ -52,9 +51,9 @@ describe "Mantle Tools" do
     end
 
     it "serializes with required fields" do
-      schema = Mantle::ParametersSchema.new(
+      schema = Mantle::Tools::ParametersSchema.new(
         properties: {
-          "name" => Mantle::PropertyDefinition.new("string", "User's name"),
+          "name" => Mantle::Tools::PropertyDefinition.new("string", "User's name"),
         },
         required: ["name"]
       )
@@ -65,9 +64,9 @@ describe "Mantle Tools" do
     end
 
     it "serializes without required fields when nil" do
-      schema = Mantle::ParametersSchema.new(
+      schema = Mantle::Tools::ParametersSchema.new(
         properties: {
-          "name" => Mantle::PropertyDefinition.new("string", "User's name"),
+          "name" => Mantle::Tools::PropertyDefinition.new("string", "User's name"),
         }
       )
 
@@ -79,7 +78,7 @@ describe "Mantle Tools" do
 
     it "deserializes from JSON correctly" do
       json = %({"type":"object","properties":{"file_path":{"type":"string","description":"Path to file"}},"required":["file_path"]})
-      schema = Mantle::ParametersSchema.from_json(json)
+      schema = Mantle::Tools::ParametersSchema.from_json(json)
 
       schema.type.should eq("object")
       schema.properties.keys.should contain("file_path")
@@ -88,16 +87,16 @@ describe "Mantle Tools" do
     end
 
     it "round-trips complex schema through JSON" do
-      original = Mantle::ParametersSchema.new(
+      original = Mantle::Tools::ParametersSchema.new(
         properties: {
-          "path"      => Mantle::PropertyDefinition.new("string", "File path"),
-          "recursive" => Mantle::PropertyDefinition.new("boolean", "Search recursively"),
+          "path"      => Mantle::Tools::PropertyDefinition.new("string", "File path"),
+          "recursive" => Mantle::Tools::PropertyDefinition.new("boolean", "Search recursively"),
         },
         required: ["path"]
       )
 
       json = original.to_json
-      restored = Mantle::ParametersSchema.from_json(json)
+      restored = Mantle::Tools::ParametersSchema.from_json(json)
 
       restored.type.should eq("object")
       restored.properties.size.should eq(2)
@@ -107,12 +106,12 @@ describe "Mantle Tools" do
 
   describe "FunctionDefinition" do
     it "serializes to JSON correctly" do
-      func = Mantle::FunctionDefinition.new(
+      func = Mantle::Tools::FunctionDefinition.new(
         name: "read_file",
         description: "Read contents of a file",
-        parameters: Mantle::ParametersSchema.new(
+        parameters: Mantle::Tools::ParametersSchema.new(
           properties: {
-            "file_path" => Mantle::PropertyDefinition.new("string", "Path to file"),
+            "file_path" => Mantle::Tools::PropertyDefinition.new("string", "Path to file"),
           },
           required: ["file_path"]
         )
@@ -127,7 +126,7 @@ describe "Mantle Tools" do
 
     it "deserializes from JSON correctly" do
       json = %({"name":"list_dir","description":"List directory","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Directory path"}}}})
-      func = Mantle::FunctionDefinition.from_json(json)
+      func = Mantle::Tools::FunctionDefinition.from_json(json)
 
       func.name.should eq("list_dir")
       func.description.should eq("List directory")
@@ -135,18 +134,18 @@ describe "Mantle Tools" do
     end
 
     it "round-trips through JSON" do
-      original = Mantle::FunctionDefinition.new(
+      original = Mantle::Tools::FunctionDefinition.new(
         name: "test_func",
         description: "A test function",
-        parameters: Mantle::ParametersSchema.new(
+        parameters: Mantle::Tools::ParametersSchema.new(
           properties: {
-            "arg1" => Mantle::PropertyDefinition.new("string", "First arg"),
+            "arg1" => Mantle::Tools::PropertyDefinition.new("string", "First arg"),
           }
         )
       )
 
       json = original.to_json
-      restored = Mantle::FunctionDefinition.from_json(json)
+      restored = Mantle::Tools::FunctionDefinition.from_json(json)
 
       restored.name.should eq(original.name)
       restored.description.should eq(original.description)
@@ -156,13 +155,13 @@ describe "Mantle Tools" do
 
   describe "Tool" do
     it "serializes to JSON correctly" do
-      tool = Mantle::Tool.new(
-        function: Mantle::FunctionDefinition.new(
+      tool = Mantle::Tools::Tool.new(
+        function: Mantle::Tools::FunctionDefinition.new(
           name: "read_file",
           description: "Read a file",
-          parameters: Mantle::ParametersSchema.new(
+          parameters: Mantle::Tools::ParametersSchema.new(
             properties: {
-              "file_path" => Mantle::PropertyDefinition.new("string", "Path"),
+              "file_path" => Mantle::Tools::PropertyDefinition.new("string", "Path"),
             }
           )
         )
@@ -175,11 +174,11 @@ describe "Mantle Tools" do
     end
 
     it "defaults type to 'function'" do
-      tool = Mantle::Tool.new(
-        function: Mantle::FunctionDefinition.new(
+      tool = Mantle::Tools::Tool.new(
+        function: Mantle::Tools::FunctionDefinition.new(
           name: "test",
           description: "Test",
-          parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition)
+          parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition)
         )
       )
 
@@ -188,7 +187,7 @@ describe "Mantle Tools" do
 
     it "deserializes from JSON correctly" do
       json = %({"type":"function","function":{"name":"get_weather","description":"Get weather","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City name"}},"required":["city"]}}})
-      tool = Mantle::Tool.from_json(json)
+      tool = Mantle::Tools::Tool.from_json(json)
 
       tool.type.should eq("function")
       tool.function.name.should eq("get_weather")
@@ -196,15 +195,15 @@ describe "Mantle Tools" do
     end
 
     it "round-trips complex tool through JSON" do
-      original = Mantle::Tool.new(
-        function: Mantle::FunctionDefinition.new(
+      original = Mantle::Tools::Tool.new(
+        function: Mantle::Tools::FunctionDefinition.new(
           name: "search_files",
           description: "Search for pattern in files",
-          parameters: Mantle::ParametersSchema.new(
+          parameters: Mantle::Tools::ParametersSchema.new(
             properties: {
-              "pattern"        => Mantle::PropertyDefinition.new("string", "Search pattern"),
-              "path"           => Mantle::PropertyDefinition.new("string", "Search path"),
-              "case_sensitive" => Mantle::PropertyDefinition.new("boolean", "Case sensitive"),
+              "pattern"        => Mantle::Tools::PropertyDefinition.new("string", "Search pattern"),
+              "path"           => Mantle::Tools::PropertyDefinition.new("string", "Search path"),
+              "case_sensitive" => Mantle::Tools::PropertyDefinition.new("boolean", "Case sensitive"),
             },
             required: ["pattern"]
           )
@@ -212,7 +211,7 @@ describe "Mantle Tools" do
       )
 
       json = original.to_json
-      restored = Mantle::Tool.from_json(json)
+      restored = Mantle::Tools::Tool.from_json(json)
 
       restored.type.should eq("function")
       restored.function.name.should eq("search_files")
@@ -224,18 +223,18 @@ describe "Mantle Tools" do
   describe "Tool array serialization" do
     it "serializes array of tools to JSON" do
       tools = [
-        Mantle::Tool.new(
-          function: Mantle::FunctionDefinition.new(
+        Mantle::Tools::Tool.new(
+          function: Mantle::Tools::FunctionDefinition.new(
             name: "tool1",
             description: "First tool",
-            parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition)
+            parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition)
           )
         ),
-        Mantle::Tool.new(
-          function: Mantle::FunctionDefinition.new(
+        Mantle::Tools::Tool.new(
+          function: Mantle::Tools::FunctionDefinition.new(
             name: "tool2",
             description: "Second tool",
-            parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition)
+            parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition)
           )
         ),
       ]

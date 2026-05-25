@@ -2,13 +2,12 @@
 require "./spec_helper"
 require "http/server"
 require "json"
-require "../src/mantle/tools"
 
 describe "Mantle Response Types" do
   describe "ToolCall" do
     it "deserializes from JSON correctly with string arguments (OpenAI format)" do
       json = %({"id":"call_123","type":"function","function":{"name":"read_file","arguments":"{\\"file_path\\":\\"test.txt\\"}"}})
-      tool_call = Mantle::ToolCall.from_json(json)
+      tool_call = Mantle::Clients::ToolCall.from_json(json)
 
       tool_call.id.should eq("call_123")
       tool_call.type.should eq("function")
@@ -18,7 +17,7 @@ describe "Mantle Response Types" do
 
     it "deserializes from JSON correctly with object arguments (Ollama format)" do
       json = %({"id":"call_456","type":"function","function":{"name":"list_directory","arguments":{"path":"."}}})
-      tool_call = Mantle::ToolCall.from_json(json)
+      tool_call = Mantle::Clients::ToolCall.from_json(json)
 
       tool_call.id.should eq("call_456")
       tool_call.type.should eq("function")
@@ -29,7 +28,7 @@ describe "Mantle Response Types" do
 
     it "deserializes from JSON correctly with nested object arguments" do
       json = %({"id":"call_789","type":"function","function":{"name":"complex_tool","arguments":{"config":{"enabled":true,"value":42},"name":"test"}}})
-      tool_call = Mantle::ToolCall.from_json(json)
+      tool_call = Mantle::Clients::ToolCall.from_json(json)
 
       tool_call.id.should eq("call_789")
       tool_call.type.should eq("function")
@@ -44,27 +43,27 @@ describe "Mantle Response Types" do
     it "raises JSON::ParseException when arguments is an array" do
       json = %({"id":"call_101","type":"function","function":{"name":"bad_tool","arguments":["an","array"]}})
       expect_raises(JSON::ParseException, "Expected String or Object for arguments") do
-        Mantle::ToolCall.from_json(json)
+        Mantle::Clients::ToolCall.from_json(json)
       end
     end
 
     it "raises JSON::ParseException when arguments is a number" do
       json = %({"id":"call_102","type":"function","function":{"name":"bad_tool","arguments":42}})
       expect_raises(JSON::ParseException, "Expected String or Object for arguments") do
-        Mantle::ToolCall.from_json(json)
+        Mantle::Clients::ToolCall.from_json(json)
       end
     end
 
     it "raises JSON::ParseException when arguments is null" do
       json = %({"id":"call_103","type":"function","function":{"name":"bad_tool","arguments":null}})
       expect_raises(JSON::ParseException, "Expected String or Object for arguments") do
-        Mantle::ToolCall.from_json(json)
+        Mantle::Clients::ToolCall.from_json(json)
       end
     end
 
     it "deserializes from JSON correctly without type field (defaults to 'function')" do
       json = %({"id":"call_999","function":{"name":"test_tool","arguments":{"param":"value"}}})
-      tool_call = Mantle::ToolCall.from_json(json)
+      tool_call = Mantle::Clients::ToolCall.from_json(json)
 
       tool_call.id.should eq("call_999")
       tool_call.type.should eq("function")  # Should default to "function"
@@ -73,10 +72,10 @@ describe "Mantle Response Types" do
     end
 
     it "serializes to JSON correctly" do
-      tool_call = Mantle::ToolCall.new(
+      tool_call = Mantle::Clients::ToolCall.new(
         id: "call_456",
         type: "function",
-        function: Mantle::ToolCallFunction.new(
+        function: Mantle::Clients::ToolCallFunction.new(
           name: "list_directory",
           arguments: %({"directory_path":"."})
         )
@@ -90,7 +89,7 @@ describe "Mantle Response Types" do
 
   describe "Response" do
     it "can be created with only content" do
-      response = Mantle::Response.new(
+      response = Mantle::Clients::Response.new(
         content: "Hello, world!",
         tool_calls: nil
       )
@@ -100,15 +99,15 @@ describe "Mantle Response Types" do
     end
 
     it "can be created with only tool_calls" do
-      tool_call = Mantle::ToolCall.new(
+      tool_call = Mantle::Clients::ToolCall.new(
         id: "call_1",
         type: "function",
-        function: Mantle::ToolCallFunction.new(
+        function: Mantle::Clients::ToolCallFunction.new(
           name: "test_tool",
           arguments: "{}"
         )
       )
-      response = Mantle::Response.new(
+      response = Mantle::Clients::Response.new(
         content: nil,
         tool_calls: [tool_call]
       )
@@ -119,15 +118,15 @@ describe "Mantle Response Types" do
     end
 
     it "can be created with both content and tool_calls" do
-      tool_call = Mantle::ToolCall.new(
+      tool_call = Mantle::Clients::ToolCall.new(
         id: "call_1",
         type: "function",
-        function: Mantle::ToolCallFunction.new(
+        function: Mantle::Clients::ToolCallFunction.new(
           name: "test_tool",
           arguments: "{}"
         )
       )
-      response = Mantle::Response.new(
+      response = Mantle::Clients::Response.new(
         content: "Calling tool...",
         tool_calls: [tool_call]
       )
@@ -138,7 +137,7 @@ describe "Mantle Response Types" do
 
     it "deserializes from JSON correctly - content only" do
       json = %({"content":"Test response"})
-      response = Mantle::Response.from_json(json)
+      response = Mantle::Clients::Response.from_json(json)
 
       response.content.should eq("Test response")
       response.tool_calls.should be_nil
@@ -146,7 +145,7 @@ describe "Mantle Response Types" do
 
     it "deserializes from JSON correctly - with tool_calls" do
       json = %({"content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"test","arguments":"{}"}}]})
-      response = Mantle::Response.from_json(json)
+      response = Mantle::Clients::Response.from_json(json)
 
       response.content.should be_nil
       response.tool_calls.should_not be_nil
@@ -155,10 +154,10 @@ describe "Mantle Response Types" do
   end
 end
 
-describe Mantle::Client do
+describe Mantle::Clients::Client do
   it "Correctly packs messages array and model parameters into /chat API request, sends over HTTP to API endpoint, and parses received result (no streaming)" do
     # Arrange
-    model_config = Mantle::ModelConfig.new(
+    model_config = Mantle::Clients::ModelConfig.new(
       "test-model",             # model_name
       false,                    # stream
       0.6,                      # temperature
@@ -166,7 +165,7 @@ describe Mantle::Client do
       700,                      # max_tokens
       "http://localhost:43000/" # api_url
     )
-    client = Mantle::LlamaClient.new(model_config)
+    client = Mantle::Clients::LlamaClient.new(model_config)
 
     # Mock response from /chat endpoint
     api_response = {
@@ -229,7 +228,7 @@ describe Mantle::Client do
     parsed_request["options"]["num_predict"].should eq(700)
 
     # Check response parsing
-    client_response.should be_a(Mantle::Response)
+    client_response.should be_a(Mantle::Clients::Response)
     client_response.content.should eq("The sky is blue because it is the color of the sky.")
     client_response.tool_calls.should be_nil
 
@@ -239,18 +238,18 @@ describe Mantle::Client do
 
   it "includes tools array in request when tools are provided" do
     # Arrange
-    model_config = Mantle::ModelConfig.new(
+    model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43001/"
     )
-    client = Mantle::LlamaClient.new(model_config)
+    client = Mantle::Clients::LlamaClient.new(model_config)
 
     # Define a test tool
-    test_tool = Mantle::Tool.new(
-      function: Mantle::FunctionDefinition.new(
+    test_tool = Mantle::Tools::Tool.new(
+      function: Mantle::Tools::FunctionDefinition.new(
         name: "read_file",
         description: "Read a file",
-        parameters: Mantle::ParametersSchema.new(
-          properties: {"file_path" => Mantle::PropertyDefinition.new("string", "File path")},
+        parameters: Mantle::Tools::ParametersSchema.new(
+          properties: {"file_path" => Mantle::Tools::PropertyDefinition.new("string", "File path")},
           required: ["file_path"]
         )
       )
@@ -301,10 +300,10 @@ describe Mantle::Client do
 
   it "parses tool_calls from API response" do
     # Arrange
-    model_config = Mantle::ModelConfig.new(
+    model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43002/"
     )
-    client = Mantle::LlamaClient.new(model_config)
+    client = Mantle::Clients::LlamaClient.new(model_config)
 
     # Mock response with tool_calls
     api_response = {
@@ -352,10 +351,10 @@ describe Mantle::Client do
 
   it "handles response with both content and tool_calls" do
     # Arrange
-    model_config = Mantle::ModelConfig.new(
+    model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43003/"
     )
-    client = Mantle::LlamaClient.new(model_config)
+    client = Mantle::Clients::LlamaClient.new(model_config)
 
     # Mock response with both
     api_response = {
@@ -400,10 +399,10 @@ describe Mantle::Client do
   end
 
   it "includes custom keep_alive value when provided" do
-    model_config = Mantle::ModelConfig.new(
+    model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43004/", keep_alive: "5m"
     )
-    client = Mantle::LlamaClient.new(model_config)
+    client = Mantle::Clients::LlamaClient.new(model_config)
 
     api_response = {
       "model": "test-model",

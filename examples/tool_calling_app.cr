@@ -10,17 +10,17 @@
 require "../src/mantle"
 
 # 1. Define custom tools
-# A custom tool is defined by creating a `Mantle::Tool` object with a `FunctionDefinition`.
+# A custom tool is defined by creating a `Mantle::Tools::Tool` object with a `FunctionDefinition`.
 # This defines the schema that the LLM uses to understand what the tool does and what
 # arguments to pass.
 def create_time_tool
-  Mantle::Tool.new(
-    function: Mantle::FunctionDefinition.new(
+  Mantle::Tools::Tool.new(
+    function: Mantle::Tools::FunctionDefinition.new(
       name: "get_current_time",
       description: "Get the current time in a specific timezone",
-      parameters: Mantle::ParametersSchema.new(
+      parameters: Mantle::Tools::ParametersSchema.new(
         properties: {
-          "timezone" => Mantle::PropertyDefinition.new(
+          "timezone" => Mantle::Tools::PropertyDefinition.new(
             type: "string",
             description: "Timezone (e.g., 'UTC', 'America/New_York')"
           )
@@ -75,7 +75,7 @@ puts "=" * 70
 puts
 
 # 2. Setup Mantle components
-model_config = Mantle::ModelConfig.new(
+model_config = Mantle::Clients::ModelConfig.new(
   "gemma4:e2b",                    # model_name
   false,                            # stream
   0.7,                              # temperature
@@ -84,47 +84,47 @@ model_config = Mantle::ModelConfig.new(
   "http://localhost:11434/api/chat" # Ollama API URL
 )
 
-client = Mantle::LlamaClient.new(model_config)
+client = Mantle::Clients::LlamaClient.new(model_config)
 
 # Use JSON-backed context store for persistence
-context_store = Mantle::JSONContextStore.new(
+context_store = Mantle::Storage::JSONContextStore.new(
   "You are a helpful assistant with access to tools. Use tools when appropriate to answer user questions.",
   context_file
 )
 
 # Memory store with proper squishifier that uses the model
 summarizer_prompt = "You are an internal memory consolidation system for an AI assistant. Review the following conversation history and tool interactions. Synthesize them into a concise 2-3 sentence summary. Focus on key facts, tool results, and actionable information. Ignore casual conversation. Write from the assistant's perspective."
-squishifier = Mantle::Squishifiers.build_basic_summarizer(client, summarizer_prompt)
+squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client, summarizer_prompt)
 
-memory_store = Mantle::JSONLayeredMemoryStore.new(
+memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(
   memory_file: memory_file,
-  layer_capacity: 10,
-  layer_target: 5,
+  layer_token_capacity: 10,
+  layer_token_target: 5,
   squishifier: squishifier
 )
 
-# Context manager with LOW msg_hardmax to trigger consolidation quickly
-context_manager = Mantle::ContextManager.new(
+# Context manager with LOW token_hardmax to trigger consolidation quickly
+context_manager = Mantle::Storage::ContextManager.new(
   context_store,
   memory_store,
   "User",
   "Assistant",
-  msg_target: 4,    # Keep 4 messages after consolidation
-  msg_hardmax: 8    # Trigger consolidation at 8 messages (low limit for testing)
+  token_target: 4,    # Keep 4 tokens/messages target after consolidation
+  token_hardmax: 8    # Trigger consolidation at 8 tokens/messages (low limit for testing)
 )
 
-logger = Mantle::FileLogger.new(log_file, "User", "Assistant", include_thinking: true)
+logger = Mantle::Support::FileLogger.new(log_file, "User", "Assistant", include_thinking: true)
 
 # Create a ToolEnabledChatFlow.
 # This flow handles not just user messages, but parses tool call requests from the model,
 # executes the relevant tools, adds the results to the context, and re-prompts the model
 # in a loop until the model provides a final textual response.
-flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
 
 # Configure built-in tool access.
 # Built-in tools have security constraints like `allowed_paths` for reading
 # and `autonomous_zone_paths` for writing.
-builtin_config = Mantle::BuiltinToolConfig.new(
+builtin_config = Mantle::Tools::BuiltinToolConfig.new(
   working_directory: Dir.current,
   allowed_paths: [Dir.current, "/tmp"],
   notify_icon: File.expand_path("../assets/icon.png", __DIR__),
@@ -134,10 +134,10 @@ builtin_config = Mantle::BuiltinToolConfig.new(
 
 # Define which tools are available
 builtins = [
-  Mantle::BuiltinTool::ReadFile,
-  Mantle::BuiltinTool::ListDirectory,
-  Mantle::BuiltinTool::NotifySend,
-  Mantle::BuiltinTool::WriteFile
+  Mantle::Tools::BuiltinTool::ReadFile,
+  Mantle::Tools::BuiltinTool::ListDirectory,
+  Mantle::Tools::BuiltinTool::NotifySend,
+  Mantle::Tools::BuiltinTool::WriteFile
 ]
 
 custom_tools = [
@@ -145,13 +145,13 @@ custom_tools = [
 ]
 
 # Callback for displaying responses
-display_response = ->(response : Mantle::Response) {
+display_response = ->(response : Mantle::Clients::Response) {
   if thinking = response.thinking
     puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
   end
   puts "Assistant: #{response.content}"
   puts
-  puts "[Context messages: #{context_store.current_num_messages}/#{context_manager.msg_hardmax}]"
+  puts "[Context messages: #{context_store.current_num_messages}/#{context_manager.token_hardmax}]"
   puts
 }
 

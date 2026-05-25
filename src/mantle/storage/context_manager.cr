@@ -4,10 +4,10 @@
 #
 # Coordinates context routing from flow to ContextStore and MemoryStore
 
-require "./app_logger"
-require "./status"
+require "../support/app_logger"
+require "../support/status"
 
-module Mantle
+module Mantle::Storage
   # Coordinates context routing and consolidation between `ContextStore` and `JSONLayeredMemoryStore`.
   #
   # Responsible for assembling views, tracking token limits, and sliding older context into long-term layered memory.
@@ -163,7 +163,7 @@ module Mantle
     def consolidate_memory
       Mantle.emit_status(:memory_consolidation)
 
-      Mantle::Log.info { "Context hit tokens #{@context_store.current_num_tokens} (threshold: #{@token_hardmax}). Consolidating Context -> Memory. Target context tokens: #{@token_target}." }
+      Mantle::Support::Log.info { "Context hit tokens #{@context_store.current_num_tokens} (threshold: #{@token_hardmax}). Consolidating Context -> Memory. Target context tokens: #{@token_target}." }
 
       pruned_messages = @context_store.prune_to_tokens(@token_target)
 
@@ -175,7 +175,7 @@ module Mantle
         end
         @memory_store.ingest(formatted_messages)
       else
-        Mantle::Log.error { "Tried to ingest to memory store with an invalid pruned_messages array" }
+        Mantle::Support::Log.error { "Tried to ingest to memory store with an invalid pruned_messages array" }
       end
     end
 

@@ -11,7 +11,7 @@ puts "=" * 70
 puts "Mantle Markdown Formatter Example"
 puts "=" * 70
 puts "This example demonstrates how a consumer application can use"
-puts "Mantle::MarkdownFormatter to render an LLM response into styled ANSI output."
+puts "Mantle::Support::MarkdownFormatter to render an LLM response into styled ANSI output."
 puts "=" * 70
 puts
 
@@ -42,7 +42,7 @@ puts emma_response
 puts
 
 puts "\e[33m--- FORMATTED STRING (After Formatting) ---\e[0m"
-formatted_response = Mantle::MarkdownFormatter.format(emma_response)
+formatted_response = Mantle::Support::MarkdownFormatter.format(emma_response)
 puts formatted_response
 puts
 puts "=" * 70

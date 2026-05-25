@@ -1,5 +1,5 @@
 require "benchmark"
-require "../src/mantle/memory_store"
+require "../src/mantle"
 require "file_utils"
 
 # Mock squishifier that does minimal work
@@ -12,7 +12,7 @@ FileUtils.rm_rf(file_path)
 
 # Parameters to trigger many cascades and writes
 # capacity=10, target=2 => ingest_step_size=8
-store = Mantle::JSONLayeredMemoryStore.new(file_path, 10, 2, squishifier)
+store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 10, 2, squishifier)
 
 # We want to trigger the while loop in cascade multiple times.
 # cascade(-1) is called by ingest.

@@ -2,33 +2,33 @@
 require "./spec_helper"
 
 # Mock client that captures the messages it receives
-class CapturingClient < Mantle::Client
+class CapturingClient < Mantle::Clients::Client
   property captured_messages : Array(Hash(String, String))? = nil
   property response_to_return : String
 
   def initialize(@response_to_return : String = "Mocked summary response")
   end
 
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
+  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
     @captured_messages = messages
     on_chunk.call(@response_to_return)
-    Mantle::Response.new(content: @response_to_return, tool_calls: nil)
+    Mantle::Clients::Response.new(content: @response_to_return, tool_calls: nil)
   end
 end
 
 # Mock client that always fails
-class FailingClient < Mantle::Client
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
+class FailingClient < Mantle::Clients::Client
+  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
     raise Exception.new("LLM service unavailable")
   end
 end
 
-describe Mantle::Squishifiers do
+describe Mantle::Support::Squishifiers do
   describe ".build_basic_summarizer" do
     it "creates a proc that accepts an array of strings" do
       # Arrange
       client = CapturingClient.new
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(client)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client)
 
       # Assert
       squishifier.should be_a(Proc(Array(String), String))
@@ -37,7 +37,7 @@ describe Mantle::Squishifiers do
     it "formats messages into proper chat format with system and user roles" do
       # Arrange
       client = CapturingClient.new("Summary result")
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(client)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client)
 
       test_messages = [
         "[User] Hello there",
@@ -69,7 +69,7 @@ describe Mantle::Squishifiers do
     it "returns the stripped response from the client" do
       # Arrange
       client = CapturingClient.new("  Response with whitespace  \n")
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(client)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client)
 
       test_messages = ["[User] Test message"]
 
@@ -83,7 +83,7 @@ describe Mantle::Squishifiers do
     it "joins multiple messages with newlines in the user content" do
       # Arrange
       client = CapturingClient.new("Summary")
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(client)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client)
 
       test_messages = [
         "Message 1",
@@ -104,7 +104,7 @@ describe Mantle::Squishifiers do
     it "handles empty message arrays gracefully" do
       # Arrange
       client = CapturingClient.new("Empty summary")
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(client)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client)
 
       # Act
       result = squishifier.call([] of String)
@@ -118,7 +118,7 @@ describe Mantle::Squishifiers do
     it "handles single message arrays" do
       # Arrange
       client = CapturingClient.new("Single message summary")
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(client)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client)
 
       # Act
       result = squishifier.call(["[User] Only one message"])
@@ -132,7 +132,7 @@ describe Mantle::Squishifiers do
     it "passes through any client exceptions" do
       # Arrange
       failing_client = FailingClient.new
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(failing_client)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(failing_client)
 
       # Act & Assert
       expect_raises(Exception, "LLM service unavailable") do
@@ -145,8 +145,8 @@ describe Mantle::Squishifiers do
       client1 = CapturingClient.new("Response 1")
       client2 = CapturingClient.new("Response 2")
 
-      squishifier1 = Mantle::Squishifiers.build_basic_summarizer(client1)
-      squishifier2 = Mantle::Squishifiers.build_basic_summarizer(client2)
+      squishifier1 = Mantle::Support::Squishifiers.build_basic_summarizer(client1)
+      squishifier2 = Mantle::Support::Squishifiers.build_basic_summarizer(client2)
 
       # Act
       result1 = squishifier1.call(["Message A"])
@@ -164,7 +164,7 @@ describe Mantle::Squishifiers do
       # Arrange
       client = CapturingClient.new("Custom summary")
       custom_prompt = "You are a technical summarizer. Extract only code-related information."
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(client, custom_prompt)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client, custom_prompt)
 
       test_messages = ["[User] Fixed the bug in main.cr"]
 
@@ -181,7 +181,7 @@ describe Mantle::Squishifiers do
     it "uses default system prompt when none provided" do
       # Arrange
       client = CapturingClient.new("Default summary")
-      squishifier = Mantle::Squishifiers.build_basic_summarizer(client)
+      squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client)
 
       test_messages = ["[User] Test message"]
 

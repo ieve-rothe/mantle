@@ -1,9 +1,8 @@
-# spec/spec_helper.cr
 require "spec"
 require "../src/mantle"
 require "json"
 
-class DummyContextStore < Mantle::ContextStore
+class DummyContextStore < Mantle::Storage::ContextStore
   property system_prompt : String = "System: Initial Prompt"
   property messages : Array(Hash(String, String)) = [] of Hash(String, String)
 
@@ -25,7 +24,7 @@ class DummyContextStore < Mantle::ContextStore
   end
 end
 
-class DummyMemoryStore < Mantle::JSONLayeredMemoryStore
+class DummyMemoryStore < Mantle::Storage::JSONLayeredMemoryStore
   def initialize
     # Initialize parent class properties with dummy test values
     @memory_file = "/tmp/dummy_memory_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
@@ -39,8 +38,8 @@ class DummyMemoryStore < Mantle::JSONLayeredMemoryStore
   end
 end
 
-class DummyContextManager < Mantle::ContextManager
-  def initialize(context_store : Mantle::ContextStore)
+class DummyContextManager < Mantle::Storage::ContextManager
+  def initialize(context_store : Mantle::Storage::ContextStore)
     super(context_store, DummyMemoryStore.new, "User", "Assistant")
   end
 
@@ -53,14 +52,14 @@ class DummyContextManager < Mantle::ContextManager
   end
 end
 
-class DummyClient < Mantle::Client
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Response
+class DummyClient < Mantle::Clients::Client
+  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
     on_chunk.call("Simulated response")
-    Mantle::Response.new(content: "Simulated response", tool_calls: nil)
+    Mantle::Clients::Response.new(content: "Simulated response", tool_calls: nil)
   end
 end
 
-class DummyLogger < Mantle::Logger
+class DummyLogger < Mantle::Support::Logger
   property last_message : String? = nil
 
   def initialize(user_name : String = "User", bot_name : String = "Assistant")

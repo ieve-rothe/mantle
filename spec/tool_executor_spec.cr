@@ -1,7 +1,4 @@
 require "./spec_helper"
-require "../src/mantle/client"
-require "../src/mantle/builtin_tools"
-require "../src/mantle/tool_executor"
 require "file_utils"
 
 describe "Mantle Tool Executor" do
@@ -19,7 +16,7 @@ describe "Mantle Tool Executor" do
 
   describe "ToolResult" do
     it "can be created with tool_call_id and result" do
-      result = Mantle::ToolResult.new(
+      result = Mantle::Tools::ToolResult.new(
         tool_call_id: "call_123",
         result: "Success"
       )
@@ -31,16 +28,16 @@ describe "Mantle Tool Executor" do
 
   describe "execute_all with built-in tools only" do
     it "executes read_file built-in tool" do
-      config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
-      executor = Mantle::ToolExecutor.new(
+      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: config,
         custom_callback: nil
       )
 
-      tool_call = Mantle::ToolCall.new(
+      tool_call = Mantle::Clients::ToolCall.new(
         id: "call_1",
         type: "function",
-        function: Mantle::ToolCallFunction.new(
+        function: Mantle::Clients::ToolCallFunction.new(
           name: "read_file",
           arguments: %({"file_path":"test.txt"})
         )
@@ -54,16 +51,16 @@ describe "Mantle Tool Executor" do
     end
 
     it "executes list_directory built-in tool" do
-      config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
-      executor = Mantle::ToolExecutor.new(
+      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: config,
         custom_callback: nil
       )
 
-      tool_call = Mantle::ToolCall.new(
+      tool_call = Mantle::Clients::ToolCall.new(
         id: "call_2",
         type: "function",
-        function: Mantle::ToolCallFunction.new(
+        function: Mantle::Clients::ToolCallFunction.new(
           name: "list_directory",
           arguments: "{}"
         )
@@ -77,25 +74,25 @@ describe "Mantle Tool Executor" do
     end
 
     it "executes multiple built-in tool calls" do
-      config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
-      executor = Mantle::ToolExecutor.new(
+      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: config,
         custom_callback: nil
       )
 
       tool_calls = [
-        Mantle::ToolCall.new(
+        Mantle::Clients::ToolCall.new(
           id: "call_1",
           type: "function",
-          function: Mantle::ToolCallFunction.new(
+          function: Mantle::Clients::ToolCallFunction.new(
             name: "list_directory",
             arguments: "{}"
           )
         ),
-        Mantle::ToolCall.new(
+        Mantle::Clients::ToolCall.new(
           id: "call_2",
           type: "function",
-          function: Mantle::ToolCallFunction.new(
+          function: Mantle::Clients::ToolCallFunction.new(
             name: "read_file",
             arguments: %({"file_path":"test.txt"})
           )
@@ -120,15 +117,15 @@ describe "Mantle Tool Executor" do
         end
       }
 
-      executor = Mantle::ToolExecutor.new(
+      executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: nil,
         custom_callback: custom_callback
       )
 
-      tool_call = Mantle::ToolCall.new(
+      tool_call = Mantle::Clients::ToolCall.new(
         id: "call_custom",
         type: "function",
-        function: Mantle::ToolCallFunction.new(
+        function: Mantle::Clients::ToolCallFunction.new(
           name: "get_time",
           arguments: "{}"
         )
@@ -151,15 +148,15 @@ describe "Mantle Tool Executor" do
         end
       }
 
-      executor = Mantle::ToolExecutor.new(
+      executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: nil,
         custom_callback: custom_callback
       )
 
-      tool_call = Mantle::ToolCall.new(
+      tool_call = Mantle::Clients::ToolCall.new(
         id: "call_greet",
         type: "function",
-        function: Mantle::ToolCallFunction.new(
+        function: Mantle::Clients::ToolCallFunction.new(
           name: "greet",
           arguments: %({"name":"Alice"})
         )
@@ -173,30 +170,30 @@ describe "Mantle Tool Executor" do
 
   describe "execute_all with mixed built-in and custom tools" do
     it "routes to correct executor based on tool name" do
-      config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
 
       custom_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
         %({"custom":"result from #{name}"})
       }
 
-      executor = Mantle::ToolExecutor.new(
+      executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: config,
         custom_callback: custom_callback
       )
 
       tool_calls = [
-        Mantle::ToolCall.new(
+        Mantle::Clients::ToolCall.new(
           id: "call_builtin",
           type: "function",
-          function: Mantle::ToolCallFunction.new(
+          function: Mantle::Clients::ToolCallFunction.new(
             name: "read_file",
             arguments: %({"file_path":"test.txt"})
           )
         ),
-        Mantle::ToolCall.new(
+        Mantle::Clients::ToolCall.new(
           id: "call_custom",
           type: "function",
-          function: Mantle::ToolCallFunction.new(
+          function: Mantle::Clients::ToolCallFunction.new(
             name: "my_custom_tool",
             arguments: "{}"
           )
@@ -213,15 +210,15 @@ describe "Mantle Tool Executor" do
 
   describe "error handling" do
     it "returns error when no callback provided for custom tool" do
-      executor = Mantle::ToolExecutor.new(
+      executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: nil,
         custom_callback: nil
       )
 
-      tool_call = Mantle::ToolCall.new(
+      tool_call = Mantle::Clients::ToolCall.new(
         id: "call_unknown",
         type: "function",
-        function: Mantle::ToolCallFunction.new(
+        function: Mantle::Clients::ToolCallFunction.new(
           name: "unknown_tool",
           arguments: "{}"
         )
@@ -233,26 +230,26 @@ describe "Mantle Tool Executor" do
     end
 
     it "continues executing remaining tools if one fails" do
-      config = Mantle::BuiltinToolConfig.new(working_directory: temp_dir)
+      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
 
-      executor = Mantle::ToolExecutor.new(
+      executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: config,
         custom_callback: nil
       )
 
       tool_calls = [
-        Mantle::ToolCall.new(
+        Mantle::Clients::ToolCall.new(
           id: "call_fail",
           type: "function",
-          function: Mantle::ToolCallFunction.new(
+          function: Mantle::Clients::ToolCallFunction.new(
             name: "read_file",
             arguments: %({"file_path":"nonexistent.txt"})
           )
         ),
-        Mantle::ToolCall.new(
+        Mantle::Clients::ToolCall.new(
           id: "call_success",
           type: "function",
-          function: Mantle::ToolCallFunction.new(
+          function: Mantle::Clients::ToolCallFunction.new(
             name: "read_file",
             arguments: %({"file_path":"test.txt"})
           )

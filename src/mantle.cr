@@ -3,14 +3,11 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 
-require "./mantle/flow"
-require "./mantle/context_manager"
-require "./mantle/context_store"
-require "./mantle/memory_store"
-require "./mantle/squishifiers"
-require "./mantle/client"
-require "./mantle/logger"
-require "./mantle/markdown_formatter"
+require "./mantle/support/*"
+require "./mantle/clients/*"
+require "./mantle/tools/*"
+require "./mantle/storage/*"
+require "./mantle/flows/*"
 
 # Represents the core module of the Mantle LLM agent library.
 module Mantle

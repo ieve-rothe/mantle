@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 
-module Mantle
+module Mantle::Support
   # Provides a lightweight terminal formatter that replaces Markdown syntax
   # with ANSI escape codes for improved readability in standard terminal environments.
   module MarkdownFormatter

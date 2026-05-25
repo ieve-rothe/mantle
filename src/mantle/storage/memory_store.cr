@@ -5,10 +5,10 @@
 # Manages memory for the agent.
 
 require "json"
-require "./app_logger"
-require "./status"
+require "../support/app_logger"
+require "../support/status"
 
-module Mantle
+module Mantle::Storage
   # Maybe write a base class once we have an implementation for Layered and then are going to add another type of memorystore
 
   # Represents a layered memory store that persists memories to a JSON file.
@@ -99,7 +99,7 @@ module Mantle
 private def cascade(current_layer_index : Int32) : Nil
   # Prevent infinite recursion - reasonable max layer depth
   if current_layer_index > 50
-    Mantle::Log.warn { "Maximum layer depth (50) reached" }
+    Mantle::Support::Log.warn { "Maximum layer depth (50) reached" }
     return
   end
 
@@ -133,13 +133,13 @@ private def cascade(current_layer_index : Int32) : Nil
 
       # If target is still at capacity after consolidation, we can't add more
       if current_num_tokens(target_layer_index) >= @layer_token_capacity
-        Mantle::Log.warn { "Layer #{target_layer_index} still at capacity after consolidation" }
+        Mantle::Support::Log.warn { "Layer #{target_layer_index} still at capacity after consolidation" }
         return
       end
 
       if current_layer_index != -1
         Mantle.emit_status(:memory_consolidation)
-        Mantle::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_token_capacity} tokens). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_token_target} tokens." }
+        Mantle::Support::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_token_capacity} tokens). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_token_target} tokens." }
       end
 
       if current_layer_index == -1
@@ -160,7 +160,7 @@ private def cascade(current_layer_index : Int32) : Nil
 
         processed_count += chunk_size
       rescue ex
-        Mantle::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
+        Mantle::Support::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
         return
       end
     end

@@ -15,8 +15,8 @@ require "../src/mantle"
 puts "--- Level 2: Chat Flow ---"
 
 # 1. Setup the Client
-client = Mantle::LlamaClient.new(
-  Mantle::ModelConfig.new(
+client = Mantle::Clients::LlamaClient.new(
+  Mantle::Clients::ModelConfig.new(
     model_name: "gpt-oss:20b",
     stream: false,
     temperature: 0.7,
@@ -28,26 +28,26 @@ client = Mantle::LlamaClient.new(
 
 # 2. Setup the Context Store
 # We use JSONContextStore to automatically save our conversation to a file.
-context_store = Mantle::JSONContextStore.new(
+context_store = Mantle::Storage::JSONContextStore.new(
   system_prompt: "You are a helpful assistant.",
   context_file: "examples/02_context.json"
 )
 
 # 3. Setup the Memory Store
 # We use JSONLayeredMemoryStore to save long-term summaries to a file.
-memory_store = Mantle::JSONLayeredMemoryStore.new(
+memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(
   memory_file: "examples/02_memory.json",
   layer_token_capacity: 100,
   layer_token_target: 50,
   # We use a built-in squishifier that uses our client to summarize old messages.
-  squishifier: Mantle::Squishifiers.build_basic_summarizer(client)
+  squishifier: Mantle::Support::Squishifiers.build_basic_summarizer(client)
 )
 
 # 4. Setup the Context Manager
 # The ContextManager ties the ContextStore and MemoryStore together.
 # - token_hardmax: When the context reaches this many tokens, it triggers consolidation.
 # - token_target: After consolidation, this many recent tokens are kept in context.
-context_manager = Mantle::ContextManager.new(
+context_manager = Mantle::Storage::ContextManager.new(
   context_store: context_store,
   memory_store: memory_store,
   user_name: "User",
@@ -58,11 +58,11 @@ context_manager = Mantle::ContextManager.new(
 
 # 5. Setup Logging
 # FileLogger writes formatted chat logs to a file.
-logger = Mantle::FileLogger.new("examples/02_chat.log", "User", "Assistant")
+logger = Mantle::Support::FileLogger.new("examples/02_chat.log", "User", "Assistant")
 
 # 6. Build the Flow
 # ChatFlow orchestrates the whole process.
-flow = Mantle::ChatFlow.new(
+flow = Mantle::Flows::ChatFlow.new(
   context_manager: context_manager,
   client: client,
   logger: logger
@@ -72,7 +72,7 @@ flow = Mantle::ChatFlow.new(
 # Instead of managing raw message arrays manually, we just call #run.
 flow.run(
   msg: "Hello! What can you do?",
-  on_response: ->(resp : Mantle::Response) {
+  on_response: ->(resp : Mantle::Clients::Response) {
     puts "Assistant: #{resp.content}"
   }
 )

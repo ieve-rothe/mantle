@@ -4,7 +4,7 @@
 
 require "log"
 
-module Mantle
+module Mantle::Support
   # Provides the default logger for the Mantle library.
   #
   # Consumer applications should configure this via Crystal's built-in Log setup:

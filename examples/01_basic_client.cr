@@ -15,7 +15,7 @@ puts "--- Level 1: Basic Client ---"
 # 1. Configure the model
 # Define model parameters.
 # Currently we only support Ollama API. Because that's what ieve uses.
-config = Mantle::ModelConfig.new(
+config = Mantle::Clients::ModelConfig.new(
   model_name: "gpt-oss:20b",
   stream: false,
   temperature: 0.7,
@@ -25,7 +25,7 @@ config = Mantle::ModelConfig.new(
 )
 
 # 2. Initialize the Client
-client = Mantle::LlamaClient.new(config)
+client = Mantle::Clients::LlamaClient.new(config)
 
 # 3. Create a payload
 # The client expects an array of messages representing the conversation history.

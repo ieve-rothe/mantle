@@ -4,7 +4,7 @@
 
 require "json"
 
-module Mantle
+module Mantle::Tools
   # Defines an individual property within a function's parameters schema.
   #
   # Describes a single parameter, including its type and what it represents.

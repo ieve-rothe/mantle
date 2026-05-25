@@ -1,7 +1,7 @@
 require "./spec_helper"
 require "file_utils"
 
-describe Mantle::JSONLayeredMemoryStore do
+describe Mantle::Storage::JSONLayeredMemoryStore do
   describe "#initialize" do
     it "creates a new memory store with empty layers" do
       # Arrange
@@ -9,7 +9,7 @@ describe Mantle::JSONLayeredMemoryStore do
       squishifier = make_deterministic_squishifier
 
       # Act
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 10,
         layer_token_target: 4,
@@ -31,7 +31,7 @@ describe Mantle::JSONLayeredMemoryStore do
       squishifier = make_deterministic_squishifier
 
       # Act
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 10,
         layer_token_target: 4,
@@ -51,11 +51,11 @@ describe Mantle::JSONLayeredMemoryStore do
       squishifier = make_deterministic_squishifier
 
       # Create initial store and add some data
-      store1 = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store1 = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
       store1.ingest(["[User] Hello\n", "[Bot] Hi there\n"])
 
       # Act - Create new store pointing to same file
-      store2 = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store2 = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Assert - Should have loaded the data
       store2.current_view.should_not eq("")
@@ -71,7 +71,7 @@ describe Mantle::JSONLayeredMemoryStore do
 
       # Act & Assert - Should raise error when target >= capacity
       expect_raises(Exception) do
-        Mantle::JSONLayeredMemoryStore.new(
+        Mantle::Storage::JSONLayeredMemoryStore.new(
           memory_file: file_path,
           layer_token_capacity: 5,
           layer_token_target: 10,
@@ -90,7 +90,7 @@ describe Mantle::JSONLayeredMemoryStore do
 
       # Act & Assert
       expect_raises(Exception) do
-        Mantle::JSONLayeredMemoryStore.new(
+        Mantle::Storage::JSONLayeredMemoryStore.new(
           memory_file: file_path,
           layer_token_capacity: 10,
           layer_token_target: 0,
@@ -108,7 +108,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Act
       store.ingest(["[User] Hello\n", "[Bot] Hi there\n"])
@@ -128,7 +128,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Act
       store.ingest(["[User] Test message\n"])
@@ -145,7 +145,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Act
       store.ingest(["[User] First\n"])
@@ -166,13 +166,13 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Act
       store.ingest(["[User] Persistence test\n"])
 
       # Assert - Create new store to verify persistence
-      store2 = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store2 = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
       store2.current_view.should contain("Persistence test")
 
       # Cleanup
@@ -183,7 +183,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Act - Ingest empty array (edge case)
       store.ingest([] of String)
@@ -205,7 +205,7 @@ describe Mantle::JSONLayeredMemoryStore do
         call_count += 1
         raise Exception.new("LLM unavailable")
       }
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, failing_squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, failing_squishifier)
 
       # Act - Attempt to ingest
       store.ingest(["[User] Test message\n"])
@@ -228,7 +228,7 @@ describe Mantle::JSONLayeredMemoryStore do
       failing_squishifier = ->(messages : Array(String)) : String {
         raise Exception.new("Network error")
       }
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, failing_squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, failing_squishifier)
 
       # Act - Attempt to ingest, which will fail
       store.ingest(["[User] Message 1\n", "[User] Message 2\n"])
@@ -250,7 +250,7 @@ describe Mantle::JSONLayeredMemoryStore do
       failing_squishifier = ->(messages : Array(String)) : String {
         raise Exception.new("Temporary failure")
       }
-      store1 = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, failing_squishifier)
+      store1 = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, failing_squishifier)
 
       # Act - First attempt fails
       store1.ingest(["[User] Pending message\n"])
@@ -258,7 +258,7 @@ describe Mantle::JSONLayeredMemoryStore do
 
       # Create new store with working squishifier (simulates retry after LLM recovers)
       working_squishifier = make_deterministic_squishifier
-      store2 = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, working_squishifier)
+      store2 = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, working_squishifier)
 
       # Trigger processing by adding new message
       store2.ingest(["[User] New message\n"])
@@ -288,7 +288,7 @@ describe Mantle::JSONLayeredMemoryStore do
         end
         messages.map { |msg| msg.strip }.join(" | ")
       }
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, sometimes_failing_squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, sometimes_failing_squishifier)
 
       # Act - First ingest fails, second succeeds and processes both
       store.ingest(["[User] Message 1\n"])
@@ -318,7 +318,7 @@ describe Mantle::JSONLayeredMemoryStore do
         end
         "Summary of #{messages.size} messages: #{messages.map { |msg| msg.strip }.join(" | ")}"
       }
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, recovering_squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, recovering_squishifier)
 
       # Act - Two failures, then success
       store.ingest(["[User] Msg1\n"]) # Fails
@@ -347,7 +347,7 @@ describe Mantle::JSONLayeredMemoryStore do
       thinking_squishifier = ->(messages : Array(String)) : String {
         "<think>This is internal reasoning</think>Summary of #{messages.size} messages: #{messages.map { |msg| msg.strip }.join(" | ")}"
       }
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, thinking_squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, thinking_squishifier)
 
       # Act
       store.ingest(["[User] Hello\n", "[Bot] Hi there\n"])
@@ -371,7 +371,7 @@ describe Mantle::JSONLayeredMemoryStore do
       thinking_squishifier = ->(messages : Array(String)) : String {
         "<think>\nFirst I need to analyze these messages.\nThen I'll create a summary.\n</think>\nFinal summary: #{messages.size} messages processed"
       }
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, thinking_squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, thinking_squishifier)
 
       # Act
       store.ingest(["[User] Message 1\n", "[User] Message 2\n"])
@@ -394,7 +394,7 @@ describe Mantle::JSONLayeredMemoryStore do
       thinking_squishifier = ->(messages : Array(String)) : String {
         "<think>Part 1</think>Summary: <think>Part 2</think>#{messages.size} messages"
       }
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, thinking_squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, thinking_squishifier)
 
       # Act
       store.ingest(["[User] Test\n"])
@@ -417,7 +417,7 @@ describe Mantle::JSONLayeredMemoryStore do
       normal_squishifier = ->(messages : Array(String)) : String {
         "Normal summary without thinking tags: #{messages.size} messages"
       }
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, normal_squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, normal_squishifier)
 
       # Act
       store.ingest(["[User] Test\n"])
@@ -436,7 +436,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 50,
         layer_token_target: 20,
@@ -472,7 +472,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 3,
         layer_token_target: 1,
@@ -496,7 +496,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 6,
         layer_token_target: 3,
@@ -532,7 +532,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 3,
         layer_token_target: 1,
@@ -567,7 +567,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 8,
         layer_token_target: 5,
@@ -595,7 +595,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 3,
         layer_token_target: 2,
@@ -621,7 +621,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Act
       view = store.current_view
@@ -637,7 +637,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
       store.ingest(["[User] Test\n"])
 
       # Act
@@ -655,7 +655,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 3,
         layer_token_target: 1,
@@ -684,7 +684,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Add multiple messages to Layer 0
       store.ingest(["[User] First\n"])
@@ -707,7 +707,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 3,
         layer_token_target: 1,
@@ -735,7 +735,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
       store.ingest(["[User] Test\n"])
 
       # Act - Read the JSON file directly
@@ -757,12 +757,12 @@ describe Mantle::JSONLayeredMemoryStore do
       squishifier = make_deterministic_squishifier
 
       # Act - Create store, add data, close
-      store1 = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store1 = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
       store1.ingest(["[User] Persistent message\n"])
       view1 = store1.current_view
 
       # Create new instance with same file
-      store2 = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store2 = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
       view2 = store2.current_view
 
       # Assert - Views should match
@@ -779,7 +779,7 @@ describe Mantle::JSONLayeredMemoryStore do
       squishifier = make_deterministic_squishifier
 
       # Create multi-layer structure
-      store1 = Mantle::JSONLayeredMemoryStore.new(
+      store1 = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 3,
         layer_token_target: 1,
@@ -788,7 +788,7 @@ describe Mantle::JSONLayeredMemoryStore do
       9.times { |i| store1.ingest(["[User] Message #{i}\n"]) }
 
       # Act - Load in new instance
-      store2 = Mantle::JSONLayeredMemoryStore.new(
+      store2 = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 3,
         layer_token_target: 1,
@@ -809,7 +809,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 50,
         layer_token_target: 20,
@@ -843,7 +843,7 @@ describe Mantle::JSONLayeredMemoryStore do
       view.should contain("Final")
 
       # Verify persistence
-      store2 = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      store2 = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
       store2.current_view.should eq(view)
 
       # Cleanup
@@ -854,7 +854,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      store = Mantle::JSONLayeredMemoryStore.new(
+      store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: file_path,
         layer_token_capacity: 6,
         layer_token_target: 4,
@@ -881,7 +881,7 @@ describe Mantle::JSONLayeredMemoryStore do
       # Arrange
       file_path = temp_file_path
       squishifier = make_deterministic_squishifier
-      memory_store = Mantle::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
+      memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(file_path, 50, 20, squishifier)
 
       # Simulate what ContextManager does: passes pruned messages
       pruned_from_context = [

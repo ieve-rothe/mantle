@@ -6,9 +6,9 @@ require "http/headers"
 require "http/client"
 require "json"
 require "random/secure"
-require "./tools"
+require "../tools/tools"
 
-module Mantle
+module Mantle::Clients
   # Represents the configuration options for an LLM client.
   #
   # Holds configuration fields such as *model_name*, *stream*, *temperature*, *top_p*, *max_tokens*, *api_url*, and *keep_alive*.
@@ -26,7 +26,7 @@ module Mantle
     # Represents the JSON string of arguments.
     #
     # normalized automatically via `ArgumentsConverter` from either OpenAI's string format or Ollama's object format.
-    @[JSON::Field(converter: Mantle::ToolCallFunction::ArgumentsConverter)]
+    @[JSON::Field(converter: Mantle::Clients::ToolCallFunction::ArgumentsConverter)]
     property arguments : String
 
     # Creates a tool call function with the specified *name* and *arguments*.
@@ -113,12 +113,12 @@ module Mantle
     # Executes the LLM request with the provided *messages* and *tools*, yielding chunks to *on_chunk*.
     #
     # Returns a `Response`.
-    abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil, &on_chunk : String -> Nil) : Response
+    abstract def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Response
 
     # Executes the LLM request without streaming, discarding partial chunks.
     #
     # Returns a `Response`.
-    def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil) : Response
+    def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil) : Response
       execute(messages, tools) { |chunk| }
     end
   end
@@ -157,7 +157,7 @@ module Mantle
       @keep_alive = model_config.keep_alive
     end
 
-    def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil, &on_chunk : String -> Nil) : Response
+    def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Response
       headers = HTTP::Headers{
         "Content-Type" => "application/json",
       }
@@ -171,7 +171,7 @@ module Mantle
       end
     end
 
-    private def build_request_body(messages : Array(Hash(String, String)), tools : Array(Tool)?) : String
+    private def build_request_body(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)?) : String
       base_options = {
         model:      @model_name,
         messages:   messages,

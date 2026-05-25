@@ -6,13 +6,13 @@
 #
 # Squishification refers to the summarization or compression of conversation messages
 # into system memory.
-module Mantle::Squishifiers
+module Mantle::Support::Squishifiers
   # Builds a basic summarization proc that compresses an array of messages into a single string.
   #
   # Uses the specified *client* to run the summarization LLM call with *system_prompt*.
   # Returns a `Proc(Array(String), String)` that takes an array of messages and returns the summary.
   def self.build_basic_summarizer(
-    client : Client,
+    client : Mantle::Clients::Client,
     system_prompt : String = "Extract factual data from the following conversation log into a concise bulleted list.",
   ) : Proc(Array(String), String)
     ->(messages : Array(String)) : String {

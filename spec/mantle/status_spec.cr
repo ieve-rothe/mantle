@@ -1,5 +1,4 @@
 require "../spec_helper"
-require "../../src/mantle/status"
 
 describe Mantle do
   before_each do

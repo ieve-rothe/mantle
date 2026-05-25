@@ -7,39 +7,39 @@
 # Base class for different LLM-based processing flows.
 # Examples include planning steps, command generation, reflection, etc.
 
-require "./tools"
-require "./builtin_tools"
-require "./tool_executor"
-require "./tool_formatter"
+require "../tools/tools"
+require "../tools/builtin_tools"
+require "../tools/tool_executor"
+require "../tools/tool_formatter"
 
-module Mantle
+module Mantle::Flows
   # Represents a generic LLM inference operation.
   #
   # Base class for different LLM-based processing flows.
   # Examples include flows for planning steps, command generation, reflection, etc.
   class Flow
     # Represents the `ContextManager` coordinating context for the flow.
-    property context_manager : ContextManager
+    property context_manager : Mantle::Storage::ContextManager
 
     # Represents the `Client` executing LLM requests.
-    property client : Client
+    property client : Mantle::Clients::Client
 
     # Represents the `Logger` logging conversation events.
-    property logger : Logger
+    property logger : Mantle::Support::Logger
 
     # Represents custom errors for flow operations.
     class InputError < Exception; end
 
     # Creates a flow instance with *context_manager*, *client*, and *logger*.
     def initialize(
-      @context_manager : ContextManager,
-      @client : Client,
-      @logger : Logger,
+      @context_manager : Mantle::Storage::ContextManager,
+      @client : Mantle::Clients::Client,
+      @logger : Mantle::Support::Logger,
     )
     end
 
     # Assembles context, sends it to the client, and executes *on_response* with the result.
-    def run(msg : String, on_response : Proc(Mantle::Response, Nil), ephemeral_blocks : Array(String) = [] of String)
+    def run(msg : String, on_response : Proc(Mantle::Clients::Response, Nil), ephemeral_blocks : Array(String) = [] of String)
       # To be implemented by specific flows
     end
 
@@ -60,7 +60,7 @@ module Mantle
     # Runs the chat flow by sending conversation messages to the client and handling the response.
     #
     # Custom callback *on_response* is executed with the final `Response` payload.
-    def run(msg : String, on_response : Proc(Mantle::Response, Nil), ephemeral_blocks : Array(String) = [] of String)
+    def run(msg : String, on_response : Proc(Mantle::Clients::Response, Nil), ephemeral_blocks : Array(String) = [] of String)
       @context_manager.handle_user_message(msg)
       context_view = @context_manager.current_view(ephemeral_blocks)
       @logger.log_message(:user, msg, format_messages_for_log(context_view))
@@ -99,9 +99,9 @@ module Mantle
 
     # Creates a tool-enabled chat flow with *context_manager*, *client*, *logger*, and optional *depth*.
     def initialize(
-      context_manager : ContextManager,
-      client : Client,
-      logger : Logger,
+      context_manager : Mantle::Storage::ContextManager,
+      client : Mantle::Clients::Client,
+      logger : Mantle::Support::Logger,
       @depth : Int32 = 0,
     )
       super(context_manager, client, logger)
@@ -113,13 +113,13 @@ module Mantle
     # safety *builtin_config*, maximum tool loop limit *max_iterations*, chunk callback *on_chunk*, and response callback *on_response*.
     def run(
       msg : String,
-      builtins : Array(BuiltinTool)? = nil,
-      custom_tools : Array(Tool)? = nil,
+      builtins : Array(Mantle::Tools::BuiltinTool)? = nil,
+      custom_tools : Array(Mantle::Tools::Tool)? = nil,
       tool_callback : Proc(String, Hash(String, JSON::Any), String)? = nil,
-      builtin_config : BuiltinToolConfig? = nil,
+      builtin_config : Mantle::Tools::BuiltinToolConfig? = nil,
       max_iterations : Int32 = DEFAULT_MAX_ITERATIONS,
       on_chunk : Proc(String, Nil)? = nil,
-      on_response : Proc(Mantle::Response, Nil)? = nil,
+      on_response : Proc(Mantle::Clients::Response, Nil)? = nil,
       ephemeral_blocks : Array(String) = [] of String,
     )
       # Add user message to context
@@ -134,7 +134,7 @@ module Mantle
       tool_names = all_tools ? all_tools.map { |t| t.function.name } : nil
 
       # Create tool executor
-      tool_executor = ToolExecutor.new(builtin_config, tool_callback, @context_manager.bot_name)
+      tool_executor = Mantle::Tools::ToolExecutor.new(builtin_config, tool_callback, @context_manager.bot_name)
 
       # Tool call loop
       iteration = 0
@@ -166,7 +166,7 @@ module Mantle
       end
     end
 
-    private def handle_tool_limit(max_iterations : Int32, ephemeral_blocks : Array(String), on_chunk : Proc(String, Nil)?, on_response : Proc(Mantle::Response, Nil)?)
+    private def handle_tool_limit(max_iterations : Int32, ephemeral_blocks : Array(String), on_chunk : Proc(String, Nil)?, on_response : Proc(Mantle::Clients::Response, Nil)?)
       error_msg = "System: Maximum number of tool iterations (#{max_iterations}) reached. Please provide a text response to the user now without using any more tools."
       @context_manager.add_message("system", error_msg, check_consolidation: false)
 
@@ -195,7 +195,7 @@ module Mantle
       on_response.try(&.call(final_response))
     end
 
-    private def execute_and_parse(context_view : Array(Hash(String, String)), all_tools : Array(Tool)?, on_chunk : Proc(String, Nil)?) : Mantle::Response
+    private def execute_and_parse(context_view : Array(Hash(String, String)), all_tools : Array(Mantle::Tools::Tool)?, on_chunk : Proc(String, Nil)?) : Mantle::Clients::Response
       # If depth >= MAX_SUBAGENT_DEPTH, strip tools to prevent recursion
       tools_to_pass = (@depth >= MAX_SUBAGENT_DEPTH) ? nil : all_tools
 
@@ -212,7 +212,7 @@ module Mantle
       response
     end
 
-    private def handle_final_response(response : Mantle::Response, ephemeral_blocks : Array(String), on_response : Proc(Mantle::Response, Nil)?)
+    private def handle_final_response(response : Mantle::Clients::Response, ephemeral_blocks : Array(String), on_response : Proc(Mantle::Clients::Response, Nil)?)
       # Final text response - add to context without consolidation check
       response_text = response.content.not_nil!
       @context_manager.handle_bot_message(response_text, check_consolidation: false)
@@ -228,17 +228,17 @@ module Mantle
     end
 
     private def process_tools(
-      tool_calls : Array(ToolCall),
+      tool_calls : Array(Mantle::Clients::ToolCall),
       tool_names : Array(String)?,
-      tool_executor : ToolExecutor,
-      response : Mantle::Response,
+      tool_executor : Mantle::Tools::ToolExecutor,
+      response : Mantle::Clients::Response,
       ephemeral_blocks : Array(String),
       context_view : Array(Hash(String, String)),
     ) : Array(Hash(String, String))
       Mantle.emit_status(:tool_loop)
       # Log detailed tool call information (natural language)
       tool_calls.each do |call|
-        formatted_call = ToolFormatter.format_tool_call(call)
+        formatted_call = Mantle::Tools::ToolFormatter.format_tool_call(call)
         @logger.log_message(:bot, formatted_call, format_messages_for_log(context_view), response.thinking)
       end
 
@@ -256,7 +256,7 @@ module Mantle
         @context_manager.add_message("tool", content_with_id, check_consolidation: false)
 
         # Log detailed tool result (natural language)
-        formatted_result = ToolFormatter.format_tool_result(result)
+        formatted_result = Mantle::Tools::ToolFormatter.format_tool_result(result)
         @logger.log_message(:bot, formatted_result, format_messages_for_log(@context_manager.current_view(ephemeral_blocks)))
       end
 
@@ -264,7 +264,7 @@ module Mantle
       @context_manager.current_view(ephemeral_blocks)
     end
 
-    private def handle_empty_response(response : Mantle::Response, ephemeral_blocks : Array(String), on_response : Proc(Mantle::Response, Nil)?)
+    private def handle_empty_response(response : Mantle::Clients::Response, ephemeral_blocks : Array(String), on_response : Proc(Mantle::Clients::Response, Nil)?)
       response_text = ""
       @context_manager.handle_bot_message(response_text, check_consolidation: false)
 
@@ -276,12 +276,12 @@ module Mantle
     end
 
     # Merge built-in and custom tool definitions
-    private def merge_tools(builtins : Array(BuiltinTool)?, custom : Array(Tool)?) : Array(Tool)?
-      tools = [] of Tool
+    private def merge_tools(builtins : Array(Mantle::Tools::BuiltinTool)?, custom : Array(Mantle::Tools::Tool)?) : Array(Mantle::Tools::Tool)?
+      tools = [] of Mantle::Tools::Tool
 
       # Add built-in tool definitions
       if builtins && !builtins.empty?
-        tools.concat(BuiltinToolRegistry.definitions_for(builtins))
+        tools.concat(Mantle::Tools::BuiltinToolRegistry.definitions_for(builtins))
       end
 
       # Add custom tools

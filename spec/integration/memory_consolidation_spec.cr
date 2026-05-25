@@ -11,21 +11,21 @@ describe "Integration: Memory Consolidation" do
 
     begin
       # 2. Setup actual components
-      context_store = Mantle::JSONContextStore.new(
+      context_store = Mantle::Storage::JSONContextStore.new(
         "System Prompt",
         context_file
       )
 
       squishifier = make_deterministic_squishifier
 
-      memory_store = Mantle::JSONLayeredMemoryStore.new(
+      memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(
         memory_file: memory_file,
         layer_token_capacity: 100,
         layer_token_target: 50,
         squishifier: squishifier
       )
 
-      context_manager = Mantle::ContextManager.new(
+      context_manager = Mantle::Storage::ContextManager.new(
         context_store,
         memory_store,
         "User",
@@ -37,26 +37,26 @@ describe "Integration: Memory Consolidation" do
       # 3. Create scripted client
       # We will simulate 3 interactions. The context store will grow to 6 messages, triggering consolidation when it exceeds msg_hardmax (4).
       client = ScriptedClient.new([
-        Mantle::Response.new(content: "Response 1", tool_calls: nil),
-        Mantle::Response.new(content: "Response 2", tool_calls: nil),
-        Mantle::Response.new(content: "Response 3", tool_calls: nil)
+        Mantle::Clients::Response.new(content: "Response 1", tool_calls: nil),
+        Mantle::Clients::Response.new(content: "Response 2", tool_calls: nil),
+        Mantle::Clients::Response.new(content: "Response 3", tool_calls: nil)
       ])
 
       logger = DummyLogger.new
 
-      flow = Mantle::ChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ChatFlow.new(context_manager, client, logger)
 
       # 4. Run the simulation
       final_responses = [] of String
 
       # Interaction 1: Context messages = 2
-      flow.run("User message 1", on_response: ->(r : Mantle::Response) { final_responses << r.content.not_nil! })
+      flow.run("User message 1", on_response: ->(r : Mantle::Clients::Response) { final_responses << r.content.not_nil! })
 
       # Interaction 2: Context messages = 4 (at msg_hardmax)
-      flow.run("User message 2", on_response: ->(r : Mantle::Response) { final_responses << r.content.not_nil! })
+      flow.run("User message 2", on_response: ->(r : Mantle::Clients::Response) { final_responses << r.content.not_nil! })
 
       # Interaction 3: Context messages = 6 (triggers consolidation back to token_target: 2)
-      flow.run("User message 3", on_response: ->(r : Mantle::Response) { final_responses << r.content.not_nil! })
+      flow.run("User message 3", on_response: ->(r : Mantle::Clients::Response) { final_responses << r.content.not_nil! })
 
       # 5. Assertions
       final_responses.should eq(["Response 1", "Response 2", "Response 3"])

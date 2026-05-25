@@ -1,10 +1,9 @@
 require "benchmark"
-require "../src/mantle/tool_formatter"
-require "../src/mantle/client"
+require "../src/mantle"
 
-module Mantle
+module Mantle::Tools
   module ToolFormatter
-    def self.original_format_tool_call(tool_call : ToolCall) : String
+    def self.original_format_tool_call(tool_call : Mantle::Clients::ToolCall) : String
       function_name = tool_call.function.name
       arguments = tool_call.function.arguments
 
@@ -28,7 +27,7 @@ module Mantle
       end
     end
 
-    def self.optimized_format_tool_call(tool_call : ToolCall) : String
+    def self.optimized_format_tool_call(tool_call : Mantle::Clients::ToolCall) : String
       function_name = tool_call.function.name
       arguments = tool_call.function.arguments
 
@@ -72,9 +71,9 @@ args = {} of String => String
 20.times do |i|
   args["arg#{i}"] = "value#{i}"
 end
-tool_call = Mantle::ToolCall.new(
+tool_call = Mantle::Clients::ToolCall.new(
   id: "call_123",
-  function: Mantle::ToolCallFunction.new(
+  function: Mantle::Clients::ToolCallFunction.new(
     name: "test_function",
     arguments: args.to_json
   )
@@ -83,10 +82,10 @@ tool_call = Mantle::ToolCall.new(
 puts "Benchmarking ToolFormatter.format_tool_call"
 Benchmark.ips do |x|
   x.report("original") do
-    Mantle::ToolFormatter.original_format_tool_call(tool_call)
+    Mantle::Tools::ToolFormatter.original_format_tool_call(tool_call)
   end
 
   x.report("optimized") do
-    Mantle::ToolFormatter.optimized_format_tool_call(tool_call)
+    Mantle::Tools::ToolFormatter.optimized_format_tool_call(tool_call)
   end
 end

@@ -1,6 +1,4 @@
 require "./spec_helper"
-require "../src/mantle/tools"
-require "../src/mantle/builtin_tools"
 require "file_utils"
 
 describe "Mantle Built-in Tools Security" do
@@ -20,8 +18,8 @@ describe "Mantle Built-in Tools Security" do
   end
 
   it "does not allow access to a directory starting with the same prefix but not a subpath" do
-    config = Mantle::BuiltinToolConfig.new(working_directory: allowed_dir)
-    executor = Mantle::BuiltinToolExecutor.new(config)
+    config = Mantle::Tools::BuiltinToolConfig.new(working_directory: allowed_dir)
+    executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
     # This should fail because secret_dir is NOT in allowed_dir,
     # even though secret_dir's path starts with allowed_dir's path.

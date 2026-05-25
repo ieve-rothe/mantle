@@ -10,7 +10,7 @@ require "../src/mantle.cr"
 # Initializing a FileLogger creates the log file if it doesn't exist.
 # The `include_thinking` flag tells the logger whether to strip out
 # `<think>` blocks or include them in the log output.
-logger = Mantle::FileLogger.new("logger_test_log.txt", "User", "Assistant", include_thinking: true)
+logger = Mantle::Support::FileLogger.new("logger_test_log.txt", "User", "Assistant", include_thinking: true)
 
 # Manually clears the log file
 logger.clear_log_file

@@ -2,10 +2,10 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 
-require "./client"
+require "../clients/client"
 require "json"
 
-module Mantle
+module Mantle::Tools
   # Formats tool calls and results as natural language for context storage.
   #
   # Converts structured tool interactions into human-readable text.
@@ -19,7 +19,7 @@ module Mantle
     # # Example output format:
     # "Called read_file(file_path: \"test.txt\")"
     # ```
-    def self.format_tool_call(tool_call : ToolCall) : String
+    def self.format_tool_call(tool_call : Mantle::Clients::ToolCall) : String
       function_name = tool_call.function.name
       arguments = tool_call.function.arguments
 
@@ -100,7 +100,7 @@ module Mantle
     # Formats an assistant message containing *content* and *tool_calls*.
     #
     # Returns a natural language representation suitable for context storage.
-    def self.format_assistant_message_with_tool_calls(content : String?, tool_calls : Array(ToolCall)) : String
+    def self.format_assistant_message_with_tool_calls(content : String?, tool_calls : Array(Mantle::Clients::ToolCall)) : String
       parts = [] of String
 
       # Add content if present

@@ -4,7 +4,7 @@ require "./spec_helper"
 # ------------------------------------------------------------------------------
 # Ephemeral Sliding Context Store
 # Should maintain last N messages in context
-describe Mantle::EphemeralSlidingContextStore do
+describe Mantle::Storage::EphemeralSlidingContextStore do
   describe "#initialize" do
     it "accepts a system prompt and a number of messages to keep in context" do
       # Arrange
@@ -12,7 +12,7 @@ describe Mantle::EphemeralSlidingContextStore do
       messages_to_keep = 3
 
       # Act
-      store = Mantle::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
+      store = Mantle::Storage::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
 
       # Assert
       store.system_prompt.should eq(sys_prompt)
@@ -28,7 +28,7 @@ describe Mantle::EphemeralSlidingContextStore do
       # Arrange
       sys_prompt = "System Prompt"
       messages_to_keep = 3
-      store = Mantle::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
+      store = Mantle::Storage::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
 
       # Act
       store.add_message("User", "Message1")
@@ -53,7 +53,7 @@ describe Mantle::EphemeralSlidingContextStore do
       # Arrange
       sys_prompt = "System Prompt"
       messages_to_keep = 5
-      store = Mantle::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
+      store = Mantle::Storage::EphemeralSlidingContextStore.new(sys_prompt, messages_to_keep)
 
       # Act
       store.add_message("User", "List files")
@@ -76,7 +76,7 @@ describe Mantle::EphemeralSlidingContextStore do
   describe "#clear" do
     it "removes all conversation messages" do
       # Arrange
-      store = Mantle::EphemeralSlidingContextStore.new("System", 5)
+      store = Mantle::Storage::EphemeralSlidingContextStore.new("System", 5)
       store.add_message("User", "Msg1")
       store.add_message("Assistant", "Msg2")
 
@@ -94,7 +94,7 @@ describe Mantle::EphemeralSlidingContextStore do
   describe "#update_system_prompt" do
     it "updates the system prompt in memory and reflects in current_view" do
       # Arrange
-      store = Mantle::EphemeralSlidingContextStore.new("Old Prompt", 5)
+      store = Mantle::Storage::EphemeralSlidingContextStore.new("Old Prompt", 5)
 
       # Act
       store.update_system_prompt("New Prompt")
@@ -111,7 +111,7 @@ end
 # ------------------------------------------------------------------------------
 # JSON Context Store
 # Should maintain last N messages in context, loading them from JSON backend store
-describe Mantle::JSONContextStore do
+describe Mantle::Storage::JSONContextStore do
   describe "error handling" do
     it "logs an error when saving to an invalid path" do
       # Arrange
@@ -122,7 +122,7 @@ describe Mantle::JSONContextStore do
       # Act
       # Using a read-only path will raise File::AccessDeniedError or similar,
       # which inherits from File::Error, so we expect an error log but no crash.
-      store = Mantle::JSONContextStore.new("System", test_file)
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
       # Assert
       log_entries = backend.entries.select { |e| e.severity == Log::Severity::Error }
@@ -141,7 +141,7 @@ describe Mantle::JSONContextStore do
       sys_prompt = "You are a test assistant."
 
       # Act
-      store = Mantle::JSONContextStore.new(sys_prompt, test_file)
+      store = Mantle::Storage::JSONContextStore.new(sys_prompt, test_file)
 
       # Assert
       store.system_prompt.should eq(sys_prompt)
@@ -172,7 +172,7 @@ describe Mantle::JSONContextStore do
       File.write(test_file, existing_data.to_json)
 
       # Act
-      store = Mantle::JSONContextStore.new(sys_prompt, test_file)
+      store = Mantle::Storage::JSONContextStore.new(sys_prompt, test_file)
 
       # Assert
       view = store.current_view
@@ -193,7 +193,7 @@ describe Mantle::JSONContextStore do
     it "adds a labeled message to the context" do
       # Arrange
       test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
-      store = Mantle::JSONContextStore.new("System:", test_file)
+      store = Mantle::Storage::JSONContextStore.new("System:", test_file)
 
       # Act
       store.add_message("User", "Hello!")
@@ -213,7 +213,7 @@ describe Mantle::JSONContextStore do
     it "automatically saves context to JSON file after each message" do
       # Arrange
       test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
-      store = Mantle::JSONContextStore.new("System", test_file)
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
       # Act
       store.add_message("User", "TestMessage")
@@ -235,7 +235,7 @@ describe Mantle::JSONContextStore do
     it "returns message array with system prompt and conversation messages" do
       # Arrange
       test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
-      store = Mantle::JSONContextStore.new("SysPrompt", test_file)
+      store = Mantle::Storage::JSONContextStore.new("SysPrompt", test_file)
 
       # Act
       store.add_message("User", "Msg1")
@@ -263,12 +263,12 @@ describe Mantle::JSONContextStore do
       sys_prompt = "Persistent System"
 
       # First instance - create and add messages
-      store1 = Mantle::JSONContextStore.new(sys_prompt, test_file)
+      store1 = Mantle::Storage::JSONContextStore.new(sys_prompt, test_file)
       store1.add_message("User", "Hello")
       store1.add_message("Assistant", "Hi")
 
       # Act - Create second instance with same file
-      store2 = Mantle::JSONContextStore.new(sys_prompt, test_file)
+      store2 = Mantle::Storage::JSONContextStore.new(sys_prompt, test_file)
 
       # Assert - Second instance should have same context
       view = store2.current_view
@@ -289,7 +289,7 @@ describe Mantle::JSONContextStore do
     it "removes the oldest N messages and returns them" do
       # Arrange
       test_file = "/tmp/mantle_test_prune_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::JSONContextStore.new("System", test_file)
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
       store.add_message("User", "One")
       store.add_message("Assistant", "Two")
@@ -327,7 +327,7 @@ describe Mantle::JSONContextStore do
     it "handles pruning more messages than currently exist by returning all available" do
       # Arrange
       test_file = "/tmp/mantle_test_prune_overflow_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::JSONContextStore.new("System", test_file)
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
       store.add_message("User", "Only Message")
 
       # Act - Try to prune 100 messages when only 1 exists
@@ -351,7 +351,7 @@ describe Mantle::JSONContextStore do
     it "removes all conversation messages and updates the JSON file" do
       # Arrange
       test_file = "/tmp/mantle_test_clear_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::JSONContextStore.new("System", test_file)
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
       store.add_message("User", "Msg1")
 
       # Act
@@ -375,7 +375,7 @@ describe Mantle::JSONContextStore do
     it "updates the system prompt and persists it to the JSON file" do
       # Arrange
       test_file = "/tmp/mantle_test_update_sys_prompt_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::JSONContextStore.new("Old Prompt", test_file)
+      store = Mantle::Storage::JSONContextStore.new("Old Prompt", test_file)
 
       # Act
       store.update_system_prompt("New Prompt")
@@ -399,7 +399,7 @@ describe Mantle::JSONContextStore do
     it "saves nil as the system prompt in the JSON file when persist_system_prompt is false" do
       # Arrange
       test_file = "/tmp/mantle_test_ephemeral_sys_prompt_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::JSONContextStore.new("Ephemeral System Prompt", test_file, persist_system_prompt: false)
+      store = Mantle::Storage::JSONContextStore.new("Ephemeral System Prompt", test_file, persist_system_prompt: false)
 
       # Act
       store.add_message("User", "Hello")
@@ -417,11 +417,11 @@ describe Mantle::JSONContextStore do
       test_file = "/tmp/mantle_test_ephemeral_sys_prompt_load_#{Time.utc.to_unix_ms}.json"
       
       # Save an ephemeral store context first (so system_prompt is nil/null in file)
-      store1 = Mantle::JSONContextStore.new("Initial Temp Prompt", test_file, persist_system_prompt: false)
+      store1 = Mantle::Storage::JSONContextStore.new("Initial Temp Prompt", test_file, persist_system_prompt: false)
       store1.add_message("User", "Hello")
 
       # Act - Re-load using new instance with a different initialized prompt, persist_system_prompt: false
-      store2 = Mantle::JSONContextStore.new("New Memory Prompt", test_file, persist_system_prompt: false)
+      store2 = Mantle::Storage::JSONContextStore.new("New Memory Prompt", test_file, persist_system_prompt: false)
 
       # Assert - The prompt should be the one passed to the constructor, not overridden to nil
       store2.system_prompt.should eq("New Memory Prompt")
@@ -434,7 +434,7 @@ describe Mantle::JSONContextStore do
     it "does not persist system prompt even after update_system_prompt is called" do
       # Arrange
       test_file = "/tmp/mantle_test_ephemeral_sys_prompt_update_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::JSONContextStore.new("Initial", test_file, persist_system_prompt: false)
+      store = Mantle::Storage::JSONContextStore.new("Initial", test_file, persist_system_prompt: false)
 
       # Act
       store.update_system_prompt("New Dynamic Prompt")

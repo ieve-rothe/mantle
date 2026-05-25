@@ -1,5 +1,5 @@
 require "benchmark"
-require "../src/mantle/markdown_formatter"
+require "../src/mantle"
 
 text = <<-MARKDOWN
 # Header 1
@@ -22,7 +22,7 @@ puts "Benchmarking MarkdownFormatter.format..."
 Benchmark.bm do |x|
   x.report("format") do
     10_000.times do
-      Mantle::MarkdownFormatter.format(text)
+      Mantle::Support::MarkdownFormatter.format(text)
     end
   end
 end

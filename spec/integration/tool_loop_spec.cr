@@ -6,19 +6,19 @@ describe "Integration: Tool Loops" do
     File.delete(context_file) if File.exists?(context_file)
 
     begin
-      context_store = Mantle::JSONContextStore.new("System prompt", context_file)
+      context_store = Mantle::Storage::JSONContextStore.new("System prompt", context_file)
       context_manager = DummyContextManager.new(context_store)
       logger = DummyLogger.new
 
       client = ScriptedClient.new([
         # Response 1: LLM decides to call "tool_A"
-        Mantle::Response.new(
+        Mantle::Clients::Response.new(
           content: nil,
           tool_calls: [
-            Mantle::ToolCall.new(
+            Mantle::Clients::ToolCall.new(
               id: "call_a1",
               type: "function",
-              function: Mantle::ToolCallFunction.new(
+              function: Mantle::Clients::ToolCallFunction.new(
                 name: "tool_A",
                 arguments: %({"input":"start"})
               )
@@ -26,13 +26,13 @@ describe "Integration: Tool Loops" do
           ]
         ),
         # Response 2: LLM receives tool_A result, decides to call "tool_B"
-        Mantle::Response.new(
+        Mantle::Clients::Response.new(
           content: nil,
           tool_calls: [
-            Mantle::ToolCall.new(
+            Mantle::Clients::ToolCall.new(
               id: "call_b1",
               type: "function",
-              function: Mantle::ToolCallFunction.new(
+              function: Mantle::Clients::ToolCallFunction.new(
                 name: "tool_B",
                 arguments: %({"input":"intermediate"})
               )
@@ -40,28 +40,28 @@ describe "Integration: Tool Loops" do
           ]
         ),
         # Response 3: LLM has enough information, returns text response
-        Mantle::Response.new(content: "Final result based on tools", tool_calls: nil)
+        Mantle::Clients::Response.new(content: "Final result based on tools", tool_calls: nil)
       ])
 
       custom_tools = [
-        Mantle::Tool.new(
-          function: Mantle::FunctionDefinition.new(
+        Mantle::Tools::Tool.new(
+          function: Mantle::Tools::FunctionDefinition.new(
             name: "tool_A",
             description: "First tool",
-            parameters: Mantle::ParametersSchema.new(
+            parameters: Mantle::Tools::ParametersSchema.new(
               properties: {
-                "input" => Mantle::PropertyDefinition.new("string", "Input data")
+                "input" => Mantle::Tools::PropertyDefinition.new("string", "Input data")
               }
             )
           )
         ),
-        Mantle::Tool.new(
-          function: Mantle::FunctionDefinition.new(
+        Mantle::Tools::Tool.new(
+          function: Mantle::Tools::FunctionDefinition.new(
             name: "tool_B",
             description: "Second tool",
-            parameters: Mantle::ParametersSchema.new(
+            parameters: Mantle::Tools::ParametersSchema.new(
               properties: {
-                "input" => Mantle::PropertyDefinition.new("string", "Input data")
+                "input" => Mantle::Tools::PropertyDefinition.new("string", "Input data")
               }
             )
           )
@@ -79,14 +79,14 @@ describe "Integration: Tool Loops" do
         end
       }
 
-      flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
 
       final_response = nil
       flow.run(
         "Please run your tools.",
         custom_tools: custom_tools,
         tool_callback: tool_callback,
-        on_response: ->(r : Mantle::Response) { final_response = r.content.not_nil! }
+        on_response: ->(r : Mantle::Clients::Response) { final_response = r.content.not_nil! }
       )
 
       # 1. Verify final text response is returned

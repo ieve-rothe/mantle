@@ -48,7 +48,7 @@ end
 # 3. Initialize Components
 
 # Setup connection parameters for the backend language model
-model_config = Mantle::ModelConfig.new(
+model_config = Mantle::Clients::ModelConfig.new(
   model_name: "gpt-oss:20b",
   stream: false,
   temperature: 1.0,
@@ -61,23 +61,23 @@ user_name = "Username"
 bot_name = "Botname"
 
 # Use LlamaClient to communicate with the model configured above.
-client = Mantle::LlamaClient.new(model_config)
+client = Mantle::Clients::LlamaClient.new(model_config)
 
 # A Logger persists plain-text or rich output logs for humans to read
-logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
+logger = Mantle::Support::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
 
 # ContextStore handles tracking the active "sliding window" of messages
-context_store = Mantle::JSONContextStore.new(
+context_store = Mantle::Storage::JSONContextStore.new(
   system_prompt: "Respond to the test.",
   context_file: CONTEXT_FILE
 )
 
 # A Squishifier is just a callable that summarizes text using the LLM.
 # It is used by the memory store to compress old messages.
-squishy = Mantle::Squishifiers.build_basic_summarizer(client)
+squishy = Mantle::Support::Squishifiers.build_basic_summarizer(client)
 
 # MemoryStore tracks long-term, summarized history.
-memory_store = Mantle::JSONLayeredMemoryStore.new(
+memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(
   memory_file: MEMORY_FILE,
   layer_token_capacity: 100,
   layer_token_target: 50,
@@ -86,7 +86,7 @@ memory_store = Mantle::JSONLayeredMemoryStore.new(
 
 # The ContextManager ties the ContextStore and MemoryStore together, ensuring
 # the prompt stays within limits, and pushing old messages into memory.
-context_manager = Mantle::ContextManager.new(
+context_manager = Mantle::Storage::ContextManager.new(
   context_store: context_store,
   memory_store: memory_store,
   user_name: user_name,
@@ -99,7 +99,7 @@ context_manager = Mantle::ContextManager.new(
 # 4. Build the Flow
 # The ChatFlow is a wrapper around the entire chat loop. You supply the components
 # and it orchestrates everything in its #run method.
-flow = Mantle::ChatFlow.new(
+flow = Mantle::Flows::ChatFlow.new(
   context_manager: context_manager,
   client: client,
   logger: logger
@@ -133,7 +133,7 @@ input_text = "Hello! Are you running correctly?"
 
 flow.run(
   msg: input_text,
-  on_response: ->(resp : Mantle::Response) {
+  on_response: ->(resp : Mantle::Clients::Response) {
     puts "User: #{input_text}"
     if thinking = resp.thinking
       puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
@@ -155,7 +155,7 @@ puts "--- Starting Multi-Test Turn ---"
   input_text = "Testing. Is it still working?"
   flow.run(
     msg: input_text,
-    on_response: ->(resp : Mantle::Response) {
+    on_response: ->(resp : Mantle::Clients::Response) {
       puts "User: #{input_text}"
       if thinking = resp.thinking
         puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"

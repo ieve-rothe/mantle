@@ -19,7 +19,7 @@ LOG_FILE     = "examples/test_log.txt"
 end
 
 # 2. Initialize Components
-model_config = Mantle::ModelConfig.new(
+model_config = Mantle::Clients::ModelConfig.new(
   model_name: "gpt-oss:20b",
   stream: false,
   temperature: 1.0,
@@ -31,11 +31,11 @@ model_config = Mantle::ModelConfig.new(
 user_name = "Username"
 bot_name = "Botname"
 
-client = Mantle::LlamaClient.new(model_config)
-logger = Mantle::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
+client = Mantle::Clients::LlamaClient.new(model_config)
+logger = Mantle::Support::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
 
 # Define the system prompt for the context window
-context_store = Mantle::JSONContextStore.new(
+context_store = Mantle::Storage::JSONContextStore.new(
   system_prompt: "You are an AI named Emma. You are speaking to Cam. We are running a diagnostic test within the LLM framework we built for which your main 'brain' application is a consumer.",
   context_file: CONTEXT_FILE
 )
@@ -46,28 +46,28 @@ context_store = Mantle::JSONContextStore.new(
 summarizer_prompt = "You are the internal subconscious of an AI named Emma. Review the following recent chat log with Cam. Synthesize the interaction into a concise, 2-3 sentence narrative memory. Extract only actionable tasks, personal facts, and significant project milestones. Ignore casual banter, technical troubleshooting details, and greetings. Write the summary from Emma's first-person perspective."
 
 # Build the squishifier using the prompt and client
-squishy = Mantle::Squishifiers.build_basic_summarizer(client, summarizer_prompt)
+squishy = Mantle::Support::Squishifiers.build_basic_summarizer(client, summarizer_prompt)
 
 # Feed the squishifier to the memory store
-memory_store = Mantle::JSONLayeredMemoryStore.new(
+memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(
   memory_file: MEMORY_FILE,
-  layer_capacity: 5,
-  layer_target: 2,
+  layer_token_capacity: 5,
+  layer_token_target: 2,
   squishifier: squishy
 )
 
-context_manager = Mantle::ContextManager.new(
+context_manager = Mantle::Storage::ContextManager.new(
   context_store: context_store,
   memory_store: memory_store,
   user_name: user_name,
   bot_name: bot_name,
-  msg_target: 4,
-  msg_hardmax: 8,
+  token_target: 4,
+  token_hardmax: 8,
   strip_thinking_tags: true  # Strip <think></think> blocks from model responses
 )
 
 # 3. Build the Flow
-flow = Mantle::ChatFlow.new(
+flow = Mantle::Flows::ChatFlow.new(
   context_manager: context_manager,
   client: client,
   logger: logger
@@ -95,7 +95,7 @@ simulated_session.each_with_index do |input_text, index|
   
   flow.run(
     msg: input_text,
-    on_response: ->(resp : Mantle::Response) {
+    on_response: ->(resp : Mantle::Clients::Response) {
       puts "User: #{input_text}"
       if thinking = resp.thinking
         puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
@@ -122,7 +122,7 @@ final_question = "I'm back. Just to check your memory—what was I planning to d
 
 flow.run(
   msg: final_question,
-  on_response: ->(resp : Mantle::Response) {
+  on_response: ->(resp : Mantle::Clients::Response) {
     puts "User: #{final_question}"
     if thinking = resp.thinking
       puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"

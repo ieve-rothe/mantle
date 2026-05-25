@@ -5,10 +5,10 @@
 # Context store manages ... context. Not identity, not memory - just manages the ongoing chat and potentially functionality for storing chats when 'finished' and resuming previous chats.
 
 require "json"
-require "./app_logger"
-require "./status"
+require "../support/app_logger"
+require "../support/status"
 
-module Mantle
+module Mantle::Storage
   # Represents the abstract base class for context stores, managing conversation context.
   #
   # A context store handles the ongoing chat history, allowing for persistence, formatting, and pruning.
@@ -89,7 +89,7 @@ module Mantle
   end
 
   # Represents an ephemeral sliding window context store that keeps a fixed number of recent messages.
-  class EphemeralSlidingContextStore < Mantle::ContextStore
+  class EphemeralSlidingContextStore < ContextStore
     # Represents the maximum number of recent messages to keep in the sliding window.
     property messages_to_keep : Int32
 
@@ -148,7 +148,7 @@ module Mantle
   end
 
   # Represents a context store that persists conversation state and system prompt to a JSON file.
-  class JSONContextStore < Mantle::ContextStore
+  class JSONContextStore < ContextStore
     # Represents whether to persist the system prompt to the JSON file.
     property persist_system_prompt : Bool
 
@@ -204,7 +204,7 @@ module Mantle
         data = FileData.new(prompt_to_save, @messages.to_a)
         File.write(@context_file, data.to_json)
       rescue e : File::Error
-        Mantle::Log.error { "Failed to save context to #{@context_file}: #{e.message}" }
+        Mantle::Support::Log.error { "Failed to save context to #{@context_file}: #{e.message}" }
       end
     end
 
@@ -222,10 +222,10 @@ module Mantle
           @messages << msg
         end
         @current_num_messages = @messages.size
-        Mantle::Log.info { "Loaded context from #{@context_file}" }
+        Mantle::Support::Log.info { "Loaded context from #{@context_file}" }
       rescue e : File::NotFoundError
         save_context_to_json
-        Mantle::Log.warn { "Context file was not found - creating a new one." }
+        Mantle::Support::Log.warn { "Context file was not found - creating a new one." }
         Mantle.emit_status(:new_context_file)
       end
     end

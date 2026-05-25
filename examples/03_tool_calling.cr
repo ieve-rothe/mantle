@@ -14,8 +14,8 @@ require "../src/mantle"
 puts "--- Level 3: Tool Calling ---"
 
 # 1. Setup Client, Context, and Memory (same as Level 2)
-client = Mantle::LlamaClient.new(
-  Mantle::ModelConfig.new(
+client = Mantle::Clients::LlamaClient.new(
+  Mantle::Clients::ModelConfig.new(
     model_name: "gpt-oss:20b",
     stream: false,
     temperature: 0.7,
@@ -25,16 +25,16 @@ client = Mantle::LlamaClient.new(
   )
 )
 
-context_manager = Mantle::ContextManager.new(
-  context_store: Mantle::JSONContextStore.new(
+context_manager = Mantle::Storage::ContextManager.new(
+  context_store: Mantle::Storage::JSONContextStore.new(
     system_prompt: "You are a helpful assistant with access to tools. Always use tools to verify information before answering.",
     context_file: "examples/03_context.json"
   ),
-  memory_store: Mantle::JSONLayeredMemoryStore.new(
+  memory_store: Mantle::Storage::JSONLayeredMemoryStore.new(
     memory_file: "examples/03_memory.json",
     layer_token_capacity: 100,
     layer_token_target: 50,
-    squishifier: Mantle::Squishifiers.build_basic_summarizer(client)
+    squishifier: Mantle::Support::Squishifiers.build_basic_summarizer(client)
   ),
   user_name: "User",
   bot_name: "Assistant",
@@ -42,12 +42,12 @@ context_manager = Mantle::ContextManager.new(
   token_hardmax: 1200
 )
 
-logger = Mantle::FileLogger.new("examples/03_chat.log", "User", "Assistant")
+logger = Mantle::Support::FileLogger.new("examples/03_chat.log", "User", "Assistant")
 
 # 2. Build the Tool Enabled Flow
 # ToolEnabledChatFlow has built-in logic to parse tool requests from the model,
 # execute them, and feed the results back into the model until a text response is ready.
-flow = Mantle::ToolEnabledChatFlow.new(
+flow = Mantle::Flows::ToolEnabledChatFlow.new(
   context_manager: context_manager,
   client: client,
   logger: logger
@@ -56,7 +56,7 @@ flow = Mantle::ToolEnabledChatFlow.new(
 # 3. Configure Built-in Tools
 # Mantle provides a set of secure built-in tools (like ReadFile, ListDirectory).
 # You must configure security boundaries to prevent the AI from accessing sensitive files.
-builtin_config = Mantle::BuiltinToolConfig.new(
+builtin_config = Mantle::Tools::BuiltinToolConfig.new(
   working_directory: Dir.current,
   allowed_paths: [Dir.current], # Only allow reading within this repo
   autonomous_zone_paths: [File.join(Dir.current, "examples", "sandbox")], # Allow writing only in the sandbox folder
@@ -65,21 +65,21 @@ builtin_config = Mantle::BuiltinToolConfig.new(
 
 # Specify which built-in tools we want to give the model access to
 builtins = [
-  Mantle::BuiltinTool::ReadFile,
-  Mantle::BuiltinTool::ListDirectory
+  Mantle::Tools::BuiltinTool::ReadFile,
+  Mantle::Tools::BuiltinTool::ListDirectory
 ]
 
 # 4. Define a Custom Tool
 # You can define your own tools! A Tool needs a FunctionDefinition (schema).
 def create_random_number_tool
-  Mantle::Tool.new(
-    function: Mantle::FunctionDefinition.new(
+  Mantle::Tools::Tool.new(
+    function: Mantle::Tools::FunctionDefinition.new(
       name: "get_random_number",
       description: "Gets a random number between a min and max value.",
-      parameters: Mantle::ParametersSchema.new(
+      parameters: Mantle::Tools::ParametersSchema.new(
         properties: {
-          "min" => Mantle::PropertyDefinition.new(type: "integer", description: "The minimum value"),
-          "max" => Mantle::PropertyDefinition.new(type: "integer", description: "The maximum value")
+          "min" => Mantle::Tools::PropertyDefinition.new(type: "integer", description: "The minimum value"),
+          "max" => Mantle::Tools::PropertyDefinition.new(type: "integer", description: "The maximum value")
         },
         required: ["min", "max"]
       )
@@ -111,7 +111,7 @@ flow.run(
   builtin_config: builtin_config,
   custom_tools: custom_tools,
   tool_callback: ->custom_tool_handler(String, Hash(String, JSON::Any)),
-  on_response: ->(resp : Mantle::Response) {
+  on_response: ->(resp : Mantle::Clients::Response) {
     # If the model emits reasoning blocks, we can see them.
     if thinking = resp.thinking
       puts "\n🤔 Thinking:\n#{thinking}"

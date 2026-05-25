@@ -1,17 +1,17 @@
 # spec/mantle_spec.cr
 require "./spec_helper"
 
-describe Mantle::ChatFlow do
+describe Mantle::Flows::ChatFlow do
   it "updates the context store with both the user input and the assistant response" do
     # Arrange
     store = DummyContextStore.new("Sys Prompt")
     context_manager = DummyContextManager.new(store)
     client = DummyClient.new
     logger = DummyLogger.new
-    flow = Mantle::ChatFlow.new(context_manager, client, logger)
+    flow = Mantle::Flows::ChatFlow.new(context_manager, client, logger)
 
     # Act
-    flow.run("Hello", ->(msg : Mantle::Response) { })
+    flow.run("Hello", ->(msg : Mantle::Clients::Response) { })
 
     # Assert
     view = store.current_view
@@ -37,9 +37,9 @@ describe Mantle::ChatFlow do
     context_manager = DummyContextManager.new(store)
     client = DummyClient.new
     logger = DummyLogger.new
-    flow = Mantle::ChatFlow.new(context_manager, client, logger)
+    flow = Mantle::Flows::ChatFlow.new(context_manager, client, logger)
     captured_message = ""
-    callback = ->(msg : Mantle::Response) { captured_message = msg.content.not_nil! }
+    callback = ->(msg : Mantle::Clients::Response) { captured_message = msg.content.not_nil! }
 
     # Act
     flow.run("What is 2+2?", callback)
@@ -54,11 +54,11 @@ describe Mantle::ChatFlow do
     context_manager = DummyContextManager.new(store)
     client = DummyClient.new
     logger = DummyLogger.new
-    flow = Mantle::ChatFlow.new(context_manager, client, logger)
+    flow = Mantle::Flows::ChatFlow.new(context_manager, client, logger)
 
     # Act
-    flow.run("Turn 1", ->(msg : Mantle::Response) { })
-    flow.run("Turn 2", ->(msg : Mantle::Response) { })
+    flow.run("Turn 1", ->(msg : Mantle::Clients::Response) { })
+    flow.run("Turn 2", ->(msg : Mantle::Clients::Response) { })
 
     # Assert
     view = store.current_view

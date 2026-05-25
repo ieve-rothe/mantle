@@ -2,7 +2,7 @@
 require "./spec_helper"
 
 # Test-specific context store that tracks messages and supports pruning
-class TrackingContextStore < Mantle::ContextStore
+class TrackingContextStore < Mantle::Storage::ContextStore
   property system_prompt : String
   property messages : Array(Hash(String, String))
   property add_message_calls : Array({String, String})
@@ -61,7 +61,7 @@ def clear
 end
 
 # Test-specific memory store that tracks ingestion calls
-class TrackingMemoryStore < Mantle::JSONLayeredMemoryStore
+class TrackingMemoryStore < Mantle::Storage::JSONLayeredMemoryStore
   property ingested_messages : Array(Array(String))
   property layers : Array(Array(String))
 
@@ -94,7 +94,7 @@ class TrackingMemoryStore < Mantle::JSONLayeredMemoryStore
   end
 end
 
-describe Mantle::ContextManager do
+describe Mantle::Storage::ContextManager do
   describe "#initialize" do
     it "accepts context_store, memory_store, user_name, and bot_name" do
       # Arrange
@@ -102,7 +102,7 @@ describe Mantle::ContextManager do
       memory_store = TrackingMemoryStore.new
 
       # Act
-      manager = Mantle::ContextManager.new(
+      manager = Mantle::Storage::ContextManager.new(
         context_store: context_store,
         memory_store: memory_store,
         user_name: "Alice",
@@ -122,7 +122,7 @@ describe Mantle::ContextManager do
       memory_store = TrackingMemoryStore.new
 
       # Act
-      manager = Mantle::ContextManager.new(
+      manager = Mantle::Storage::ContextManager.new(
         context_store: context_store,
         memory_store: memory_store,
         user_name: "User",
@@ -140,7 +140,7 @@ describe Mantle::ContextManager do
       memory_store = TrackingMemoryStore.new
 
       # Act
-      manager = Mantle::ContextManager.new(
+      manager = Mantle::Storage::ContextManager.new(
         context_store: context_store,
         memory_store: memory_store,
         user_name: "User",
@@ -160,7 +160,7 @@ describe Mantle::ContextManager do
       # Arrange
       context_store = TrackingContextStore.new("System Prompt")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       # Add some memory layer data
       memory_store.layers << ["[Memory Layer 0] Previous conversation summary\n"]
@@ -197,7 +197,7 @@ describe Mantle::ContextManager do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "Alice", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "Alice", "Bot")
 
       # Act
       manager.handle_user_message("Hello world")
@@ -217,7 +217,7 @@ describe Mantle::ContextManager do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
+      manager = Mantle::Storage::ContextManager.new(
         context_store: context_store,
         memory_store: memory_store,
         user_name: "User",
@@ -243,7 +243,7 @@ describe Mantle::ContextManager do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "ChatBot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "ChatBot")
 
       # Act
       manager.handle_bot_message("How can I help?")
@@ -262,7 +262,7 @@ describe Mantle::ContextManager do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Assistant")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Assistant")
 
       # Act
       manager.handle_bot_message("First response")
@@ -285,7 +285,7 @@ describe Mantle::ContextManager do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
+      manager = Mantle::Storage::ContextManager.new(
         context_store: context_store,
         memory_store: memory_store,
         user_name: "User",
@@ -307,7 +307,7 @@ describe Mantle::ContextManager do
     it "triggers consolidate_memory when reaching token_hardmax" do
   context_store = TrackingContextStore.new("System")
   memory_store = TrackingMemoryStore.new
-  manager = Mantle::ContextManager.new(
+  manager = Mantle::Storage::ContextManager.new(
     context_store: context_store,
     memory_store: memory_store,
     user_name: "User",
@@ -327,7 +327,7 @@ end
 it "triggers consolidate_memory when exceeding token_hardmax" do
   context_store = TrackingContextStore.new("System")
   memory_store = TrackingMemoryStore.new
-  manager = Mantle::ContextManager.new(
+  manager = Mantle::Storage::ContextManager.new(
     context_store: context_store,
     memory_store: memory_store,
     user_name: "User",
@@ -352,7 +352,7 @@ end
   it "prunes oldest messages to reach token_target" do
     context_store = TrackingContextStore.new("System")
     memory_store = TrackingMemoryStore.new
-    manager = Mantle::ContextManager.new(
+    manager = Mantle::Storage::ContextManager.new(
       context_store: context_store,
       memory_store: memory_store,
       user_name: "User",
@@ -373,7 +373,7 @@ end
   it "ingests pruned messages into memory_store as formatted strings" do
     context_store = TrackingContextStore.new("System")
     memory_store = TrackingMemoryStore.new
-    manager = Mantle::ContextManager.new(
+    manager = Mantle::Storage::ContextManager.new(
       context_store: context_store,
       memory_store: memory_store,
       user_name: "User",
@@ -395,7 +395,7 @@ end
   it "leaves token_target tokens remaining in context_store" do
     context_store = TrackingContextStore.new("System")
     memory_store = TrackingMemoryStore.new
-    manager = Mantle::ContextManager.new(
+    manager = Mantle::Storage::ContextManager.new(
       context_store: context_store,
       memory_store: memory_store,
       user_name: "User",
@@ -419,7 +419,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
       context_store.add_message("User", "Hello")
 
       # Act
@@ -436,7 +436,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("You are a helpful assistant.")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
+      manager = Mantle::Storage::ContextManager.new(
         context_store: context_store,
         memory_store: memory_store,
         user_name: "Alice",
@@ -480,7 +480,7 @@ end
       # Mock the layers sizes so we have something to check
       memory_store.layers = [["mock memory"], ["mock memory 2", "mock memory 3"]]
 
-      manager = Mantle::ContextManager.new(
+      manager = Mantle::Storage::ContextManager.new(
         context_store: context_store,
         memory_store: memory_store,
         user_name: "User",
@@ -516,7 +516,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -540,7 +540,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -565,7 +565,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -590,7 +590,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -612,7 +612,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -633,7 +633,7 @@ end
       it "strips thinking tags before storing in context during consolidation" do
   context_store = TrackingContextStore.new("System")
   memory_store = TrackingMemoryStore.new
-  manager = Mantle::ContextManager.new(
+  manager = Mantle::Storage::ContextManager.new(
     context_store: context_store,
     memory_store: memory_store,
     user_name: "User",
@@ -660,7 +660,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -683,7 +683,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -707,7 +707,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -729,7 +729,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -751,7 +751,7 @@ end
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
-        manager = Mantle::ContextManager.new(
+        manager = Mantle::Storage::ContextManager.new(
           context_store: context_store,
           memory_store: memory_store,
           user_name: "User",
@@ -776,7 +776,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("Base System Prompt")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       context_store.add_message("User", "Hello")
 
@@ -808,7 +808,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System Prompt")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       # Add memory
       memory_store.layers << ["[Memory] Previous conversation\n"]
@@ -843,7 +843,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       context_store.add_message("User", "Test message")
 
@@ -868,7 +868,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       context_store.add_message("User", "Hello")
 
@@ -885,7 +885,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       # Act - Call with ephemeral blocks
       view1 = manager.current_view(["Ephemeral instruction"])
@@ -912,7 +912,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       # Act
       manager.handle_user_message("Let's fix the bug.", invisible_append: "\n\n[System: Dev intent detected. Switch frames.]")
@@ -931,7 +931,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       # Act
       manager.handle_user_message("Test message", invisible_append: " [APPEND]")
@@ -951,7 +951,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       # Add several messages
       manager.handle_user_message("First message")
@@ -972,7 +972,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       # Act
       manager.handle_user_message("Normal message", invisible_append: nil)
@@ -987,7 +987,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(
+      manager = Mantle::Storage::ContextManager.new(
         context_store: context_store,
         memory_store: memory_store,
         user_name: "User",
@@ -1018,7 +1018,7 @@ end
       # Arrange
       old_context = TrackingContextStore.new("Old System")
       old_memory = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(old_context, old_memory, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(old_context, old_memory, "User", "Bot")
 
       # Add messages to old stores
       manager.handle_user_message("Old message")
@@ -1042,7 +1042,7 @@ end
       # Arrange
       old_context = TrackingContextStore.new("Old System")
       old_memory = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(old_context, old_memory, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(old_context, old_memory, "User", "Bot")
 
       manager.handle_user_message("Old message")
 
@@ -1061,7 +1061,7 @@ end
       # Arrange
       old_context = TrackingContextStore.new("Old System")
       old_memory = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(old_context, old_memory, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(old_context, old_memory, "User", "Bot")
 
       manager.handle_user_message("Old message")
 
@@ -1084,7 +1084,7 @@ end
       # Arrange
       old_context = TrackingContextStore.new("Old System")
       old_memory = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(old_context, old_memory, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(old_context, old_memory, "User", "Bot")
 
       # Set up a pending invisible append
       manager.handle_user_message("Test", invisible_append: " [PENDING]")
@@ -1110,7 +1110,7 @@ end
       # Arrange
       context_store = TrackingContextStore.new("Old System")
       memory_store = TrackingMemoryStore.new
-      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
       # Act
       manager.update_system_prompt("New System")
