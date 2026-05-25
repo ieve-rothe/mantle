@@ -20,6 +20,10 @@ module Mantle
       @current_num_messages = 0
     end
 
+    def update_system_prompt(new_prompt : String)
+      @system_prompt = new_prompt
+    end
+
     def current_num_tokens : Int32
       # Derived via current_view
       current_view.sum { |msg| msg["content"].size // 4 }
@@ -156,6 +160,11 @@ def clear
       role = normalize_role(label)
       @messages << {"role" => role, "content" => message}
       @current_num_messages = @messages.size
+      save_context_to_json
+    end
+
+    def update_system_prompt(new_prompt : String)
+      @system_prompt = new_prompt
       save_context_to_json
     end
 

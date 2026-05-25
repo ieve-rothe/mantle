@@ -162,6 +162,10 @@ module Mantle
       @context_store.clear
     end
 
+    def update_system_prompt(new_prompt : String)
+      @context_store.update_system_prompt(new_prompt)
+    end
+
     def stats : NamedTuple(
       context_tokens: Int32,
       context_softmax: Int32,

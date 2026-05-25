@@ -90,6 +90,22 @@ describe Mantle::EphemeralSlidingContextStore do
       view[0]["role"].should eq("system")
     end
   end
+
+  describe "#update_system_prompt" do
+    it "updates the system prompt in memory and reflects in current_view" do
+      # Arrange
+      store = Mantle::EphemeralSlidingContextStore.new("Old Prompt", 5)
+
+      # Act
+      store.update_system_prompt("New Prompt")
+
+      # Assert
+      store.system_prompt.should eq("New Prompt")
+      view = store.current_view
+      view[0]["role"].should eq("system")
+      view[0]["content"].should eq("New Prompt")
+    end
+  end
 end
 
 # ------------------------------------------------------------------------------
@@ -349,6 +365,30 @@ describe Mantle::JSONContextStore do
       # Check persistence
       json_content = JSON.parse(File.read(test_file))
       json_content["messages"].as_a.size.should eq(0)
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+
+  describe "#update_system_prompt" do
+    it "updates the system prompt and persists it to the JSON file" do
+      # Arrange
+      test_file = "/tmp/mantle_test_update_sys_prompt_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::JSONContextStore.new("Old Prompt", test_file)
+
+      # Act
+      store.update_system_prompt("New Prompt")
+
+      # Assert
+      store.system_prompt.should eq("New Prompt")
+      view = store.current_view
+      view[0]["role"].should eq("system")
+      view[0]["content"].should eq("New Prompt")
+
+      # Check persistence
+      json_content = JSON.parse(File.read(test_file))
+      json_content["system_prompt"].as_s.should eq("New Prompt")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)

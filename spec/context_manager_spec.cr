@@ -1104,3 +1104,19 @@ end
       user_msg.not_nil!["content"].should_not contain("[PENDING]")
     end
   end
+
+  describe "#update_system_prompt" do
+    it "delegates updating the system prompt to the context store" do
+      # Arrange
+      context_store = TrackingContextStore.new("Old System")
+      memory_store = TrackingMemoryStore.new
+      manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
+
+      # Act
+      manager.update_system_prompt("New System")
+
+      # Assert
+      context_store.system_prompt.should eq("New System")
+      manager.current_view[0]["content"].should eq("New System")
+    end
+  end
