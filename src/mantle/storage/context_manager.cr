@@ -181,8 +181,17 @@ module Mantle::Storage
 
     # Consolidates all conversation messages in the context store into long-term memory
     # and clears the context store (0 tokens of conversation history left).
-    def consolidate_all_to_memory
+    def consolidate_all_to_memory(is_frame_switch : Bool = false)
       Mantle.emit_status(:memory_consolidation)
+
+      num_messages = @context_store.current_num_messages
+      num_tokens = @context_store.current_num_tokens
+
+      if is_frame_switch
+        Mantle::Support::Log.info { "Frame switch triggered: Consolidating all #{num_messages} messages (#{num_tokens} tokens) of target topic context into memory cascade." }
+      else
+        Mantle::Support::Log.info { "Consolidating all #{num_messages} messages (#{num_tokens} tokens) of context into memory cascade." }
+      end
 
       # Prune everything down to 0 tokens of conversation history
       pruned_messages = @context_store.prune_to_tokens(0)
