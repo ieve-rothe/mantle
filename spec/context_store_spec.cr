@@ -394,4 +394,61 @@ describe Mantle::JSONContextStore do
       File.delete(test_file) if File.exists?(test_file)
     end
   end
+
+  describe "ephemeral system prompt mode" do
+    it "saves nil as the system prompt in the JSON file when persist_system_prompt is false" do
+      # Arrange
+      test_file = "/tmp/mantle_test_ephemeral_sys_prompt_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::JSONContextStore.new("Ephemeral System Prompt", test_file, persist_system_prompt: false)
+
+      # Act
+      store.add_message("User", "Hello")
+
+      # Assert - JSON file should contain null/nil for system_prompt
+      json_content = JSON.parse(File.read(test_file))
+      json_content["system_prompt"]?.try(&.raw).should be_nil
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "preserves memory-initialized system prompt on load if file contains nil" do
+      # Arrange
+      test_file = "/tmp/mantle_test_ephemeral_sys_prompt_load_#{Time.utc.to_unix_ms}.json"
+      
+      # Save an ephemeral store context first (so system_prompt is nil/null in file)
+      store1 = Mantle::JSONContextStore.new("Initial Temp Prompt", test_file, persist_system_prompt: false)
+      store1.add_message("User", "Hello")
+
+      # Act - Re-load using new instance with a different initialized prompt, persist_system_prompt: false
+      store2 = Mantle::JSONContextStore.new("New Memory Prompt", test_file, persist_system_prompt: false)
+
+      # Assert - The prompt should be the one passed to the constructor, not overridden to nil
+      store2.system_prompt.should eq("New Memory Prompt")
+      store2.current_view[0]["content"].should eq("New Memory Prompt")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "does not persist system prompt even after update_system_prompt is called" do
+      # Arrange
+      test_file = "/tmp/mantle_test_ephemeral_sys_prompt_update_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::JSONContextStore.new("Initial", test_file, persist_system_prompt: false)
+
+      # Act
+      store.update_system_prompt("New Dynamic Prompt")
+
+      # Assert - Updated in memory
+      store.system_prompt.should eq("New Dynamic Prompt")
+      store.current_view[0]["content"].should eq("New Dynamic Prompt")
+
+      # Assert - Still null in file
+      json_content = JSON.parse(File.read(test_file))
+      json_content["system_prompt"]?.try(&.raw).should be_nil
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
 end

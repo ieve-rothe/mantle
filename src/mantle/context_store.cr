@@ -129,17 +129,19 @@ def clear
 
   # ----------------------------------------------------------------------------
   class JSONContextStore < Mantle::ContextStore
+    property persist_system_prompt : Bool
+
     # Data transfer object
     private struct FileData
       include JSON::Serializable
-      property system_prompt : String
+      property system_prompt : String?
       property messages : Array(Hash(String, String))
 
-      def initialize(@system_prompt : String, @messages : Array(Hash(String, String)))
+      def initialize(@system_prompt : String?, @messages : Array(Hash(String, String)))
       end
     end
 
-    def initialize(system_prompt : String, context_file : String)
+    def initialize(system_prompt : String, context_file : String, @persist_system_prompt : Bool = true)
       super(system_prompt)
       @messages = Deque(Hash(String, String)).new
       @context_file = context_file
@@ -170,7 +172,8 @@ def clear
 
     def save_context_to_json : Nil
       begin
-        data = FileData.new(@system_prompt, @messages.to_a)
+        prompt_to_save = @persist_system_prompt ? @system_prompt : nil
+        data = FileData.new(prompt_to_save, @messages.to_a)
         File.write(@context_file, data.to_json)
       rescue e : File::Error
         Mantle::Log.error { "Failed to save context to #{@context_file}: #{e.message}" }
@@ -180,7 +183,7 @@ def clear
     def load_context_from_json
       begin
         data = FileData.from_json(File.read(@context_file))
-        @system_prompt = data.system_prompt
+        @system_prompt = data.system_prompt || @system_prompt
         @messages.clear
         data.messages.each do |msg|
           # Validate roles when loading

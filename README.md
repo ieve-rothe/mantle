@@ -36,7 +36,7 @@ Mantle is a framework to abstract details of communication to LLMs away, to help
 
 2. Chat Flow with Context and Memory Management
 > See [example: chat flow](examples/02_chat_flow.cr)
-- **Context Store**: Tracks the ongoing back and forth conversation between the user and the bot. (Also the system prompt is at the very top of context memory). New messages are appended to be bottom. Stored in JSON. (`Mantle::JSONContextStore`)
+- **Context Store**: Tracks the ongoing back and forth conversation between the user and the bot. (Also the system prompt is at the very top of context memory). New messages are appended to the bottom. Stored in JSON (`Mantle::JSONContextStore`), with optional ephemeral system prompt support.
 - **Context Cascade and Memory Store**: To help avoid context dilution during long sessions or ongoing interactions, Mantle implements a summarization cascade with configurable thresholds based on a rough token counting heuristic. 
   - When context exceeds the `token_hardmax` target, we run an LLM flow using a `Mantle::Squishifiers` class method, asking the model to summarize enough messages to return us to `token_target`. Those messages are removed from context and moved to `Mantle::JSONLayeredMemoryStore`.
   - Memory stores themselves have a `layer_token_target` and `layer_token_hardmax`, so that when each memory layer reaches its threshold, those memory entries are sent through the Squishifier and cascade to the next layer of memory. (Currently internally hardcoded to a maximum of 50 layers. Surely 50 ought to be enough for anyone.)
@@ -71,6 +71,10 @@ Mantle provides several advanced primitives designed for cognitive operating sys
 - **Ephemeral System Blocks**: Dynamically inject temporary system messages (K-Lines, "Demon" instructions) into a single LLM call without persisting to storage. Useful for frame switching and context manipulation.
 
 - **Invisible Appends**: Append backend routing instructions to user messages that appear in the LLM context but not in long-term memory. Prevents metadata from cluttering conversation history.
+
+- **Dynamic System Prompt Updates**: Update the system prompt on any `ContextStore` or through the `ContextManager` mid-session (e.g. `@context_manager.update_system_prompt(new_prompt)`) to adapt context to changing cognitive tasks.
+
+- **System Prompt Ephemeral Mode**: Configure `JSONContextStore` with `persist_system_prompt: false` to allow the application layer or Hypervisor to manage system prompts dynamically in memory without saving them to the JSON context files, preventing old system prompts from being restored on reload.
 
 - **Hot-Swapping State Stores**: Safely replace ContextStore and MemoryStore mid-session for "hard shifts" between personas or conversation frames. Ensures data integrity through proper flushing.
 

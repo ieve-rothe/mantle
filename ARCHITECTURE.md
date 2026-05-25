@@ -60,17 +60,18 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 **Purpose**: Manages ongoing conversation context (short-term memory only, not identity or long-term memory)
 
 **Implementations**:
-- `EphemeralSlidingContextStore`: Maintains fixed number of recent messages in memory
-- `JSONContextStore`: Persists sliding window to JSON file for cross-session continuity
+- `EphemeralSlidingContextStore`: Maintains fixed number of recent messages in memory.
+- `JSONContextStore`: Persists sliding window to JSON file for cross-session continuity. Supports `persist_system_prompt` option (saves `nil` to the JSON schema if set to `false`, preserving in-memory updates).
 
 **API**:
-- `add_message(label : String, message : String)`: Add message to context
-- `current_view : Array(Hash(String, String))`: Get current context as message array
-- `prune(num : Int32)`: Manually remove oldest messages (JSONContextStore only)
+- `add_message(label : String, message : String)`: Add message to context.
+- `update_system_prompt(new_prompt : String)`: Change the active system prompt dynamically. Polimorphically implemented to persist (in `JSONContextStore`) or update in-memory only (in `EphemeralSlidingContextStore`).
+- `current_view : Array(Hash(String, String))`: Get current context as message array.
+- `prune(num : Int32)`: Manually remove oldest messages (JSONContextStore only).
 
 **Message Format**: `{"role" => "user|assistant|system", "content" => "..."}`
 
-**Design**: Multiple implementations with different retention strategies allow applications to choose appropriate context management
+**Design**: Multiple implementations with different retention strategies allow applications to choose appropriate context management. Optional/nilable `system_prompt` field in JSON context schema ensures backward compatibility and supports dynamic/ephemeral prompts.
 
 ---
 
@@ -112,6 +113,12 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 - Flushes pending memory ingestion before swapping to ensure data integrity
 - Clears pending invisible appends during transition
 - Enables "hard shifts" for frame switching or persona changes in cognitive architectures
+
+*Dynamic System Prompt Updates* (`update_system_prompt(new_prompt : String)`):
+- Instantly update the current system prompt mid-session
+- Delegated to the active `ContextStore` to update (and persist if configured)
+- Allows dynamically shifting cognitive priorities (identity, demons, mementos) on a per-turn basis without reloading or swapping the entire context store
+
 
 ---
 
