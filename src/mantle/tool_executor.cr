@@ -12,8 +12,9 @@ module Mantle
   class ToolResult
     property tool_call_id : String
     property result : String
+    property formatted_override : String?
 
-    def initialize(@tool_call_id : String, @result : String)
+    def initialize(@tool_call_id : String, @result : String, @formatted_override : String? = nil)
     end
   end
 
@@ -39,9 +40,22 @@ module Mantle
     def execute_all(tool_calls : Array(ToolCall), available_tool_names : Array(String)? = nil) : Array(ToolResult)
       tool_calls.map do |call|
         result_json = execute_single(call, available_tool_names)
+
+        # Try to parse formatted_override from the result JSON
+        formatted_override = nil
+        begin
+          parsed_result = JSON.parse(result_json)
+          if parsed_result.as_h? && (override = parsed_result.as_h["formatted_override"]?)
+            formatted_override = override.as_s
+          end
+        rescue
+          # If parsing fails, just ignore and use nil
+        end
+
         ToolResult.new(
           tool_call_id: call.id,
-          result: result_json
+          result: result_json,
+          formatted_override: formatted_override
         )
       end
     end

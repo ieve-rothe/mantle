@@ -19,6 +19,9 @@ module Mantle
     property token_hardmax : Int32
     property strip_thinking_tags : Bool
 
+    # Pending invisible append to be applied on next current_view call
+    @pending_invisible_append : String? = nil
+
     def initialize(@context_store : ContextStore,
                    @memory_store : JSONLayeredMemoryStore,
                    @user_name : String,
@@ -29,33 +32,64 @@ module Mantle
                    @strip_thinking_tags : Bool = false)
     end
 
-    def current_view : Array(Hash(String, String))
+    def current_view(ephemeral_blocks : Array(String) = [] of String) : Array(Hash(String, String))
       messages = [] of Hash(String, String)
 
-      # Build system message combining system prompt and memory
-      system_content = @context_store.system_prompt
+      # 1. Base system prompt (without memory yet)
+      base_system_content = @context_store.system_prompt
+      unless base_system_content.empty?
+        messages << {"role" => "system", "content" => base_system_content}
+      end
+
+      # 2. Ephemeral blocks as separate system messages
+      ephemeral_blocks.each do |block|
+        messages << {"role" => "system", "content" => block}
+      end
+
+      # 3. Memory view as system message
       memory_view = @memory_store.current_view
-
       if !memory_view.empty?
-        system_content += "\n\n" + memory_view
+        messages << {"role" => "system", "content" => memory_view}
       end
 
-      # Add system message if there's content
-      unless system_content.empty?
-        messages << {"role" => "system", "content" => system_content}
-      end
-
-      # Get conversation messages from context_store (skip the system message it includes)
+      # 4. Get conversation messages from context_store (skip the system message it includes)
       context_messages = @context_store.current_view
       conversation_messages = context_messages.select { |msg| msg["role"] != "system" }
       messages.concat(conversation_messages)
 
+      # 5. Apply pending invisible append to the last user message if present
+      if pending_append = @pending_invisible_append
+        # Find the index of the last user message
+        last_user_index = nil
+        messages.each_with_index do |msg, idx|
+          if msg["role"] == "user"
+            last_user_index = idx
+          end
+        end
+
+        if last_user_index
+          # Create a new hash with the appended content (don't modify original)
+          original_msg = messages[last_user_index]
+          messages[last_user_index] = {
+            "role"    => original_msg["role"],
+            "content" => original_msg["content"] + pending_append,
+          }
+        end
+
+        # Clear the pending append after applying it
+        @pending_invisible_append = nil
+      end
+
       return messages
     end
 
-    def handle_user_message(msg : String)
+    def handle_user_message(msg : String, invisible_append : String? = nil)
       # Always use "User" label for normalization, not custom user_name
+      # Only store the visible msg to context_store
       @context_store.add_message("User", msg)
+
+      # Store the invisible append for next current_view call
+      @pending_invisible_append = invisible_append
 
       # Later - Don't write tests for these future functions yet.
       # potentially check for special context command flags?
@@ -152,6 +186,28 @@ module Mantle
         memory_layers:      layer_count,
         memory_layer_stats: memory_stats,
       }
+    end
+
+    # Hot-swap the context and memory stores safely
+    # Flushes pending data from old stores before swapping
+    def flush_and_swap(new_context : ContextStore, new_memory : JSONLayeredMemoryStore)
+      # 1. Force the outgoing memory store to process any remaining ingest_pending items
+      if !@memory_store.ingest_pending.empty?
+        @memory_store.ingest([] of String)  # Trigger cascade without adding new items
+      end
+
+      # 2. Ensure all data is flushed to disk
+      # (save_memories_to_json is called by cascade, but call it explicitly to be safe)
+      @memory_store.ingest([] of String)
+
+      # 3. Reassign to new stores
+      @context_store = new_context
+      @memory_store = new_memory
+
+      # 4. Clear any pending invisible append from old context
+      @pending_invisible_append = nil
+
+      # Token tracking is delegated to the stores, so no need to reset it manually
     end
 
     private def strip_thinking(msg : String) : String

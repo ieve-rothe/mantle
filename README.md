@@ -63,6 +63,23 @@ Mantle is a framework to abstract details of communication to LLMs away, to help
   - `file_backup_count`: Mantle automatically creates a backup of any file the bot writes to in the background, and will automatically maintain N files up to this integer param, deleting N+1 on next write.
 - **Tool iteration**: ``Mantle::ToolEnabledChatFlow` accepts a `max_iterations` parameter. When the model initiates a tool call, we will enter a loop up to this maximum number. If we get a text response back from the model, we end the loop and return the response. If the model initiates another tool call, we'll keep running tool calls up to the maximum. If we keep running tool calls up to the maximum, we provide a final prompt to the model without tools available asking it to provide a text response.
 
+4. Advanced Features for Cognitive Architectures
+> See `ARCHITECTURE.md` for detailed documentation
+
+Mantle provides several advanced primitives designed for cognitive operating systems and multi-agent architectures:
+
+- **Ephemeral System Blocks**: Dynamically inject temporary system messages (K-Lines, "Demon" instructions) into a single LLM call without persisting to storage. Useful for frame switching and context manipulation.
+
+- **Invisible Appends**: Append backend routing instructions to user messages that appear in the LLM context but not in long-term memory. Prevents metadata from cluttering conversation history.
+
+- **Hot-Swapping State Stores**: Safely replace ContextStore and MemoryStore mid-session for "hard shifts" between personas or conversation frames. Ensures data integrity through proper flushing.
+
+- **Custom Tool Formatting**: Tool callbacks can return `formatted_override` to control how results appear in context, maintaining persona continuity when subagents need custom formatting.
+
+- **Subagent Recursion Kill-Switch**: Framework-level depth tracking (`MAX_SUBAGENT_DEPTH = 1`) automatically strips tools at depth boundaries to prevent infinite recursion, runaway costs, and context collapse.
+
+These features maintain Mantle's core principle: the framework provides agnostic *pipes*, while applications control the *content* and *timing*.
+
 ## Development
 
 1. Run tests with `crystal spec`.

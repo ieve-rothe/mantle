@@ -87,9 +87,31 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 **Responsibilities**:
 - Bridges ContextStore (short-term) and MemoryStore (long-term)
-- Provides `handle_user_message(msg : String)` and `handle_bot_message(msg : String, check_consolidation : Bool = true)` convenience methods
+- Provides `handle_user_message(msg : String, invisible_append : String? = nil)` and `handle_bot_message(msg : String, check_consolidation : Bool = true)` convenience methods
 - Assembles complete context view (system prompt + memory + conversation)
-- Exposes `stats` method to access real-time diagnostic information on context window usage and internal memory layers capacity.
+- Exposes `stats` method to access real-time diagnostic information on context window usage and internal memory layers capacity
+
+**Advanced Features**:
+
+*Ephemeral System Blocks* (`current_view(ephemeral_blocks : Array(String) = [] of String)`):
+- Dynamically inject system messages into the context view without persisting to storage
+- Useful for K-Lines, "Demon" instructions, or temporary context modifications
+- Assembly order: base system prompt → ephemeral blocks → memory → context
+- Each ephemeral block becomes a separate system message
+- Applied only for the duration of a single LLM call
+
+*Invisible Appends* (`handle_user_message(msg, invisible_append: "...")`):
+- Append system instructions to user messages that appear in the LLM context but not in storage
+- Example: `User: "Let's fix the bug." \n\n [System: Dev intent detected. Switch frames.]`
+- Prevents backend routing metadata from cluttering long-term memory
+- Applied to the last user message in `current_view`, then automatically cleared
+- Used exactly once per call to avoid accidental persistence
+
+*Hot-Swapping State Stores* (`flush_and_swap(new_context, new_memory)`):
+- Safely replace ContextStore and MemoryStore mid-session without losing data
+- Flushes pending memory ingestion before swapping to ensure data integrity
+- Clears pending invisible appends during transition
+- Enables "hard shifts" for frame switching or persona changes in cognitive architectures
 
 ---
 
@@ -171,7 +193,14 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 **Key Classes**:
 - `ToolExecutor`: Routes tool calls to appropriate handlers
-- `ToolResult`: Links tool call ID to execution result
+- `ToolResult`: Links tool call ID to execution result, with optional `formatted_override`
+
+**Custom Tool Formatting**:
+- Tool callbacks can return JSON with an optional `formatted_override` field
+- When present, this overrides the default result formatting for context storage
+- Example: `{"content": "...", "formatted_override": "<inner_monologue>Emma consulted her notes</inner_monologue>"}`
+- Useful for maintaining persona continuity when subagents need to return formatted results
+- The override is used exactly as provided, bypassing default stringification
 
 **Routing Logic**:
 - Checks function name against built-in tools list (`["read_file", "list_directory", "notify_send", "write_file"]`)
@@ -206,20 +235,34 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)
 
 **Purpose**: Extends ChatFlow with automatic tool calling loop
 
+**Constructor Parameters**:
+- `context_manager`: ContextManager instance
+- `client`: Client instance
+- `logger`: Logger instance
+- `depth`: Subagent nesting depth (default: 0)
+
 **Tool Call Loop**:
 1. Sends user message with merged tool definitions to LLM
 2. If response contains tool calls: execute tools, add natural language results to context, continue
 3. If response contains only text: complete and return to application
 4. Enforces `max_iterations` limit (default: 10) to prevent infinite loops
 
-**Parameters**:
+**Run Parameters**:
 - `builtins`: Array of `BuiltinTool` enum values to enable
 - `custom_tools`: Array of `Tool` definitions
 - `tool_callback`: Proc for executing custom tools
 - `builtin_config`: Filesystem safety configuration
 - `max_iterations`: Safety limit
+- `ephemeral_blocks`: Temporary system messages (passed through to ContextManager)
 
 **Context Integration**: All tool interactions stored as natural language in conversation history
+
+**Subagent Recursion Kill-Switch**:
+- `MAX_SUBAGENT_DEPTH = 1`: Framework constant preventing runaway recursion
+- When `depth >= MAX_SUBAGENT_DEPTH`, tools are automatically stripped from LLM calls
+- Forces text-only responses at depth boundaries, breaking recursive chains
+- Applications should create nested flows with `depth + 1` when spawning subagents
+- Prevents infinite recursion, runaway API costs, and context collapse
 
 ---
 

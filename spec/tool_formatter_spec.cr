@@ -67,20 +67,24 @@ describe "Mantle Tool Formatter" do
 
   describe "format_tool_result" do
     it "formats successful tool result" do
-      result = Mantle::ToolFormatter.format_tool_result(
-        "call_123",
-        %({"success":true,"content":"Hello, World!"})
+      tool_result = Mantle::ToolResult.new(
+        tool_call_id: "call_123",
+        result: %({"success":true,"content":"Hello, World!"})
       )
+
+      result = Mantle::ToolFormatter.format_tool_result(tool_result)
 
       result.should contain("call_123")
       result.should contain("Hello, World!")
     end
 
     it "formats error tool result" do
-      result = Mantle::ToolFormatter.format_tool_result(
-        "call_456",
-        %({"error":"File not found"})
+      tool_result = Mantle::ToolResult.new(
+        tool_call_id: "call_456",
+        result: %({"error":"File not found"})
       )
+
+      result = Mantle::ToolFormatter.format_tool_result(tool_result)
 
       result.should contain("call_456")
       result.should contain("Error")
@@ -89,20 +93,55 @@ describe "Mantle Tool Formatter" do
 
     it "truncates very long results" do
       long_content = "A" * 1000
-      result = Mantle::ToolFormatter.format_tool_result(
-        "call_789",
-        %({"content":"#{long_content}"})
+      tool_result = Mantle::ToolResult.new(
+        tool_call_id: "call_789",
+        result: %({"content":"#{long_content}"})
       )
+
+      result = Mantle::ToolFormatter.format_tool_result(tool_result)
 
       result.size.should be < long_content.size + 100
       result.should contain("...")
+    end
+
+    it "uses formatted_override when present" do
+      tool_result = Mantle::ToolResult.new(
+        tool_call_id: "call_override",
+        result: %({"content":"Raw result"}),
+        formatted_override: "<inner_monologue>Emma consulted her notes</inner_monologue>"
+      )
+
+      result = Mantle::ToolFormatter.format_tool_result(tool_result)
+
+      # Should use the formatted_override exactly
+      result.should eq("<inner_monologue>Emma consulted her notes</inner_monologue>")
+      result.should_not contain("Raw result")
+      result.should_not contain("call_override")
+    end
+
+    it "uses default formatting when formatted_override is nil" do
+      tool_result = Mantle::ToolResult.new(
+        tool_call_id: "call_default",
+        result: %({"content":"Standard output"}),
+        formatted_override: nil
+      )
+
+      result = Mantle::ToolFormatter.format_tool_result(tool_result)
+
+      # Should use default formatting
+      result.should contain("call_default")
+      result.should contain("Standard output")
     end
 
     describe "truncate_string boundary cases" do
       it "does not truncate when length is exactly MAX_RESULT_LENGTH" do
         max_len = Mantle::ToolFormatter::MAX_RESULT_LENGTH
         content = "A" * max_len
-        result = Mantle::ToolFormatter.format_tool_result("call_1", %({"content":"#{content}"}))
+        tool_result = Mantle::ToolResult.new(
+          tool_call_id: "call_1",
+          result: %({"content":"#{content}"})
+        )
+        result = Mantle::ToolFormatter.format_tool_result(tool_result)
 
         result.should contain(content)
         result.should_not contain("...")
@@ -111,7 +150,11 @@ describe "Mantle Tool Formatter" do
       it "truncates when length is MAX_RESULT_LENGTH + 1" do
         max_len = Mantle::ToolFormatter::MAX_RESULT_LENGTH
         content = "A" * (max_len + 1)
-        result = Mantle::ToolFormatter.format_tool_result("call_1", %({"content":"#{content}"}))
+        tool_result = Mantle::ToolResult.new(
+          tool_call_id: "call_1",
+          result: %({"content":"#{content}"})
+        )
+        result = Mantle::ToolFormatter.format_tool_result(tool_result)
 
         result.should contain("...")
         # Should have max_len - 3 characters followed by ...
@@ -128,7 +171,11 @@ describe "Mantle Tool Formatter" do
         # Let's add a test for a result that is not JSON and thus hits the rescue block
 
         long_raw = "B" * (Mantle::ToolFormatter::MAX_RESULT_LENGTH + 10)
-        result = Mantle::ToolFormatter.format_tool_result("call_raw", long_raw)
+        tool_result = Mantle::ToolResult.new(
+          tool_call_id: "call_raw",
+          result: long_raw
+        )
+        result = Mantle::ToolFormatter.format_tool_result(tool_result)
         result.should contain("...")
         result.should contain("B" * (Mantle::ToolFormatter::MAX_RESULT_LENGTH - 3))
       end

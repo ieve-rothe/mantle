@@ -42,7 +42,17 @@ module Mantle
 
     # Format a tool result as natural language
     # Example: "Result from call_123: Hello, World!"
-    def self.format_tool_result(tool_call_id : String, result : String) : String
+    # If the ToolResult has a formatted_override, use it instead of default formatting
+    def self.format_tool_result(tool_result : ToolResult) : String
+      # If formatted_override is present, use it exactly as provided
+      if formatted_override = tool_result.formatted_override
+        return formatted_override
+      end
+
+      # Otherwise, use default formatting
+      tool_call_id = tool_result.tool_call_id
+      result = tool_result.result
+
       # Try to parse result JSON and extract relevant info
       begin
         result_json = JSON.parse(result)

@@ -311,3 +311,154 @@ describe "Mantle ToolEnabledChatFlow" do
     end
   end
 end
+
+describe "Subagent depth kill-switch" do
+  it "allows tool execution at depth 0" do
+    # Arrange
+    context_store = DummyContextStore.new
+    context_manager = DummyContextManager.new(context_store)
+    
+    tool_call = Mantle::ToolCall.new(
+      id: "call_1",
+      type: "function",
+      function: Mantle::ToolCallFunction.new(
+        name: "get_time",
+        arguments: "{}"
+      )
+    )
+    
+    client = ToolCallMockClient.new([
+      Mantle::Response.new(content: nil, tool_calls: [tool_call]),
+      Mantle::Response.new(content: "The time is 3:00 PM", tool_calls: nil)
+    ])
+    
+    logger = DummyLogger.new
+    flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 0)
+    
+    # Act
+    tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
+      %({"content":"Current time: 3:00 PM"})
+    }
+    
+    custom_tools = [Mantle::Tool.new(
+      function: Mantle::FunctionDefinition.new(
+        name: "get_time",
+        description: "Get current time",
+        parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition, required: [] of String)
+      )
+    )]
+    
+    flow.run(
+      "What time is it?",
+      custom_tools: custom_tools,
+      tool_callback: tool_callback,
+      on_response: ->(response : Mantle::Response) {}
+    )
+    
+    # Assert - Tool should have been executed
+    context_store.messages.any? { |msg| msg["role"] == "tool" }.should be_true
+  end
+  
+  it "strips tools at depth 1 (MAX_SUBAGENT_DEPTH)" do
+    # Arrange
+    context_store = DummyContextStore.new
+    context_manager = DummyContextManager.new(context_store)
+    
+    # Client should receive NO tools in the execute call
+    client = DummyClient.new
+    
+    logger = DummyLogger.new
+    flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 1)
+    
+    # Act
+    custom_tools = [Mantle::Tool.new(
+      function: Mantle::FunctionDefinition.new(
+        name: "get_time",
+        description: "Get current time",
+        parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition, required: [] of String)
+      )
+    )]
+    
+    flow.run(
+      "What time is it?",
+      custom_tools: custom_tools,
+      tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { "" },
+      on_response: ->(response : Mantle::Response) {}
+    )
+    
+    # Assert - No tool calls should have been executed (tools were stripped)
+    context_store.messages.none? { |msg| msg["role"] == "tool" }.should be_true
+  end
+  
+  it "strips tools at depth 2 (beyond MAX_SUBAGENT_DEPTH)" do
+    # Arrange
+    context_store = DummyContextStore.new
+    context_manager = DummyContextManager.new(context_store)
+    
+    client = DummyClient.new
+    logger = DummyLogger.new
+    flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 2)
+    
+    # Act
+    custom_tools = [Mantle::Tool.new(
+      function: Mantle::FunctionDefinition.new(
+        name: "spawn_agent",
+        description: "Spawn a subagent",
+        parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition, required: [] of String)
+      )
+    )]
+    
+    flow.run(
+      "Spawn an agent",
+      custom_tools: custom_tools,
+      tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { "" },
+      on_response: ->(response : Mantle::Response) {}
+    )
+    
+    # Assert - No tool calls should have been executed
+    context_store.messages.none? { |msg| msg["role"] == "tool" }.should be_true
+  end
+  
+  it "defaults to depth 0 when not specified" do
+    # Arrange
+    context_store = DummyContextStore.new
+    context_manager = DummyContextManager.new(context_store)
+    
+    tool_call = Mantle::ToolCall.new(
+      id: "call_1",
+      type: "function",
+      function: Mantle::ToolCallFunction.new(
+        name: "test_tool",
+        arguments: "{}"
+      )
+    )
+    
+    client = ToolCallMockClient.new([
+      Mantle::Response.new(content: nil, tool_calls: [tool_call]),
+      Mantle::Response.new(content: "Done", tool_calls: nil)
+    ])
+    
+    logger = DummyLogger.new
+    # Don't pass depth parameter - should default to 0
+    flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+    
+    # Act
+    custom_tools = [Mantle::Tool.new(
+      function: Mantle::FunctionDefinition.new(
+        name: "test_tool",
+        description: "Test tool",
+        parameters: Mantle::ParametersSchema.new(properties: {} of String => Mantle::PropertyDefinition, required: [] of String)
+      )
+    )]
+    
+    flow.run(
+      "Test",
+      custom_tools: custom_tools,
+      tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { %({"success":true}) },
+      on_response: ->(response : Mantle::Response) {}
+    )
+    
+    # Assert - Tools should work at default depth 0
+    context_store.messages.any? { |msg| msg["role"] == "tool" }.should be_true
+  end
+end
