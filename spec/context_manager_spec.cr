@@ -1120,3 +1120,25 @@ end
       manager.current_view[0]["content"].should eq("New System")
     end
   end
+
+  describe "#consolidate_all_to_memory" do
+    it "fully prunes all messages and ingests them into memory store" do
+      # Arrange
+      context_store = TrackingContextStore.new("System")
+      memory_store = TrackingMemoryStore.new
+      manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
+
+      context_store.add_message("User", "First")
+      context_store.add_message("Bot", "Second")
+
+      # Act
+      manager.consolidate_all_to_memory
+
+      # Assert
+      context_store.messages.size.should eq(0)
+      memory_store.ingested_messages.size.should eq(1)
+      memory_store.ingested_messages[0].size.should eq(2)
+      memory_store.ingested_messages[0][0].should contain("[User] First")
+      memory_store.ingested_messages[0][1].should contain("[Bot] Second")
+    end
+  end

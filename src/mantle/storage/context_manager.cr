@@ -179,6 +179,27 @@ module Mantle::Storage
       end
     end
 
+    # Consolidates all conversation messages in the context store into long-term memory
+    # and clears the context store (0 tokens of conversation history left).
+    def consolidate_all_to_memory
+      Mantle.emit_status(:memory_consolidation)
+
+      # Prune everything down to 0 tokens of conversation history
+      pruned_messages = @context_store.prune_to_tokens(0)
+
+      if pruned_messages && pruned_messages.size >= 1
+        # Convert message hashes to formatted strings for memory store
+        formatted_messages = pruned_messages.map do |msg|
+          role_label = msg["role"] == "user" ? @user_name : @bot_name
+          "[#{role_label}] #{msg["content"]}\n"
+        end
+        @memory_store.ingest(formatted_messages)
+      end
+
+      # Clear context store to be absolutely sure it is clean
+      @context_store.clear
+    end
+
     # Clears the active context store.
     def clear_context
       @context_store.clear
