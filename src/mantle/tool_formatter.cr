@@ -6,13 +6,19 @@ require "./client"
 require "json"
 
 module Mantle
-  # Formats tool calls and results as natural language for context storage
-  # Converts structured tool interactions into human-readable text
+  # Formats tool calls and results as natural language for context storage.
+  #
+  # Converts structured tool interactions into human-readable text.
   module ToolFormatter
+    # Represents the maximum length of a formatted tool result before it gets truncated.
     MAX_RESULT_LENGTH = 500
 
-    # Format a single tool call as natural language
-    # Example: "Called read_file(file_path: 'test.txt')"
+    # Formats a single *tool_call* as natural language.
+    #
+    # ```
+    # # Example output format:
+    # "Called read_file(file_path: \"test.txt\")"
+    # ```
     def self.format_tool_call(tool_call : ToolCall) : String
       function_name = tool_call.function.name
       arguments = tool_call.function.arguments
@@ -40,9 +46,15 @@ module Mantle
       end
     end
 
-    # Format a tool result as natural language
-    # Example: "Result from call_123: Hello, World!"
-    # If the ToolResult has a formatted_override, use it instead of default formatting
+    # Formats a *tool_result* as natural language.
+    #
+    # If the *tool_result* has a `ToolResult#formatted_override`, that override is returned exactly.
+    # Otherwise, it parses the JSON result to create a standard output string:
+    #
+    # ```
+    # # Example default output:
+    # "Result from call_123: Hello, World!"
+    # ```
     def self.format_tool_result(tool_result : ToolResult) : String
       # If formatted_override is present, use it exactly as provided
       if formatted_override = tool_result.formatted_override
@@ -85,8 +97,9 @@ module Mantle
       end
     end
 
-    # Format assistant message that may contain content and/or tool calls
-    # Returns natural language representation suitable for context storage
+    # Formats an assistant message containing *content* and *tool_calls*.
+    #
+    # Returns a natural language representation suitable for context storage.
     def self.format_assistant_message_with_tool_calls(content : String?, tool_calls : Array(ToolCall)) : String
       parts = [] of String
 
@@ -105,15 +118,14 @@ module Mantle
       parts.join(" | ")
     end
 
-    # Helper: Format a JSON::Any value for display
+    # :nodoc:
     private def self.format_json_value(value : JSON::Any) : String
       String.build do |io|
         format_json_value(value, io)
       end
     end
 
-    # Helper: Format a JSON::Any value for display directly to an IO buffer
-    # This avoids extra string allocations for each value being formatted.
+    # :nodoc:
     private def self.format_json_value(value : JSON::Any, io : IO) : Nil
       case raw = value.raw
       when String
@@ -125,7 +137,7 @@ module Mantle
       end
     end
 
-    # Helper: Truncate string to max length with ellipsis
+    # :nodoc:
     private def self.truncate_string(str : String, max_length : Int32) : String
       return str if str.size <= max_length
 

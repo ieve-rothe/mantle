@@ -5,57 +5,75 @@
 require "json"
 
 module Mantle
-  # Level 4: Individual property definitions for function parameters
-  # Describes a single parameter: its type and what it represents
+  # Defines an individual property within a function's parameters schema.
+  #
+  # Describes a single parameter, including its type and what it represents.
   struct PropertyDefinition
     include JSON::Serializable
 
-    property type : String        # e.g., "string", "integer", "boolean"
-    property description : String # Human-readable description
+    # Represents the type of the property (e.g., "string", "integer", "boolean").
+    property type : String
 
+    # Represents the human-readable description of the property.
+    property description : String
+
+    # Creates a property definition with the specified *type* and *description*.
     def initialize(@type : String, @description : String)
     end
   end
 
-  # Level 3: Parameters schema for function arguments
-  # Defines the structure of arguments a function expects
+  # Defines the schema structure of arguments a function expects.
   struct ParametersSchema
     include JSON::Serializable
 
-    property type : String = "object" # Always "object" for parameter schemas
+    # Represents the type of the schema, which is always "object" for parameter schemas.
+    property type : String = "object"
+
+    # Represents the hash mapping parameter names to their `PropertyDefinition` values.
     property properties : Hash(String, PropertyDefinition)
 
-    # Optional array of required parameter names
-    # If a property name is in here, the LLM must provide it when calling the tool
+    # Represents the optional list of required parameter names.
+    #
+    # If a property name is present in this list, the LLM must provide it when calling the tool.
     @[JSON::Field(emit_null: false)]
     property required : Array(String)?
 
+    # Creates a parameters schema with the specified *properties* and *required* list.
     def initialize(@properties : Hash(String, PropertyDefinition), @required : Array(String)? = nil)
     end
   end
 
-  # Level 2: Function definition
-  # Describes a callable function with its name, purpose, and parameters
+  # Defines a callable function, containing its name, description, and parameters schema.
   struct FunctionDefinition
     include JSON::Serializable
 
-    property name : String                 # Function identifier
-    property description : String          # What the function does
-    property parameters : ParametersSchema # What arguments it accepts
+    # Represents the function identifier.
+    property name : String
 
+    # Represents the description of what the function does.
+    property description : String
+
+    # Represents the `ParametersSchema` defining what arguments the function accepts.
+    property parameters : ParametersSchema
+
+    # Creates a function definition with the specified *name*, *description*, and *parameters*.
     def initialize(@name : String, @description : String, @parameters : ParametersSchema)
     end
   end
 
-  # Level 1: Tool wrapper
-  # Top-level container for tools sent to the LLM API
-  # APIs expect an array of tools, where each tool specifies its type
+  # Represents a container wrapper for tools sent to the LLM API.
+  #
+  # LLM APIs expect an array of tools, where each tool specifies its type.
   struct Tool
     include JSON::Serializable
 
-    property type : String = "function" # Always "function" for function tools
+    # Represents the tool type, which is always "function" for function tools.
+    property type : String = "function"
+
+    # Represents the `FunctionDefinition` defining the tool function.
     property function : FunctionDefinition
 
+    # Creates a tool wrapper around the specified *function*.
     def initialize(@function : FunctionDefinition)
     end
   end

@@ -5,9 +5,12 @@
 require "set"
 
 module Mantle
-  # Allow for consumer to register a callback for handling status updates.
+  # Allows the consumer to register a callback for handling status updates.
   class_property on_status_update : Proc(Symbol, Nil)?
 
+  # Emits a status update *flag* to the registered callback if one exists.
+  #
+  # Italicized parameter: *flag*
   def self.emit_status(flag : Symbol)
     on_status_update.try &.call(flag)
   end

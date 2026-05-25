@@ -9,51 +9,61 @@ require "./app_logger"
 require "./status"
 
 module Mantle
-  # ----------------------------------------------------------------------------
-  # Base class context store, not usable by itself.
+  # Represents the abstract base class for context stores, managing conversation context.
+  #
+  # A context store handles the ongoing chat history, allowing for persistence, formatting, and pruning.
   class ContextStore
+    # Represents the active system prompt.
     property system_prompt : String
+
+    # Represents the count of conversation messages currently in the store.
     property current_num_messages : Int32
 
+    # Creates a context store with the specified *system_prompt*.
     def initialize(system_prompt : String)
       @system_prompt = system_prompt
       @current_num_messages = 0
     end
 
+    # Updates the system prompt to *new_prompt*.
     def update_system_prompt(new_prompt : String)
       @system_prompt = new_prompt
     end
 
+    # Returns the estimated count of tokens in the store, derived via `#current_view`.
     def current_num_tokens : Int32
       # Derived via current_view
       current_view.sum { |msg| msg["content"].size // 4 }
     end
 
-    # Returns messages in chat format: Array(Hash(String, String))
-    # Each hash has "role" and "content" keys
+    # Returns messages in chat format: Array of hashes with `"role"` and `"content"` keys.
     def current_view : Array(Hash(String, String))
       # Implement in specific class
       [] of Hash(String, String)
     end
 
+    # Appends a new message to the store with the specified *label* and *message* content.
     def add_message(label : String, message : String)
       # Implement in specific class
     end
 
+    # Prunes messages until the total token count is under *target_tokens*, returning the list of pruned messages.
     def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
       # Implement in specific class.
       [] of Hash(String, String)
     end
 
+    # Prunes the oldest *num_to_prune* messages from the store.
     def prune(num_to_prune : Int32)
       # Implement in specific class.
     end
 
+    # Clears all conversation messages from the store.
     def clear
       # Implement in specific class.
     end
 
-    # Normalize label to valid chat role
+    # Normalizes a *label* to a valid chat role (e.g., `"user"`, `"assistant"`, `"system"`, `"tool"`).
     protected def normalize_role(label : String) : String
       normalized = label.downcase
       case normalized
@@ -70,7 +80,7 @@ module Mantle
       end
     end
 
-    # Validate that role is one of the allowed values
+    # Validates that the specified *role* is one of the allowed values.
     protected def validate_role(role : String)
       unless ["user", "assistant", "system", "tool"].includes?(role)
         raise ArgumentError.new("Invalid role: #{role}. Must be user, assistant, system, or tool.")
@@ -78,16 +88,19 @@ module Mantle
     end
   end
 
-  # ----------------------------------------------------------------------------
+  # Represents an ephemeral sliding window context store that keeps a fixed number of recent messages.
   class EphemeralSlidingContextStore < Mantle::ContextStore
-    property messages_to_keep
+    # Represents the maximum number of recent messages to keep in the sliding window.
+    property messages_to_keep : Int32
 
+    # Creates an ephemeral sliding context store with *system_prompt* and *messages_to_keep* count.
     def initialize(system_prompt : String, messages_to_keep : Int32)
       super(system_prompt)
       @messages_to_keep = messages_to_keep
       @messages = Deque(Hash(String, String)).new
     end
 
+    # Returns the messages in chat format, prepending the system prompt if present.
     def current_view : Array(Hash(String, String))
       result = [] of Hash(String, String)
       # Add system prompt as first message if present
@@ -97,6 +110,9 @@ module Mantle
       result
     end
 
+    # Adds a message to the context store, sliding the window to eject old messages if needed.
+    #
+    # Standardizes the *label* using `#normalize_role`.
     def add_message(label : String, message : String)
       role = normalize_role(label)
       @messages << {"role" => role, "content" => message}
@@ -104,34 +120,39 @@ module Mantle
       @current_num_messages = @messages.size
     end
 
-def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
-  pruned_messages = [] of Hash(String, String)
+    # Prunes oldest messages to keep the total token count under *target_tokens*.
+    #
+    # Returns the list of pruned messages.
+    def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+      pruned_messages = [] of Hash(String, String)
 
-  while current_num_tokens > target_tokens && !@messages.empty?
-    if @messages.first["role"] == "system" && @messages.size > 1
-      system_msg = @messages.shift
-      pruned_messages << @messages.shift
-      @messages.unshift(system_msg)
-    else
-      pruned_messages << @messages.shift
+      while current_num_tokens > target_tokens && !@messages.empty?
+        if @messages.first["role"] == "system" && @messages.size > 1
+          system_msg = @messages.shift
+          pruned_messages << @messages.shift
+          @messages.unshift(system_msg)
+        else
+          pruned_messages << @messages.shift
+        end
+      end
+
+      @current_num_messages = @messages.size
+      return pruned_messages
     end
-  end
 
-  @current_num_messages = @messages.size
-  return pruned_messages
-end
-
-def clear
+    # Clears all messages in the sliding store.
+    def clear
       @messages.clear
       @current_num_messages = 0
     end
   end
 
-  # ----------------------------------------------------------------------------
+  # Represents a context store that persists conversation state and system prompt to a JSON file.
   class JSONContextStore < Mantle::ContextStore
+    # Represents whether to persist the system prompt to the JSON file.
     property persist_system_prompt : Bool
 
-    # Data transfer object
+    # :nodoc:
     private struct FileData
       include JSON::Serializable
       property system_prompt : String?
@@ -141,6 +162,7 @@ def clear
       end
     end
 
+    # Creates a JSON-backed context store, loading context from *context_file* using the specified *system_prompt*.
     def initialize(system_prompt : String, context_file : String, @persist_system_prompt : Bool = true)
       super(system_prompt)
       @messages = Deque(Hash(String, String)).new
@@ -149,6 +171,7 @@ def clear
       load_context_from_json
     end
 
+    # Returns the active messages, prepending the system prompt if present.
     def current_view : Array(Hash(String, String))
       result = [] of Hash(String, String)
       # Add system prompt as first message if present
@@ -158,6 +181,9 @@ def clear
       result
     end
 
+    # Adds a message to the context store and saves the updated state to the JSON file.
+    #
+    # Standardizes the *label* using `#normalize_role`.
     def add_message(label : String, message : String)
       role = normalize_role(label)
       @messages << {"role" => role, "content" => message}
@@ -165,11 +191,13 @@ def clear
       save_context_to_json
     end
 
+    # Updates the system prompt to *new_prompt* and saves the context.
     def update_system_prompt(new_prompt : String)
       @system_prompt = new_prompt
       save_context_to_json
     end
 
+    # Saves the current messages and optional system prompt to the JSON file.
     def save_context_to_json : Nil
       begin
         prompt_to_save = @persist_system_prompt ? @system_prompt : nil
@@ -180,6 +208,9 @@ def clear
       end
     end
 
+    # Loads conversation context and system prompt from the JSON file.
+    #
+    # Emits `:new_context_file` if the context file is not found.
     def load_context_from_json
       begin
         data = FileData.from_json(File.read(@context_file))
@@ -199,25 +230,31 @@ def clear
       end
     end
 
-def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
-  pruned_messages = [] of Hash(String, String)
+    # Prunes conversation messages to keep total tokens under *target_tokens*, and saves the updated state.
+    #
+    # Returns the list of pruned messages.
+    def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+      pruned_messages = [] of Hash(String, String)
 
-  while current_num_tokens > target_tokens && !@messages.empty?
-    if @messages.first["role"] == "system" && @messages.size > 1
-      system_msg = @messages.shift
-      pruned_messages << @messages.shift
-      @messages.unshift(system_msg)
-    else
-      pruned_messages << @messages.shift
+      while current_num_tokens > target_tokens && !@messages.empty?
+        if @messages.first["role"] == "system" && @messages.size > 1
+          system_msg = @messages.shift
+          pruned_messages << @messages.shift
+          @messages.unshift(system_msg)
+        else
+          pruned_messages << @messages.shift
+        end
+      end
+
+      @current_num_messages = @messages.size
+      save_context_to_json
+      return pruned_messages
     end
-  end
 
-  @current_num_messages = @messages.size
-  save_context_to_json
-  return pruned_messages
-end
-
-def prune(num_to_prune : Int32) : Array(Hash(String, String))
+    # Prunes the oldest *num_to_prune* messages and saves the updated state.
+    #
+    # Returns the list of pruned messages.
+    def prune(num_to_prune : Int32) : Array(Hash(String, String))
       pruned_messages = [] of Hash(String, String)
 
       count = [num_to_prune, @current_num_messages].min
@@ -230,6 +267,7 @@ def prune(num_to_prune : Int32) : Array(Hash(String, String))
       return pruned_messages
     end
 
+    # Clears all messages in the store and updates the JSON file.
     def clear
       @messages.clear
       @current_num_messages = 0

@@ -6,8 +6,9 @@ require "./tools"
 require "json"
 
 module Mantle
-  # Enum representing available built-in tools
-  # Applications opt into these by passing the enum values
+  # Represents the list of available built-in tools.
+  #
+  # Consumer applications opt into these by passing the enum values.
   enum BuiltinTool
     ReadFile
     ListDirectory
@@ -16,10 +17,9 @@ module Mantle
     SearchFiles
   end
 
-  # Registry that provides tool definitions for built-in tools
-  # Maps enum values to their corresponding Tool definitions
+  # Provides a registry that maps `BuiltinTool` enum values to their corresponding `Tool` definitions.
   class BuiltinToolRegistry
-    # Get the Tool definition for a specific built-in tool
+    # Returns the `Tool` definition for a specific *builtin* tool.
     def self.definition_for(builtin : BuiltinTool) : Tool
       case builtin
       when BuiltinTool::ReadFile
@@ -37,12 +37,12 @@ module Mantle
       end
     end
 
-    # Get Tool definitions for multiple built-in tools
+    # Returns the `Tool` definitions for the given list of *builtins*.
     def self.definitions_for(builtins : Array(BuiltinTool)) : Array(Tool)
       builtins.map { |b| definition_for(b) }
     end
 
-    # Get all available built-in tool definitions
+    # Returns the `Tool` definitions for all available built-in tools.
     def self.all_definitions : Array(Tool)
       BuiltinTool.values.map { |b| definition_for(b) }
     end
@@ -152,15 +152,26 @@ module Mantle
     end
   end
 
-  # Configuration for built-in tool execution safety
-  # Controls which paths built-in tools can access
+  # Represents the configuration options for executing built-in tools safely.
+  #
+  # Controls which paths and operations built-in tools can access.
   class BuiltinToolConfig
+    # Represents the active working directory for the tool environment.
     property working_directory : String
+
+    # Represents the list of directories or files the tools are permitted to read.
     property allowed_paths : Array(String)?
+
+    # Represents the path or name of the icon to display in desktop notifications.
     property notify_icon : String?
+
+    # Represents the list of paths where write operations are permitted.
     property autonomous_zone_paths : Array(String)?
+
+    # Represents the number of older backups to retain for modified files.
     property file_backup_count : Int32
 
+    # Creates a configuration using the specified properties.
     def initialize(
       @working_directory : String,
       @allowed_paths : Array(String)? = nil,
@@ -171,17 +182,22 @@ module Mantle
     end
   end
 
-  # Executes built-in tools with safety restrictions
-  # Validates all file system access against allowed paths
+  # Executes built-in tools while applying security and safety restrictions.
+  #
+  # Validates all file system access against allowed paths and autonomous zones.
   class BuiltinToolExecutor
+    # :nodoc:
     @config : BuiltinToolConfig
+    # :nodoc:
     @bot_name : String
 
+    # Creates a tool executor with the specified *config* and *bot_name*.
     def initialize(@config : BuiltinToolConfig, @bot_name : String = "Assistant")
     end
 
-    # Execute a built-in tool by name with given arguments
-    # Returns JSON-formatted result string or error message
+    # Executes a built-in tool specified by *tool_name* using the provided *arguments*.
+    #
+    # Returns a JSON-formatted result string or an error message.
     def execute(tool_name : String, arguments : Hash(String, JSON::Any)) : String
       case tool_name
       when "read_file"

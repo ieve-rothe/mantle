@@ -7,34 +7,34 @@ require "time"
 require "./app_logger"
 
 module Mantle
-  # Abstract class for loggers
+  # Represents an abstract base logger defining the logging contract for Mantle.
   #
-  # Defines contract that loggers must follow.
-  # Abstract class was implemented to allow a 'DummyLogger' to be used for unit tests
+  # Abstract class implemented to allow a 'DummyLogger' or other custom loggers to be used.
   abstract class Logger
+    # Represents the display name for user messages.
     property user_name : String
+
+    # Represents the display name for bot messages.
     property bot_name : String
+
+    # Represents whether the logger should include the model's thinking/reasoning process.
     property include_thinking : Bool
 
+    # Creates a logger with the specified *user_name*, *bot_name*, and optional *include_thinking* flag.
     def initialize(@user_name : String, @bot_name : String, @include_thinking : Bool = false)
     end
 
-    # Logs a message with generic label
+    # Logs a *message* labeled with *label*.
     #
-    # - `label`: A category label, eg "Context Input", "Model Response", "ERROR"
-    # - `message`: Content to be logged
+    # The *label* is a category label (e.g., `"Context Input"`, `"Model Response"`, or `"ERROR"`).
     abstract def log(label : String, message : String)
 
-    # Logs a user or bot message with full context
+    # Logs a user or bot message with the given *role* (e.g., `:user` or `:bot`), *message*, *context*, and optional *thinking*.
     #
     # This is the main method for logging interactions in flows.
-    # - `role`: Either :user or :bot (name is determined by role and stored user_name/bot_name)
-    # - `message`: The actual message content
-    # - `context`: The full conversation context at this point
-    # - `thinking`: The model's reasoning/thinking process (if any)
     abstract def log_message(role : Symbol, message : String, context : String, thinking : String? = nil)
 
-    # Helper to optionally format thinking tags ahead of the message content
+    # Formats *message* and optional *thinking* tags together if thinking process is included.
     protected def format_with_thinking(message : String, thinking : String?) : String
       if @include_thinking && thinking && !thinking.empty?
         "🤔 [Thinking Process]\n#{thinking}\n\n[Response]\n#{message}"
@@ -43,36 +43,26 @@ module Mantle
       end
     end
 
-    # Logs the raw API payload for request and response
-    #
-    # - `request`: The raw JSON string sent to the model
-    # - `response`: The raw JSON string returned by the model
+    # Logs raw API *request* and *response* payloads.
     abstract def log_api_payloads(request : String, response : String)
   end
 
-  # Concrete logger to write formatted messages to log file
+  # Represents a concrete logger that writes formatted messages to a log file.
   #
-  # Formats messages with a timestamp and writes to file.
+  # Formats messages with a timestamp and appends them to a file.
   class FileLogger < Logger
-    # Path to log file on disk
+    # Represents the path to the log file on disk.
     property log_file : String
 
-    # Creates a new FileLogger
-    #
-    # - `log_file`: Path to file where logs will be appended
-    # - `user_name`: Display name for user messages
-    # - `bot_name`: Display name for bot messages
+    # Creates a new `FileLogger` targeting *log_file* with the specified *user_name*, *bot_name*, and optional *include_thinking*.
     def initialize(@log_file : String, user_name : String, bot_name : String, include_thinking : Bool = false)
       super(user_name, bot_name, include_thinking)
       new_context
     end
 
-    # Writes a formatted message to log file
+    # Writes a formatted *message* labeled with *label* to the log file.
     #
-    # Rescues and prints error to STDOUT if file write fails
-    #
-    # - `label`: A category label, eg "Context Input", "Model Response", "ERROR"
-    # - `message`: Content to be logged
+    # Rescues and prints error to `Mantle::Log` if the file write fails.
     def log(label : String, message : String)
       formatted_entry = format(message, label)
       File.write(@log_file, formatted_entry, mode: "a")
@@ -80,51 +70,40 @@ module Mantle
       Mantle::Log.error { "Logger failed to write: #{ex.message}" }
     end
 
-    # Logs a user or bot message
-    #
-    # For basic FileLogger, just writes to the main log file.
-    # - `role`: Either :user or :bot
-    # - `message`: The actual message content
-    # - `context`: The full conversation context (not used in basic logger)
-    # - `thinking`: The model's reasoning/thinking process (if any)
+    # Logs a user or bot message targeting *role* with *message*, *context*, and optional *thinking*.
     def log_message(role : Symbol, message : String, context : String, thinking : String? = nil)
       name = role == :user ? @user_name : @bot_name
       final_message = format_with_thinking(message, thinking)
       log(name, final_message)
     end
 
-    # Default implementation for FileLogger does not log payloads
+    # Logs raw API *request* and *response* payloads (no-op in `FileLogger`).
     def log_api_payloads(request : String, response : String)
       # No-op
     end
 
-    # ---
-
+    # Clears the contents of the log file.
     def clear_log_file
       File.write(@log_file, "", mode: "w")
     end
 
+    # :nodoc:
     private def new_context
       separator = "\n" + get_ascii_divider(:stars) + "\n"
       File.write(@log_file, separator, mode: "a")
     end
 
-    # ---
-
-    # Formats a log entry with a UTC timestamp and label.
+    # :nodoc:
     private def format(message : String, label : String)
       "[#{Time.utc.to_s("%F")}] -- [#{label}] #{message}\n" + log_separator + "\n"
     end
 
-    # Helper to draw a separator line in output
+    # :nodoc:
     private def log_separator
       "#{"-" * 50}"
     end
 
-    # ---
-
-    # Returns ASCII art dividers for file output
-    # Cycles through multiple divider styles
+    # :nodoc:
     private def get_ascii_divider(divider_type : Symbol = :random) : String
       dividers = {
         cat:     "=^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=   =^..^=",
@@ -135,37 +114,45 @@ module Mantle
       }
 
       if divider_type == :random
-        # Pick a random divider
         divider_keys = dividers.keys
         random_key = divider_keys.sample
         return dividers[random_key]
       elsif dividers.has_key?(divider_type)
         return dividers[divider_type]
       else
-        # Default to stars if invalid type provided
         return dividers[:stars]
       end
     end
-    # ---
   end
 
+  # Represents a logger that writes interaction details across multiple dedicated files.
   class DetailedLogger < FileLogger
+    # Represents the path to the context log file.
     property context_log_file : String
+
+    # Represents the path to the last user message file.
     property last_user_message_file : String
+
+    # Represents the path to the last bot message file.
     property last_bot_message_file : String
+
+    # Represents the optional path to the last API request payload file.
     property last_request_file : String?
+
+    # Represents the optional path to the last API response payload file.
     property last_response_file : String?
 
+    # Creates a new `DetailedLogger` with the specified output file paths and configuration.
     def initialize(@log_file : String, @context_log_file : String, @last_user_message_file : String, @last_bot_message_file : String, user_name : String, bot_name : String, @last_request_file : String? = nil, @last_response_file : String? = nil, include_thinking : Bool = false)
       super(@log_file, user_name, bot_name, include_thinking)
     end
 
-    # Logs a user or bot message with full context
+    # Logs a *message* with full *context* and *thinking* process to the main log file and role-specific files.
     #
-    # Overrides FileLogger to write to multiple files:
-    # - Main log file (via parent)
-    # - Context file (always updated with current context)
-    # - User or bot specific message file
+    # Overrides `FileLogger#log_message` to write details across:
+    # - Main log file (via parent `FileLogger`)
+    # - Context log file
+    # - Role-specific message files (*last_user_message_file* or *last_bot_message_file*)
     def log_message(role : Symbol, message : String, context : String, thinking : String? = nil)
       # Log to main log file
       super(role, message, context, thinking)
@@ -187,7 +174,7 @@ module Mantle
       Mantle::Log.error { "DetailedLogger failed to write: #{ex.message}" }
     end
 
-    # Logs the raw API payload for request and response to specific files
+    # Logs the raw API *request* and *response* payloads to their respective files.
     def log_api_payloads(request : String, response : String)
       File.write(@last_request_file.not_nil!, request, mode: "w") if @last_request_file
       File.write(@last_response_file.not_nil!, response, mode: "w") if @last_response_file

@@ -8,20 +8,38 @@ require "./app_logger"
 require "./status"
 
 module Mantle
-  # Responsible for coordinating context and memory.
+  # Coordinates context routing and consolidation between `ContextStore` and `JSONLayeredMemoryStore`.
+  #
+  # Responsible for assembling views, tracking token limits, and sliding older context into long-term layered memory.
   class ContextManager
+    # Represents the active `ContextStore` instance.
     property context_store : ContextStore
+
+    # Represents the active `JSONLayeredMemoryStore` instance.
     property memory_store : JSONLayeredMemoryStore
+
+    # Represents the display name for user messages in memory logs.
     property user_name : String
+
+    # Represents the display name for bot messages in memory logs.
     property bot_name : String
+
+    # Represents the target token count when pruning/consolidating context.
     property token_target : Int32
+
+    # Represents the soft threshold above which a warning status is emitted.
     property token_softmax : Int32
+
+    # Represents the hard threshold at which context is consolidated into memory.
     property token_hardmax : Int32
+
+    # Represents whether to strip `<think>...</think>` tags from bot responses before storing them.
     property strip_thinking_tags : Bool
 
-    # Pending invisible append to be applied on next current_view call
+    # :nodoc:
     @pending_invisible_append : String? = nil
 
+    # Creates a context manager with the specified stores, names, and token thresholds.
     def initialize(@context_store : ContextStore,
                    @memory_store : JSONLayeredMemoryStore,
                    @user_name : String,
@@ -32,6 +50,10 @@ module Mantle
                    @strip_thinking_tags : Bool = false)
     end
 
+    # Assembles and returns the full conversation context as an array of messages.
+    #
+    # Incorporates the base system prompt, optional *ephemeral_blocks*, long-term memory view,
+    # chat history, and applies any pending invisible appends.
     def current_view(ephemeral_blocks : Array(String) = [] of String) : Array(Hash(String, String))
       messages = [] of Hash(String, String)
 
@@ -83,6 +105,7 @@ module Mantle
       return messages
     end
 
+    # Handles a user message *msg*, optionally storing *invisible_append* to be applied in the next view.
     def handle_user_message(msg : String, invisible_append : String? = nil)
       # Always use "User" label for normalization, not custom user_name
       # Only store the visible msg to context_store
@@ -90,12 +113,9 @@ module Mantle
 
       # Store the invisible append for next current_view call
       @pending_invisible_append = invisible_append
-
-      # Later - Don't write tests for these future functions yet.
-      # potentially check for special context command flags?
-      # (such as, clear context, replay last turn without changes, replay last turn with changes)
     end
 
+    # Handles a bot response *msg*, optionally triggering context consolidation if *check_consolidation* is true.
     def handle_bot_message(msg : String, check_consolidation : Bool = true)
       # Strip thinking tags if enabled
       processed_msg = @strip_thinking_tags ? strip_thinking(msg) : msg
@@ -112,7 +132,7 @@ module Mantle
       end
     end
 
-    # Add a message to context with a specific role, optionally deferring consolidation check
+    # Adds a message to the context with a specific *role* and *content*, optionally checking consolidation.
     def add_message(role : String, content : String, check_consolidation : Bool = true)
       @context_store.add_message(role, content)
 
@@ -125,20 +145,21 @@ module Mantle
       end
     end
 
-    # Manually trigger consolidation check (for use at turn boundaries)
+    # Manually triggers a hard consolidation check (for use at turn boundaries).
     def check_and_consolidate
       if @context_store.current_num_tokens >= @token_hardmax
         consolidate_memory
       end
     end
 
-    # Explicitly check for soft consolidation (can be triggered by user application when idle)
+    # Explicitly checks for soft consolidation (can be triggered by user application when idle).
     def check_and_consolidate_soft
       if @context_store.current_num_tokens >= @token_softmax
         consolidate_memory
       end
     end
 
+    # Performs the consolidation process by pruning context and ingesting pruned messages into the memory store.
     def consolidate_memory
       Mantle.emit_status(:memory_consolidation)
 
@@ -158,14 +179,17 @@ module Mantle
       end
     end
 
+    # Clears the active context store.
     def clear_context
       @context_store.clear
     end
 
+    # Updates the system prompt in the active context store with *new_prompt*.
     def update_system_prompt(new_prompt : String)
       @context_store.update_system_prompt(new_prompt)
     end
 
+    # Returns stats for token tracking and memory layers.
     def stats : NamedTuple(
       context_tokens: Int32,
       context_softmax: Int32,
@@ -192,8 +216,9 @@ module Mantle
       }
     end
 
-    # Hot-swap the context and memory stores safely
-    # Flushes pending data from old stores before swapping
+    # Hot-swaps the active *new_context* and *new_memory* stores safely.
+    #
+    # Flushes pending data from old stores before swapping.
     def flush_and_swap(new_context : ContextStore, new_memory : JSONLayeredMemoryStore)
       # 1. Force the outgoing memory store to process any remaining ingest_pending items
       if !@memory_store.ingest_pending.empty?
@@ -214,6 +239,7 @@ module Mantle
       # Token tracking is delegated to the stores, so no need to reset it manually
     end
 
+    # :nodoc:
     private def strip_thinking(msg : String) : String
       # Remove <think>...</think> blocks and their contents
       # Uses regex with multiline flag to handle thinking blocks that span multiple lines

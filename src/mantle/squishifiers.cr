@@ -2,10 +2,15 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
-# Creates 'squishifier' procs for use in memory management.
-# Squishification is summarization / compression of messages into system memory
-
+# Provides functions to create 'squishifier' procs for use in memory management.
+#
+# Squishification refers to the summarization or compression of conversation messages
+# into system memory.
 module Mantle::Squishifiers
+  # Builds a basic summarization proc that compresses an array of messages into a single string.
+  #
+  # Uses the specified *client* to run the summarization LLM call with *system_prompt*.
+  # Returns a `Proc(Array(String), String)` that takes an array of messages and returns the summary.
   def self.build_basic_summarizer(
     client : Client,
     system_prompt : String = "Extract factual data from the following conversation log into a concise bulleted list.",

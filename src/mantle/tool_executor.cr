@@ -7,26 +7,37 @@ require "./builtin_tools"
 require "json"
 
 module Mantle
-  # Result from executing a tool
-  # Links the tool call ID to its execution result
+  # Represents the result of executing a tool call.
+  #
+  # Links the tool call ID to its execution result.
   class ToolResult
+    # Represents the unique identifier of the tool call.
     property tool_call_id : String
+
+    # Represents the raw output or result string from the tool execution.
     property result : String
+
+    # Represents an optional natural language override for formatting the result.
     property formatted_override : String?
 
+    # Creates a tool result mapping *tool_call_id* to *result* and optional *formatted_override*.
     def initialize(@tool_call_id : String, @result : String, @formatted_override : String? = nil)
     end
   end
 
-  # Coordinates tool execution, routing to built-in or custom handlers
-  # Handles both built-in tools (via BuiltinToolExecutor) and custom tools (via callback)
+  # Coordinates tool execution, routing requests to built-in or custom handlers.
+  #
+  # Handles both built-in tools (via `BuiltinToolExecutor`) and custom tools (via callback).
   class ToolExecutor
-    # List of built-in tool names for routing
+    # Represents the list of built-in tool names used for routing.
     BUILTIN_TOOL_NAMES = ["read_file", "list_directory", "notify_send", "write_file", "search_files"]
 
+    # :nodoc:
     @builtin_executor : BuiltinToolExecutor?
+    # :nodoc:
     @custom_callback : Proc(String, Hash(String, JSON::Any), String)?
 
+    # Creates a tool executor with the specified *builtin_config*, *custom_callback*, and *bot_name*.
     def initialize(
       builtin_config : BuiltinToolConfig?,
       @custom_callback : Proc(String, Hash(String, JSON::Any), String)?,
@@ -35,8 +46,10 @@ module Mantle
       @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config, bot_name) : nil
     end
 
-    # Execute all tool calls and return their results
-    # Routes each call to either built-in executor or custom callback
+    # Executes all *tool_calls* and returns their results.
+    #
+    # Routes each call to either the built-in executor or the custom callback.
+    # Optionally uses *available_tool_names* to format helpful error messages.
     def execute_all(tool_calls : Array(ToolCall), available_tool_names : Array(String)? = nil) : Array(ToolResult)
       tool_calls.map do |call|
         result_json = execute_single(call, available_tool_names)

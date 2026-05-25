@@ -11,15 +11,31 @@ require "./status"
 module Mantle
   # Maybe write a base class once we have an implementation for Layered and then are going to add another type of memorystore
 
+  # Represents a layered memory store that persists memories to a JSON file.
+  #
+  # Manages the agent's long-term memory using hierarchical layers that consolidate when capacity is reached.
   class JSONLayeredMemoryStore
+    # Represents the path to the JSON file where memories are stored.
     property memory_file : String
+
+    # Represents the target token count when consolidating a layer.
     property layer_token_target : Int32
+
+    # Represents the token capacity limit for each memory layer.
     property layer_token_capacity : Int32
+
+    # Represents the proc used to summarize and compress messages.
     property squishifier : Proc(Array(String), String)
 
+    # Represents the queue of messages waiting to be ingested into memory layer 0.
     property ingest_pending : Array(String) = [] of String
+
+    # Represents the collection of memory layers.
     property layers : Array(Array(String)) = [] of Array(String)
 
+    # Creates a memory store using *memory_file*, *layer_token_capacity*, *layer_token_target*, and *squishifier*.
+    #
+    # Raises `Exception` if the configuration constraints are not met.
     def initialize(@memory_file,
                    @layer_token_capacity,
                    @layer_token_target,
@@ -32,13 +48,14 @@ module Mantle
       load_memories_from_json
     end
 
-def current_num_tokens(layer_index : Int32) : Int32
-  return 0 if layer_index >= @layers.size || layer_index < 0
-  @layers[layer_index].sum { |msg| msg.size // 4 }
-end
+    # Returns the number of tokens in the memory layer at *layer_index*.
+    def current_num_tokens(layer_index : Int32) : Int32
+      return 0 if layer_index >= @layers.size || layer_index < 0
+      @layers[layer_index].sum { |msg| msg.size // 4 }
+    end
 
-def current_view : String
-
+    # Returns a formatted string representation of all active memory layers.
+    def current_view : String
       return "" if @layers.empty? || @layers.all? { |layer| layer.empty? }
 
       view = String::Builder.new
@@ -57,28 +74,24 @@ def current_view : String
       return view.to_s
     end
 
+    # Ingests an array of *messages* into the memory store, triggering cascading consolidation where needed.
     def ingest(messages : Array(String)) : Nil
       @ingest_pending.concat(messages)
       save_memories_to_json
 
       cascade(-1) # layer -1 indicates input to layer 0, ie incoming context
-      # Push messages received into ingest_pending
-      # Check how many chunks (N) of ingest_step_size we have in ingest_pending. (Ideally ingest_pending would be empty when we start, and then we just fill it up with the messages coming out of context right now, but our fault tolerance for inability to get squishification from the model means there could be messages from last time that never got squishified into memory.)
-      # Check that target layer has space. If we're at layer_token_capacity, call ingest for the target layer to clear up space. (Which runs this same function, so might need to do some squishification deeper in the recursion stack)
-      # Then, run squishifier N times. If there are fewer than ingest_step_size in the last chunk, just squish it anyway? Or maybe we'll save it for next time.
-      # For each result of squishifier, stick it in Layer 0.
-      # If we can't get a response from the model, don't pop anytihng out of ingest_pending, just leave it there and log an error.
     end
 
-# Force check memory layers for capacity and trigger cascade where needed.
-# Can be called explicitly by user application when idle.
-def check_and_consolidate
-  @layers.each_with_index do |layer, index|
-    if current_num_tokens(index) >= @layer_token_capacity
-      cascade(index)
+    # Checks all memory layers and triggers cascading consolidation on any that exceed capacity.
+    #
+    # Can be called explicitly by user application when idle.
+    def check_and_consolidate
+      @layers.each_with_index do |layer, index|
+        if current_num_tokens(index) >= @layer_token_capacity
+          cascade(index)
+        end
+      end
     end
-  end
-end
 
 # Private -------------------------------------------------------------
 

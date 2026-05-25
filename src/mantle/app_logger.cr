@@ -5,9 +5,10 @@
 require "log"
 
 module Mantle
-  # Default logger for the Mantle library
+  # Provides the default logger for the Mantle library.
   #
   # Consumer applications should configure this via Crystal's built-in Log setup:
+  #
   # ```
   # ::Log.setup do |c|
   #   backend = ::Log::IOBackend.new(io: File.new("app.log", "a"))

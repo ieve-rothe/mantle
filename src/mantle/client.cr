@@ -9,35 +9,37 @@ require "random/secure"
 require "./tools"
 
 module Mantle
-  # Record is a macro that expands to define struct with initializer, getters and a copy_with and clone helper methods.
-  # Reminder that it's positional, not named arguments
+  # Represents the configuration options for an LLM client.
+  #
+  # Holds configuration fields such as *model_name*, *stream*, *temperature*, *top_p*, *max_tokens*, *api_url*, and *keep_alive*.
   record ModelConfig, model_name : String, stream : Bool, temperature : Float64, top_p : Float64, max_tokens : Int32, api_url : String, keep_alive : Int32 | String = "10m"
 
-  # Represents a function call within a tool call
-  # Contains the function name and its arguments as a JSON string
+  # Represents a function call within a tool call.
+  #
+  # Contains the function name and its arguments serialized as a JSON string.
   class ToolCallFunction
     include JSON::Serializable
 
-    property name : String # Function name (e.g., "read_file")
+    # Represents the name of the function to be called.
+    property name : String
 
-    # Custom converter to handle both string and object formats for arguments
-    # OpenAI format: arguments as JSON string
-    # Ollama format: arguments as JSON object
+    # Represents the JSON string of arguments.
+    #
+    # normalized automatically via `ArgumentsConverter` from either OpenAI's string format or Ollama's object format.
     @[JSON::Field(converter: Mantle::ToolCallFunction::ArgumentsConverter)]
-    property arguments : String # JSON string of arguments (normalized)
+    property arguments : String
 
+    # Creates a tool call function with the specified *name* and *arguments*.
     def initialize(@name : String, @arguments : String)
     end
 
-    # Custom JSON converter that handles both string and object argument formats
+    # :nodoc:
     module ArgumentsConverter
       def self.from_json(pull : JSON::PullParser) : String
         case pull.kind
         when .string?
-          # OpenAI format: already a JSON string
           pull.read_string
         when .begin_object?
-          # Ollama format: JSON object, convert to string
           JSON.parse(pull.read_raw).to_json
         else
           raise JSON::ParseException.new("Expected String or Object for arguments", pull.line_number, pull.column_number)
@@ -50,71 +52,101 @@ module Mantle
     end
   end
 
-  # Represents a tool call from the LLM
-  # When the LLM wants to invoke a tool, it returns this structure
+  # Represents a tool call requested by the LLM.
+  #
+  # When the LLM decides to invoke a tool, it returns this structure.
   class ToolCall
     include JSON::Serializable
 
-    property id : String # Unique identifier for this tool call
+    # Represents the unique identifier for this tool call.
+    property id : String
 
-    # Type field defaults to "function" since some APIs (e.g., Ollama) omit it
+    # Represents the type of the tool.
+    #
+    # Defaults to `"function"` for function tools.
     @[JSON::Field(emit_null: false)]
-    property type : String = "function" # Always "function" for function tools
+    property type : String = "function"
 
-    property function : ToolCallFunction # The function to call
+    # Represents the function detail to call.
+    property function : ToolCallFunction
 
+    # Creates a tool call with the specified *id*, *function*, and *type*.
     def initialize(@id : String, @function : ToolCallFunction, @type : String = "function")
     end
   end
 
-  # Response from the LLM, can contain text content, tool calls, or both
-  # Replaces the simple String return type to support tool calling
+  # Represents the response from the LLM.
+  #
+  # A response can contain text content, a thinking process, tool calls, or a combination thereof.
   class Response
     include JSON::Serializable
 
+    # Represents the text response content (if any).
     @[JSON::Field(emit_null: false)]
-    property content : String? # Text response content (if any)
+    property content : String?
 
+    # Represents the thinking process output (if any).
     @[JSON::Field(emit_null: false)]
-    property thinking : String? # Thinking process output (if any)
+    property thinking : String?
 
+    # Represents the list of tool calls requested by the LLM (if any).
     @[JSON::Field(emit_null: false)]
-    property tool_calls : Array(ToolCall)? # Tool calls requested (if any)
+    property tool_calls : Array(ToolCall)?
 
+    # Represents the raw request payload sent to the LLM.
     @[JSON::Field(ignore: true)]
     property raw_request : String?
 
+    # Represents the raw response payload returned from the LLM.
     @[JSON::Field(ignore: true)]
     property raw_response : String?
 
+    # Creates an LLM response containing *content*, *tool_calls*, and optional *thinking*.
     def initialize(@content : String?, @tool_calls : Array(ToolCall)?, @thinking : String? = nil)
     end
   end
 
-  # Contract for Client class. Using a contract to allow for a dummy client class when unit testing other parts of codebase.
-  # Now returns Response instead of String to support tool calling
+  # Represents the abstract base client for executing LLM requests.
+  #
+  # Implementations must define the `#execute` method to handle LLM calls.
   abstract class Client
-    # Accepts an optional block (the `&on_chunk` part) which lets consumer apps
-    # "listen" to pieces of the response as they arrive (like a typewriter effect)
+    # Executes the LLM request with the provided *messages* and *tools*, yielding chunks to *on_chunk*.
+    #
+    # Returns a `Response`.
     abstract def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil, &on_chunk : String -> Nil) : Response
 
-    # A fallback version of `execute` for apps that don't want to deal with streaming.
-    # It just runs the request and throws away the partial chunks, waiting for the final response.
+    # Executes the LLM request without streaming, discarding partial chunks.
+    #
+    # Returns a `Response`.
     def execute(messages : Array(Hash(String, String)), tools : Array(Tool)? = nil) : Response
       execute(messages, tools) { |chunk| }
     end
   end
 
-  # Client for sending requests to ollama API
+  # Represents a client for sending inference requests to the Ollama API.
   class LlamaClient < Client
+    # Represents the model identifier.
     property model_name : String
+
+    # Represents whether response chunks should be streamed.
     property stream : Bool
+
+    # Represents the temperature setting for controlling response randomness.
     property temperature : Float64
+
+    # Represents the top-p setting for controlling response nucleus sampling.
     property top_p : Float64
+
+    # Represents the maximum number of tokens to predict.
     property max_tokens : Int32
+
+    # Represents the target API URL endpoint.
     property api_url : String
+
+    # Represents the connection keep-alive duration.
     property keep_alive : Int32 | String
 
+    # Creates a Llama API client using the specified *model_config*.
     def initialize(model_config : ModelConfig)
       @model_name = model_config.model_name
       @stream = model_config.stream

@@ -12,6 +12,8 @@ require "./mantle/client"
 require "./mantle/logger"
 require "./mantle/markdown_formatter"
 
+# Represents the core module of the Mantle LLM agent library.
 module Mantle
+  # Represents the current version of the Mantle library.
   VERSION = "0.1.0"
 end

@@ -13,18 +13,24 @@ require "./tool_executor"
 require "./tool_formatter"
 
 module Mantle
-  # Represents a generic LLM inference operation
+  # Represents a generic LLM inference operation.
   #
   # Base class for different LLM-based processing flows.
   # Examples include flows for planning steps, command generation, reflection, etc.
   class Flow
+    # Represents the `ContextManager` coordinating context for the flow.
     property context_manager : ContextManager
+
+    # Represents the `Client` executing LLM requests.
     property client : Client
+
+    # Represents the `Logger` logging conversation events.
     property logger : Logger
 
-    # Custom errors for flow operations
+    # Represents custom errors for flow operations.
     class InputError < Exception; end
 
+    # Creates a flow instance with *context_manager*, *client*, and *logger*.
     def initialize(
       @context_manager : ContextManager,
       @client : Client,
@@ -32,12 +38,12 @@ module Mantle
     )
     end
 
-    # Assemble context, send it to client, set model response in class
+    # Assembles context, sends it to the client, and executes *on_response* with the result.
     def run(msg : String, on_response : Proc(Mantle::Response, Nil), ephemeral_blocks : Array(String) = [] of String)
       # To be implemented by specific flows
     end
 
-    # Convert message array to human-readable string for logging
+    # :nodoc:
     protected def format_messages_for_log(messages : Array(Hash(String, String))) : String
       String.build do |io|
         messages.join(io, "") do |msg, i|
@@ -49,12 +55,17 @@ module Mantle
     end
   end
 
+  # Represents a standard chat-based LLM flow without tool execution capabilities.
   class ChatFlow < Flow
+    # Runs the chat flow by sending conversation messages to the client and handling the response.
+    #
+    # Custom callback *on_response* is executed with the final `Response` payload.
     def run(msg : String, on_response : Proc(Mantle::Response, Nil), ephemeral_blocks : Array(String) = [] of String)
       @context_manager.handle_user_message(msg)
       context_view = @context_manager.current_view(ephemeral_blocks)
       @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
+      # Execute LLM request
       response = @client.execute(context_view)
 
       if (req = response.raw_request) && (res = response.raw_response)
@@ -73,14 +84,20 @@ module Mantle
     end
   end
 
-  # ChatFlow with tool calling support
-  # Extends ChatFlow to handle tool calls in a loop until text response received
+  # Represents a chat flow with support for executing tools in a loop.
+  #
+  # Extends `ChatFlow` to handle tool calls until a final text response is received.
   class ToolEnabledChatFlow < ChatFlow
+    # Represents the default maximum number of tool execution iterations per run.
     DEFAULT_MAX_ITERATIONS = 10
+
+    # Represents the maximum nested execution depth for tools to prevent recursion.
     MAX_SUBAGENT_DEPTH     = 1
 
+    # :nodoc:
     @depth : Int32
 
+    # Creates a tool-enabled chat flow with *context_manager*, *client*, *logger*, and optional *depth*.
     def initialize(
       context_manager : ContextManager,
       client : Client,
@@ -90,6 +107,10 @@ module Mantle
       super(context_manager, client, logger)
     end
 
+    # Runs the tool-enabled chat flow, processing LLM requests and executing tool calls in a loop until a final text response is produced.
+    #
+    # Takes the initial user message *msg*, list of *builtins*, *custom_tools*, tool execution callback *tool_callback*,
+    # safety *builtin_config*, maximum tool loop limit *max_iterations*, chunk callback *on_chunk*, and response callback *on_response*.
     def run(
       msg : String,
       builtins : Array(BuiltinTool)? = nil,
