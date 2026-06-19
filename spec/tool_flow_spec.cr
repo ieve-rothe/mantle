@@ -456,4 +456,130 @@ describe "Subagent depth kill-switch" do
     # Assert - Tools should work at default depth 0
     context_store.messages.any? { |msg| msg["role"] == "tool" }.should be_true
   end
+
+  describe "infinite retry loop prevention" do
+    it "aborts and returns synthetic response when same tool fails with same args twice" do
+      context_store = DummyContextStore.new
+      context_manager = DummyContextManager.new(context_store)
+      logger = DummyLogger.new
+
+      # Client repeatedly calls the same failed tool
+      client = ToolCallMockClient.new([
+        Mantle::Clients::Response.new(
+          content: nil,
+          tool_calls: [
+            Mantle::Clients::ToolCall.new(
+              id: "call_fail_1",
+              type: "function",
+              function: Mantle::Clients::ToolCallFunction.new(
+                name: "test_tool",
+                arguments: %({"arg1":"value"})
+              )
+            )
+          ]
+        ),
+        Mantle::Clients::Response.new(
+          content: nil,
+          tool_calls: [
+            Mantle::Clients::ToolCall.new(
+              id: "call_fail_2",
+              type: "function",
+              function: Mantle::Clients::ToolCallFunction.new(
+                name: "test_tool",
+                arguments: %({"arg1":"value"})
+              )
+            )
+          ]
+        )
+      ])
+
+      # Callback returns a failure message
+      call_count = 0
+      tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
+        call_count += 1
+        "Error: Something went wrong."
+      }
+
+      custom_tools = [
+        Mantle::Tools::Tool.new(
+          function: Mantle::Tools::FunctionDefinition.new(
+            name: "test_tool",
+            description: "Test tool",
+            parameters: Mantle::Tools::ParametersSchema.new(
+              properties: {
+                "arg1" => Mantle::Tools::PropertyDefinition.new("string", "Arg description")
+              }
+            )
+          )
+        )
+      ]
+
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+
+      final_response = nil
+      flow.run(
+        "Try to do something",
+        custom_tools: custom_tools,
+        tool_callback: tool_callback,
+        on_response: ->(r : Mantle::Clients::Response) { final_response = r.content.not_nil! }
+      )
+
+      # Should only invoke callback once (second attempt aborted before execution)
+      call_count.should eq(1)
+      final_response.not_nil!.should contain("Error: Tool 'test_tool' with arguments")
+      client.call_count.should eq(2) # First turn + second turn which got aborted
+    end
+
+    it "aborts immediately when a tool callback raises TerminalToolError" do
+      context_store = DummyContextStore.new
+      context_manager = DummyContextManager.new(context_store)
+      logger = DummyLogger.new
+
+      client = ToolCallMockClient.new([
+        Mantle::Clients::Response.new(
+          content: nil,
+          tool_calls: [
+            Mantle::Clients::ToolCall.new(
+              id: "call_fail_immediate",
+              type: "function",
+              function: Mantle::Clients::ToolCallFunction.new(
+                name: "test_tool",
+                arguments: "{}"
+              )
+            )
+          ]
+        )
+      ])
+
+      # Callback raises TerminalToolError
+      tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
+        raise Mantle::Tools::TerminalToolError.new("Critical failure")
+      }
+
+      custom_tools = [
+        Mantle::Tools::Tool.new(
+          function: Mantle::Tools::FunctionDefinition.new(
+            name: "test_tool",
+            description: "Test tool",
+            parameters: Mantle::Tools::ParametersSchema.new(
+              properties: {} of String => Mantle::Tools::PropertyDefinition
+            )
+          )
+        )
+      ]
+
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+
+      final_response = nil
+      flow.run(
+        "Try to do something",
+        custom_tools: custom_tools,
+        tool_callback: tool_callback,
+        on_response: ->(r : Mantle::Clients::Response) { final_response = r.content.not_nil! }
+      )
+
+      final_response.not_nil!.should eq("Error: Critical failure")
+      client.call_count.should eq(1)
+    end
+  end
 end

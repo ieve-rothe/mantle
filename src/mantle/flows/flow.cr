@@ -139,6 +139,7 @@ module Mantle::Flows
 
       # Tool call loop
       iteration = 0
+      failed_calls = [] of {String, JSON::Any}
       loop do
         iteration += 1
 
@@ -158,7 +159,26 @@ module Mantle::Flows
 
         # We have tool calls - process them
         if tool_calls = response.tool_calls
-          context_view = process_tools(tool_calls, tool_names, tool_executor, response, ephemeral_blocks, context_view)
+          begin
+            # Check for repeated failures before executing
+            tool_calls.each do |call|
+              begin
+                parsed_args = JSON.parse(call.function.arguments)
+                if failed_calls.includes?({call.function.name, parsed_args})
+                  raise Mantle::Tools::TerminalToolError.new("Tool '#{call.function.name}' with arguments '#{call.function.arguments}' has already failed in this turn. Aborting tool loop to prevent infinite loop.")
+                end
+              rescue ex : Mantle::Tools::TerminalToolError
+                raise ex
+              rescue
+                # Ignore JSON parse errors for arguments check, let execution handle it
+              end
+            end
+
+            context_view = process_tools(tool_calls, tool_names, tool_executor, response, ephemeral_blocks, context_view, failed_calls)
+          rescue ex : Mantle::Tools::TerminalToolError
+            handle_terminal_error(ex.message || "Terminal tool failure", ephemeral_blocks, on_response)
+            break
+          end
         else
           # No content and no tool calls - shouldn't happen, but handle it
           handle_empty_response(response, ephemeral_blocks, on_response)
@@ -228,6 +248,38 @@ module Mantle::Flows
       on_response.try(&.call(response))
     end
 
+    private def failed_result?(result : String) : Bool
+      begin
+        parsed = JSON.parse(result)
+        if parsed.as_h? && parsed.as_h.has_key?("error")
+          return true
+        end
+      rescue
+        # Not valid JSON
+      end
+      trimmed = result.strip
+      trimmed.downcase.starts_with?("error")
+    end
+
+    private def handle_terminal_error(
+      error_msg : String,
+      ephemeral_blocks : Array(String),
+      on_response : Proc(Mantle::Clients::Response, Nil)?
+    )
+      response_text = "Error: #{error_msg}"
+      @context_manager.handle_bot_message(response_text, check_consolidation: false)
+
+      # Check consolidation now that the full turn is complete
+      @context_manager.check_and_consolidate
+
+      updated_context = @context_manager.current_view(ephemeral_blocks)
+      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context))
+      Mantle.emit_status(:idle)
+
+      synthetic_response = Mantle::Clients::Response.new(content: response_text, tool_calls: nil)
+      on_response.try(&.call(synthetic_response))
+    end
+
     private def process_tools(
       tool_calls : Array(Mantle::Clients::ToolCall),
       tool_names : Array(String)?,
@@ -235,6 +287,7 @@ module Mantle::Flows
       response : Mantle::Clients::Response,
       ephemeral_blocks : Array(String),
       context_view : Array(Hash(String, String)),
+      failed_calls : Array({String, JSON::Any})
     ) : Array(Hash(String, String))
       Mantle.emit_status(:tool_loop)
       # Log detailed tool call information (natural language)
@@ -252,13 +305,24 @@ module Mantle::Flows
       tool_results = tool_executor.execute_all(tool_calls, tool_names)
 
       # Add tool results to context with 'tool' role (defer consolidation)
-      tool_results.each do |result|
+      tool_results.each_with_index do |result, idx|
         content_with_id = "Result from #{result.tool_call_id}: #{result.result}"
         @context_manager.add_message("tool", content_with_id, check_consolidation: false)
 
         # Log detailed tool result (natural language)
         formatted_result = Mantle::Tools::ToolFormatter.format_tool_result(result)
         @logger.log_message(:bot, formatted_result, format_messages_for_log(@context_manager.current_view(ephemeral_blocks)))
+
+        # Track failed calls
+        if failed_result?(result.result)
+          call = tool_calls[idx]
+          begin
+            parsed_args = JSON.parse(call.function.arguments)
+            failed_calls << {call.function.name, parsed_args}
+          rescue
+            # Ignore argument parsing error
+          end
+        end
       end
 
       # Update context view for next iteration

@@ -5,6 +5,10 @@
 require "json"
 
 module Mantle::Tools
+  # Represents a tool execution error that should immediately terminate the chat loop.
+  class TerminalToolError < Exception
+  end
+
   # Defines an individual property within a function's parameters schema.
   #
   # Describes a single parameter, including its type and what it represents.

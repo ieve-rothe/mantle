@@ -21,7 +21,7 @@ If the code is related to _what_ an agent is trying to achieve, it should live a
    ```yaml
    dependencies:
      mantle:
-       github: CameronCarroll/mantle
+       github: ieve-rothe/mantle
    ```
 
 2. Run `shards install`

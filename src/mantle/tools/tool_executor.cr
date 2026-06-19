@@ -112,6 +112,8 @@ module Mantle::Tools
       if callback = @custom_callback
         begin
           callback.call(name, arguments)
+        rescue ex : TerminalToolError
+          raise ex
         rescue ex
           {error: "Custom tool #{name} failed: #{ex.message}"}.to_json
         end
