@@ -443,6 +443,11 @@ module Mantle::Tools
         return {error: "Security violation: message cannot start with a hyphen."}.to_json
       end
 
+      # Sanitize message: remove ANSI escape sequences, control characters, and backticks
+      message = message.gsub(/\e\[[0-9;]*[a-zA-Z]/, "")
+        .gsub(/[[:cntrl:]]/, "")
+        .gsub('`', "")
+
       # Build notify-send arguments
       args = [@bot_name]
 
