@@ -92,7 +92,7 @@ module Mantle::Flows
     DEFAULT_MAX_ITERATIONS = 10
 
     # Represents the maximum nested execution depth for tools to prevent recursion.
-    MAX_SUBAGENT_DEPTH     = 1
+    MAX_SUBAGENT_DEPTH = 1
 
     # :nodoc:
     @depth : Int32
@@ -264,7 +264,7 @@ module Mantle::Flows
     private def handle_terminal_error(
       error_msg : String,
       ephemeral_blocks : Array(String),
-      on_response : Proc(Mantle::Clients::Response, Nil)?
+      on_response : Proc(Mantle::Clients::Response, Nil)?,
     )
       response_text = "Error: #{error_msg}"
       @context_manager.handle_bot_message(response_text, check_consolidation: false)
@@ -287,7 +287,7 @@ module Mantle::Flows
       response : Mantle::Clients::Response,
       ephemeral_blocks : Array(String),
       context_view : Array(Hash(String, String)),
-      failed_calls : Array({String, JSON::Any})
+      failed_calls : Array({String, JSON::Any}),
     ) : Array(Hash(String, String))
       Mantle.emit_status(:tool_loop)
       # Log detailed tool call information (natural language)

@@ -116,7 +116,6 @@ describe Mantle::Storage::JSONLayeredMemoryStore do
       # Assert
       view = store.current_view
 
-
       view.should contain("[User] Hello")
       view.should contain("[Bot] Hi there")
 
@@ -270,7 +269,6 @@ describe Mantle::Storage::JSONLayeredMemoryStore do
       view = store2.current_view
       view.should contain("Pending message")
       view.should contain("New message")
-
 
       # Cleanup
       File.delete(file_path)
@@ -453,14 +451,11 @@ describe Mantle::Storage::JSONLayeredMemoryStore do
       view = store.current_view
       store.layers.size.should be > 0
 
-
       # Layer 0 should have 2 remaining messages (the most recent)
       # Extract just Layer 0's section
       layer0_section = view.split("=== Memory Layer 0 ===")[1]
 
-
       # Old messages should only be in Layer 1, not in Layer 0
-
 
       layer0_section.should_not contain("Summary of 1 messages: [User] Message 2")
 
@@ -521,7 +516,6 @@ describe Mantle::Storage::JSONLayeredMemoryStore do
       layer1_section = view.split("=== Memory Layer 1 ===")[1].split("=== Memory Layer 0 ===")[0]
       layer1_section.should_not be_nil
 
-
       # Cleanup
       File.delete(file_path)
     end
@@ -555,9 +549,7 @@ describe Mantle::Storage::JSONLayeredMemoryStore do
       store.layers.size.should be > 0
       store.layers.size.should be > 0
 
-
       # Layer 2 should contain consolidated summaries
-
 
       # Cleanup
       File.delete(file_path)
@@ -672,9 +664,6 @@ describe Mantle::Storage::JSONLayeredMemoryStore do
       layer2_pos = view.index("=== Memory Layer 2 ===")
       layer1_pos = view.index("=== Memory Layer 1 ===")
       layer0_pos = view.index("=== Memory Layer 0 ===")
-
-
-
 
       # Cleanup
       File.delete(file_path)
