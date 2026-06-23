@@ -12,7 +12,7 @@ require "../src/mantle.cr"
 
 # 1. Setup Primitives
 CONTEXT_FILE = "examples/test_context.json"
-MEMORY_FILE = "examples/test_memory.json"
+MEMORY_FILE  = "examples/test_memory.json"
 LOG_FILE     = "examples/test_log.txt"
 
 # Clean up previous test files
@@ -93,7 +93,7 @@ context_manager = Mantle::Storage::ContextManager.new(
   bot_name: bot_name,
   token_target: 60,
   token_hardmax: 120,
-  strip_thinking_tags: true  # Strip <think></think> blocks from model responses
+  strip_thinking_tags: true # Strip <think></think> blocks from model responses
 )
 
 # 4. Build the Flow
@@ -162,7 +162,7 @@ puts "--- Starting Multi-Test Turn ---"
       end
       puts "Bot: #{resp.content}"
     }
-    )
+  )
 end
 
 # 7. Display Stats

@@ -9,19 +9,19 @@ module Mantle::Support
     extend self
 
     # Represents the regex used to match bold markdown syntax.
-    BOLD_REGEX        = /\*\*([^*]+)\*\*/
+    BOLD_REGEX = /\*\*([^*]+)\*\*/
     # Represents the regex used to match italic markdown syntax.
-    ITALIC_REGEX      = /(?<!\w)\*([^*]+)\*(?!\w)/
+    ITALIC_REGEX = /(?<!\w)\*([^*]+)\*(?!\w)/
     # Represents the regex used to match code blocks.
-    CODE_BLOCK_REGEX  = /```([\s\S]*?)```/
+    CODE_BLOCK_REGEX = /```([\s\S]*?)```/
     # Represents the regex used to match inline code.
     INLINE_CODE_REGEX = /`([^`]+)`/
     # Represents the regex used to match headers.
-    HEADER_REGEX      = /^(\#{1,6})\s+([^\n]+)$/m
+    HEADER_REGEX = /^(\#{1,6})\s+([^\n]+)$/m
     # Represents the regex used to match markdown links.
-    LINK_REGEX        = /\[([^\]\[]+)\]\(([^)]+)\)/
+    LINK_REGEX = /\[([^\]\[]+)\]\(([^)]+)\)/
     # Represents the regex used to match blockquotes.
-    BLOCKQUOTE_REGEX  = /^>\s+([^\n]+)$/m
+    BLOCKQUOTE_REGEX = /^>\s+([^\n]+)$/m
 
     # Formats a markdown string *text* by converting markdown syntax elements to ANSI escape codes.
     #
