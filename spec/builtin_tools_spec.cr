@@ -263,37 +263,47 @@ describe "Mantle Built-in Tools" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "read_file",
           {"file_path" => JSON::Any.new("test_file.txt")}
         )
 
-        result.should contain("Hello, World!")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["file_path"].as_s.should eq("test_file.txt")
+        result["bytes_read"].as_i.should eq(13)
+        result["content"].as_s.should eq("Hello, World!")
       end
 
       it "reads file with absolute path in working directory" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "read_file",
           {"file_path" => JSON::Any.new("#{temp_dir}/test_file.txt")}
         )
 
-        result.should contain("Hello, World!")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["file_path"].as_s.should eq("#{temp_dir}/test_file.txt")
+        result["bytes_read"].as_i.should eq(13)
+        result["content"].as_s.should eq("Hello, World!")
       end
 
       it "rejects file outside working directory with default config" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "read_file",
           {"file_path" => JSON::Any.new("#{outside_dir}/restricted.txt")}
         )
 
-        result.should contain("error")
-        result.should contain("not allowed")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("not allowed")
+        result["file_path"].as_s.should eq("#{outside_dir}/restricted.txt")
       end
 
       it "allows file in explicitly allowed paths" do
@@ -303,24 +313,31 @@ describe "Mantle Built-in Tools" do
         )
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "read_file",
           {"file_path" => JSON::Any.new("#{outside_dir}/restricted.txt")}
         )
 
-        result.should contain("Should not access")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["file_path"].as_s.should eq("#{outside_dir}/restricted.txt")
+        result["bytes_read"].as_i.should eq(17)
+        result["content"].as_s.should eq("Should not access")
       end
 
       it "returns error for non-existent file" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "read_file",
           {"file_path" => JSON::Any.new("nonexistent.txt")}
         )
 
-        result.should contain("error")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should_not be_empty
+        result["file_path"].as_s.should eq("nonexistent.txt")
       end
     end
 
@@ -329,7 +346,7 @@ describe "Mantle Built-in Tools" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "write_file",
           {
             "file_path" => JSON::Any.new("#{temp_dir}/test_file.txt"),
@@ -337,8 +354,10 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("error")
-        result.should contain("not configured")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("not configured")
+        result["file_path"].as_s.should eq("#{temp_dir}/test_file.txt")
       end
 
       it "rejects file writing outside autonomous zone" do
@@ -348,7 +367,7 @@ describe "Mantle Built-in Tools" do
         )
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "write_file",
           {
             "file_path" => JSON::Any.new("#{outside_dir}/restricted.txt"),
@@ -356,8 +375,10 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("error")
-        result.should contain("not allowed")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("not allowed")
+        result["file_path"].as_s.should eq("#{outside_dir}/restricted.txt")
       end
 
       it "writes file inside autonomous zone" do
@@ -369,7 +390,7 @@ describe "Mantle Built-in Tools" do
 
         target_path = "#{temp_dir}/new_file.txt"
 
-        result = executor.execute(
+        result_str = executor.execute(
           "write_file",
           {
             "file_path" => JSON::Any.new(target_path),
@@ -377,7 +398,11 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("success")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["file_path"].as_s.should eq(target_path)
+        result["bytes_written"].as_i.should eq(16)
+        result["message"].as_s.should contain("successfully")
 
         # Verify it actually wrote the content
         File.read(target_path).should eq("new file content")
@@ -393,7 +418,7 @@ describe "Mantle Built-in Tools" do
         target_path = "#{temp_dir}/existing_file.txt"
         File.write(target_path, "original content")
 
-        result = executor.execute(
+        result_str = executor.execute(
           "write_file",
           {
             "file_path" => JSON::Any.new(target_path),
@@ -401,7 +426,10 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("success")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["file_path"].as_s.should eq(target_path)
+        result["bytes_written"].as_i.should eq(16)
 
         # Verify the file was modified
         File.read(target_path).should eq("modified content")
@@ -429,7 +457,7 @@ describe "Mantle Built-in Tools" do
         File.write("#{target_path}.20020101000000.bak", "newest")
 
         # Now execute the write file tool which should trigger rotation
-        result = executor.execute(
+        result_str = executor.execute(
           "write_file",
           {
             "file_path" => JSON::Any.new(target_path),
@@ -437,14 +465,15 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("success")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["file_path"].as_s.should eq(target_path)
 
         # Verify only 2 backups remain (since file_backup_count is 2)
         backups = Dir.glob("#{target_path}.*.bak").sort
         backups.size.should eq(2)
 
         # The oldest backup should be gone, "middle" might also be gone or "base" might be the newest
-        # To be certain, the content of the remaining backups should NOT contain "oldest"
         backup_contents = backups.map { |b| File.read(b) }
         backup_contents.should_not contain("oldest")
         backup_contents.should_not contain("middle")
@@ -459,13 +488,15 @@ describe "Mantle Built-in Tools" do
         )
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "write_file",
           {"file_path" => JSON::Any.new("#{temp_dir}/test_file.txt")}
         )
 
-        result.should contain("error")
-        result.should contain("Missing required parameter: content")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Missing required parameter: content")
+        result["file_path"].as_s.should eq("#{temp_dir}/test_file.txt")
       end
     end
 
@@ -474,51 +505,65 @@ describe "Mantle Built-in Tools" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "list_directory",
           {} of String => JSON::Any
         )
 
-        result.should contain("test_file.txt")
-        result.should contain("another_file.txt")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["directory_path"].as_s.should eq(".")
+        result["entry_count"].as_i.should be > 0
+        entries = result["entries"].as_a.map(&.as_s)
+        entries.should contain("test_file.txt")
+        entries.should contain("another_file.txt")
       end
 
       it "lists working directory when path is '.'" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "list_directory",
           {"directory_path" => JSON::Any.new(".")}
         )
 
-        result.should contain("test_file.txt")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["directory_path"].as_s.should eq(".")
+        result["entries"].as_a.map(&.as_s).should contain("test_file.txt")
       end
 
       it "lists directory with absolute path in working directory" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "list_directory",
           {"directory_path" => JSON::Any.new(temp_dir)}
         )
 
-        result.should contain("test_file.txt")
-        result.should contain("another_file.txt")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["directory_path"].as_s.should eq(temp_dir)
+        entries = result["entries"].as_a.map(&.as_s)
+        entries.should contain("test_file.txt")
+        entries.should contain("another_file.txt")
       end
 
       it "rejects directory outside working directory" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "list_directory",
           {"directory_path" => JSON::Any.new(outside_dir)}
         )
 
-        result.should contain("error")
-        result.should contain("not allowed")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("not allowed")
+        result["directory_path"].as_s.should eq(outside_dir)
       end
 
       it "allows directory in explicitly allowed paths" do
@@ -528,24 +573,30 @@ describe "Mantle Built-in Tools" do
         )
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "list_directory",
           {"directory_path" => JSON::Any.new(outside_dir)}
         )
 
-        result.should contain("restricted.txt")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["directory_path"].as_s.should eq(outside_dir)
+        result["entries"].as_a.map(&.as_s).should contain("restricted.txt")
       end
 
       it "returns error for non-existent directory" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "list_directory",
           {"directory_path" => JSON::Any.new("nonexistent_dir")}
         )
 
-        result.should contain("error")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should_not be_empty
+        result["directory_path"].as_s.should eq("nonexistent_dir")
       end
     end
 
@@ -554,13 +605,14 @@ describe "Mantle Built-in Tools" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {} of String => JSON::Any
         )
 
-        result.should contain("error")
-        result.should contain("Missing required parameter")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Missing required parameter")
       end
 
       it "returns zero matches as empty array" do
@@ -569,13 +621,17 @@ describe "Mantle Built-in Tools" do
 
         File.write("#{temp_dir}/zero_matches.txt", "nothing here")
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("nonexistent_string")}
         )
 
-        result.should contain("success")
-        result.should contain("\"matches\":[]")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["query"].as_s.should eq("nonexistent_string")
+        result["directory_path"].as_s.should eq(".")
+        result["total_matches"].as_i.should eq(0)
+        result["matches"].as_a.should be_empty
       end
 
       it "is case-sensitive by default" do
@@ -584,13 +640,14 @@ describe "Mantle Built-in Tools" do
 
         File.write("#{temp_dir}/case_sensitive.txt", "here is UpperCase and lowercase")
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("uppercase")}
         )
 
-        # uppercase shouldn't match UpperCase
-        result.should contain("\"matches\":[]")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["matches"].as_a.should be_empty
       end
 
       it "handles regex with special characters correctly" do
@@ -599,12 +656,14 @@ describe "Mantle Built-in Tools" do
 
         File.write("#{temp_dir}/regex.txt", "abc123xyz")
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("c\\d+x")}
         )
 
-        result.should contain("regex.txt:1")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["matches"].as_a.map(&.as_s).any?(&.includes?("regex.txt:1")).should be_true
       end
 
       it "skips hidden files and directories" do
@@ -618,16 +677,13 @@ describe "Mantle Built-in Tools" do
         File.write("#{empty_dir}/.hidden_dir/file.txt", "HIDDEN_MATCH")
         File.write("#{empty_dir}/.hidden_file", "HIDDEN_MATCH")
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("HIDDEN_MATCH")}
         )
 
-        # By default grep doesn't ignore hidden files unless told to, but ripgrep does.
-        # We'll just verify the call succeeds. Since we might be running grep or ripgrep,
-        # we can check that it doesn't crash, but the exact behavior depends on the underlying tool.
-        # So we'll just check success.
-        result.should contain("success")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
       end
 
       it "skips binary files gracefully" do
@@ -637,14 +693,14 @@ describe "Mantle Built-in Tools" do
         # Write null bytes to make it binary
         File.write("#{temp_dir}/binary.bin", "binary_match\0\0\0")
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("binary_match")}
         )
 
-        result.should contain("success")
-        # Ensure it skipped the binary file and didn't match
-        result.should contain("\"matches\":[]")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["matches"].as_a.should be_empty
       end
 
       it "filters by file extension" do
@@ -657,7 +713,7 @@ describe "Mantle Built-in Tools" do
         File.write("#{empty_dir}/test.cr", "FILTER_MATCH")
         File.write("#{empty_dir}/test.md", "FILTER_MATCH")
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {
             "query"        => JSON::Any.new("FILTER_MATCH"),
@@ -665,29 +721,33 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("success")
-        result.should contain("test.cr:1")
-        result.should_not contain("test.md:1")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["file_pattern"].as_s.should eq("*.cr")
+        matches = result["matches"].as_a.map(&.as_s)
+        matches.any?(&.includes?("test.cr:1")).should be_true
+        matches.any?(&.includes?("test.md:1")).should be_false
       end
 
       it "returns helpful error for malformed regex" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("[invalid_regex")}
         )
 
-        result.should contain("error")
-        result.should contain("Search failed")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Search failed")
       end
 
       it "returns error if directory does not exist" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {
             "query"          => JSON::Any.new("MATCH"),
@@ -695,15 +755,17 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("error")
-        result.should contain("Path does not exist")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Path does not exist")
+        result["directory_path"].as_s.should eq("nonexistent_dir")
       end
 
       it "rejects file_pattern starting with hyphen" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {
             "query"        => JSON::Any.new("MATCH"),
@@ -711,15 +773,17 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("error")
-        result.should contain("Security violation")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Security violation")
+        result["file_pattern"].as_s.should eq("-u")
       end
 
       it "rejects file_pattern containing malicious control characters" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {
             "query"        => JSON::Any.new("MATCH"),
@@ -727,21 +791,25 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("error")
-        result.should contain("Security violation")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Security violation")
+        result["file_pattern"].as_s.should eq("*.txt; id")
       end
 
       it "rejects query starting with hyphen" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("-e")}
         )
 
-        result.should contain("error")
-        result.should contain("Security violation")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Security violation")
+        result["query"].as_s.should eq("-e")
       end
 
       it "truncates exactly at 11 matches" do
@@ -756,14 +824,15 @@ describe "Mantle Built-in Tools" do
         end
         File.write("#{empty_dir}/exact11_matches.txt", content)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("EXACT11MATCH")}
         )
 
-        result.should contain("success")
-        result.should contain("warning")
-        result.should contain("Results truncated from 11 to 10")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["warning"].as_s.should contain("Results truncated from 11 to 10")
+        result["matches"].as_a.size.should eq(10)
       end
 
       it "searches inside working directory successfully" do
@@ -773,20 +842,21 @@ describe "Mantle Built-in Tools" do
         # Write test files
         File.write("#{temp_dir}/search_target.txt", "line1\nline2 has UNIQUEMATCH\nline3")
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {"query" => JSON::Any.new("UNIQUEMATCH")}
         )
 
-        result.should contain("success")
-        result.should contain("search_target.txt:2")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_true
+        result["matches"].as_a.map(&.as_s).any?(&.includes?("search_target.txt:2")).should be_true
       end
 
       it "rejects search in unauthorized directory" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "search_files",
           {
             "query"          => JSON::Any.new("restricted"),
@@ -794,8 +864,10 @@ describe "Mantle Built-in Tools" do
           }
         )
 
-        result.should contain("error")
-        result.should contain("not allowed")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("not allowed")
+        result["directory_path"].as_s.should eq(outside_dir)
       end
     end
 
@@ -804,28 +876,31 @@ describe "Mantle Built-in Tools" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "notify_send",
           {} of String => JSON::Any
         )
 
-        result.should contain("error")
-        result.should contain("Missing required parameter")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Missing required parameter")
       end
 
       it "prevents argument injection" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "notify_send",
           {
             "message" => JSON::Any.new("-u critical"),
           }
         )
 
-        result.should contain("error")
-        result.should contain("Security violation")
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Security violation")
+        result["message"].as_s.should eq("-u critical")
       end
     end
 
@@ -834,13 +909,13 @@ describe "Mantle Built-in Tools" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
 
-        result = executor.execute(
+        result_str = executor.execute(
           "unknown_tool",
           {} of String => JSON::Any
         )
 
-        result.should contain("error")
-        result.should contain("Unknown")
+        result = JSON.parse(result_str)
+        result["error"].as_s.should contain("Unknown")
       end
     end
   end

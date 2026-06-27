@@ -220,21 +220,21 @@ module Mantle::Tools
       content = arguments["content"]?.try(&.as_s?)
 
       unless file_path
-        return {error: "Missing required parameter: file_path"}.to_json
+        return {success: false, error: "Missing required parameter: file_path"}.to_json
       end
 
       unless content
-        return {error: "Missing required parameter: content"}.to_json
+        return {success: false, error: "Missing required parameter: content", file_path: file_path}.to_json
       end
 
       unless @config.autonomous_zone_paths
-        return {error: "Writing files is not configured (no autonomous zone specified)"}.to_json
+        return {success: false, error: "Writing files is not configured (no autonomous zone specified)", file_path: file_path}.to_json
       end
 
       absolute_path = resolve_path(file_path)
 
       unless path_in_autonomous_zone?(absolute_path)
-        return {error: "Access to path not allowed (outside autonomous zone): #{absolute_path}"}.to_json
+        return {success: false, error: "Access to path not allowed (outside autonomous zone): #{absolute_path}", file_path: file_path}.to_json
       end
 
       begin
@@ -248,9 +248,9 @@ module Mantle::Tools
 
         # Write the file
         File.write(absolute_path, content)
-        {success: true, message: "File written successfully."}.to_json
+        {success: true, message: "File written successfully.", file_path: file_path, bytes_written: content.bytesize}.to_json
       rescue ex
-        {error: "Error writing file: #{ex.message}"}.to_json
+        {success: false, error: "Error writing file: #{ex.message}", file_path: file_path}.to_json
       end
     end
 
@@ -288,7 +288,7 @@ module Mantle::Tools
       file_path = arguments["file_path"]?.try(&.as_s)
 
       unless file_path
-        return {error: "Missing required parameter: file_path"}.to_json
+        return {success: false, error: "Missing required parameter: file_path"}.to_json
       end
 
       # Resolve to absolute path
@@ -296,15 +296,20 @@ module Mantle::Tools
 
       # Check if path is allowed
       unless path_allowed?(absolute_path)
-        return {error: "Access to path not allowed: #{absolute_path}"}.to_json
+        return {success: false, error: "Access to path not allowed: #{absolute_path}", file_path: file_path}.to_json
       end
 
       # Read the file
       begin
         content = File.read(absolute_path)
-        {success: true, content: content}.to_json
+        {
+          success: true,
+          file_path: file_path,
+          bytes_read: content.bytesize,
+          content: content
+        }.to_json
       rescue ex
-        {error: "Error reading file: #{ex.message}"}.to_json
+        {success: false, error: "Error reading file: #{ex.message}", file_path: file_path}.to_json
       end
     end
 
@@ -317,15 +322,20 @@ module Mantle::Tools
 
       # Check if path is allowed
       unless path_allowed?(absolute_path)
-        return {error: "Access to path not allowed: #{absolute_path}"}.to_json
+        return {success: false, error: "Access to path not allowed: #{absolute_path}", directory_path: dir_path}.to_json
       end
 
       # List directory contents
       begin
         entries = Dir.children(absolute_path)
-        {success: true, entries: entries}.to_json
+        {
+          success: true,
+          directory_path: dir_path,
+          entry_count: entries.size,
+          entries: entries
+        }.to_json
       rescue ex
-        {error: "Error listing directory: #{ex.message}"}.to_json
+        {success: false, error: "Error listing directory: #{ex.message}", directory_path: dir_path}.to_json
       end
     end
 
@@ -333,12 +343,16 @@ module Mantle::Tools
       query = arguments["query"]?.try(&.as_s)
 
       unless query
-        return {error: "Missing required parameter: query"}.to_json
+        return {success: false, error: "Missing required parameter: query"}.to_json
       end
 
       # Validate query to prevent argument injection
       if query.strip.starts_with?("-")
-        return {error: "Security violation: query cannot start with a hyphen."}.to_json
+        return {
+          success: false,
+          error: "Security violation: query cannot start with a hyphen.",
+          query: query
+        }.to_json
       end
 
       # Default to "." (working directory) if no path provided
@@ -348,11 +362,23 @@ module Mantle::Tools
       if file_pattern
         # Validate file_pattern to prevent argument injection and malicious payloads
         if file_pattern.strip.starts_with?("-")
-          return {error: "Security violation: file_pattern cannot start with a hyphen."}.to_json
+          return {
+            success: false,
+            error: "Security violation: file_pattern cannot start with a hyphen.",
+            query: query,
+            directory_path: dir_path,
+            file_pattern: file_pattern
+          }.to_json
         end
 
         if file_pattern =~ /[;\n\r&|`$]/
-          return {error: "Security violation: file_pattern contains invalid characters."}.to_json
+          return {
+            success: false,
+            error: "Security violation: file_pattern contains invalid characters.",
+            query: query,
+            directory_path: dir_path,
+            file_pattern: file_pattern
+          }.to_json
         end
       end
 
@@ -361,13 +387,25 @@ module Mantle::Tools
 
       # Check if path is allowed
       unless path_allowed?(absolute_path)
-        return {error: "Access to path not allowed: #{absolute_path}"}.to_json
+        return {
+          success: false,
+          error: "Access to path not allowed: #{absolute_path}",
+          query: query,
+          directory_path: dir_path,
+          file_pattern: file_pattern
+        }.to_json
       end
 
       begin
         # If absolute_path exists but is a file, we want to skip directory logic and just search the file
         unless File.exists?(absolute_path)
-          return {error: "Path does not exist: #{absolute_path}"}.to_json
+          return {
+            success: false,
+            error: "Path does not exist: #{absolute_path}",
+            query: query,
+            directory_path: dir_path,
+            file_pattern: file_pattern
+          }.to_json
         end
 
         # Determine whether to use rg or grep
@@ -404,12 +442,25 @@ module Mantle::Tools
         if !status.success? && status.exit_code > 1
           err_msg = error.to_s.strip
           err_msg = "Command failed with exit code #{status.exit_code}" if err_msg.empty?
-          return {error: "Search failed: #{err_msg}"}.to_json
+          return {
+            success: false,
+            error: "Search failed: #{err_msg}",
+            query: query,
+            directory_path: dir_path,
+            file_pattern: file_pattern
+          }.to_json
         end
 
         unless status.success? && !output_str.empty?
           # grep/rg return 1 if no lines are found
-          return {success: true, matches: [] of String}.to_json
+          return {
+            success: true,
+            query: query,
+            directory_path: dir_path,
+            file_pattern: file_pattern,
+            total_matches: 0,
+            matches: [] of String
+          }.to_json
         end
 
         # Parse and truncate matches
@@ -424,15 +475,27 @@ module Mantle::Tools
 
         truncated_matches = matches.first(10)
 
-        result = {success: true, matches: truncated_matches}
-
-        if matches.size > 10
-          result = result.merge({warning: "Results truncated from #{matches.size} to 10."})
+        JSON.build do |json|
+          json.object do
+            json.field "success", true
+            json.field "query", query
+            json.field "directory_path", dir_path
+            json.field "file_pattern", file_pattern
+            json.field "total_matches", matches.size
+            json.field "matches", truncated_matches
+            if matches.size > 10
+              json.field "warning", "Results truncated from #{matches.size} to 10."
+            end
+          end
         end
-
-        result.to_json
       rescue ex
-        {error: "Error executing search: #{ex.message}"}.to_json
+        {
+          success: false,
+          error: "Error executing search: #{ex.message}",
+          query: query,
+          directory_path: dir_path,
+          file_pattern: file_pattern
+        }.to_json
       end
     end
 
@@ -440,12 +503,16 @@ module Mantle::Tools
       message = arguments["message"]?.try(&.as_s?)
 
       unless message
-        return {error: "Missing required parameter: message"}.to_json
+        return {success: false, error: "Missing required parameter: message"}.to_json
       end
 
       # Validate message to prevent argument injection and malicious payloads
       if message.strip.starts_with?("-")
-        return {error: "Security violation: message cannot start with a hyphen."}.to_json
+        return {
+          success: false,
+          error: "Security violation: message cannot start with a hyphen.",
+          message: message
+        }.to_json
       end
 
       # Build notify-send arguments
@@ -461,12 +528,24 @@ module Mantle::Tools
       begin
         status = Process.run("notify-send", args)
         if status.success?
-          {success: true, message: "Notification sent successfully"}.to_json
+          {
+            success: true,
+            message: "Notification sent successfully",
+            notification_message: message
+          }.to_json
         else
-          {error: "Error sending notification. Exit code: #{status.exit_code}"}.to_json
+          {
+            success: false,
+            error: "Error sending notification. Exit code: #{status.exit_code}",
+            message: message
+          }.to_json
         end
       rescue ex
-        {error: "Error executing notify-send: #{ex.message}"}.to_json
+        {
+          success: false,
+          error: "Error executing notify-send: #{ex.message}",
+          message: message
+        }.to_json
       end
     end
 
