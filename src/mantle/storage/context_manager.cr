@@ -90,12 +90,11 @@ module Mantle::Storage
         end
 
         if last_user_index
-          # Create a new hash with the appended content (don't modify original)
-          original_msg = messages[last_user_index]
-          messages[last_user_index] = {
-            "role"    => original_msg["role"],
-            "content" => original_msg["content"] + pending_append,
-          }
+          # Inject as a separate system message immediately following the user's message
+          messages.insert(last_user_index + 1, {
+            "role"    => "system",
+            "content" => pending_append.strip,
+          })
         end
 
         # Clear the pending append after applying it

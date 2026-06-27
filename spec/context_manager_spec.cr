@@ -908,7 +908,7 @@ end
   end
 
   describe "#handle_user_message with invisible_append" do
-    it "applies invisible append to user message in current_view but not in context store" do
+    it "applies invisible append as separate system message in current_view but not in context store" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -918,10 +918,15 @@ end
       manager.handle_user_message("Let's fix the bug.", invisible_append: "\n\n[System: Dev intent detected. Switch frames.]")
       view = manager.current_view
 
-      # Assert - invisible append appears in current_view
+      # Assert - user message content is unmodified
       user_message = view.find { |msg| msg["role"] == "user" }
       user_message.should_not be_nil
-      user_message.not_nil!["content"].should eq("Let's fix the bug.\n\n[System: Dev intent detected. Switch frames.]")
+      user_message.not_nil!["content"].should eq("Let's fix the bug.")
+
+      # And a separate system message is inserted immediately following the user message
+      user_idx = view.index(user_message).not_nil!
+      view[user_idx + 1]["role"].should eq("system")
+      view[user_idx + 1]["content"].should eq("[System: Dev intent detected. Switch frames.]")
 
       # But not in context store
       context_store.messages.last["content"].should eq("Let's fix the bug.")
@@ -938,16 +943,21 @@ end
       view1 = manager.current_view
       view2 = manager.current_view
 
-      # Assert - First call has the append
+      # Assert - First call has the system message following user message
       user_msg1 = view1.find { |msg| msg["role"] == "user" }
-      user_msg1.not_nil!["content"].should eq("Test message [APPEND]")
+      user_idx1 = view1.index(user_msg1).not_nil!
+      view1[user_idx1 + 1]["role"].should eq("system")
+      view1[user_idx1 + 1]["content"].should eq("[APPEND]")
 
-      # Second call does NOT have the append (it was cleared)
+      # Second call does NOT have the system message following user message (it was cleared)
       user_msg2 = view2.find { |msg| msg["role"] == "user" }
-      user_msg2.not_nil!["content"].should eq("Test message")
+      user_idx2 = view2.index(user_msg2).not_nil!
+      if user_idx2 + 1 < view2.size
+        view2[user_idx2 + 1]["role"].should_not eq("system")
+      end
     end
 
-    it "appends to the last user message when multiple user messages exist" do
+    it "inserts system message after the last user message when multiple user messages exist" do
       # Arrange
       context_store = TrackingContextStore.new("System")
       memory_store = TrackingMemoryStore.new
@@ -961,11 +971,16 @@ end
       # Act
       view = manager.current_view
 
-      # Assert - Only the last user message gets the append
+      # Assert - Last user message is followed by the system message
       user_messages = view.select { |msg| msg["role"] == "user" }
       user_messages.size.should eq(2)
       user_messages[0]["content"].should eq("First message")
-      user_messages[1]["content"].should eq("Second message [INVISIBLE]")
+      user_messages[1]["content"].should eq("Second message")
+
+      last_user_message = view.select { |msg| msg["role"] == "user" }.last
+      last_user_idx = view.index(last_user_message).not_nil!
+      view[last_user_idx + 1]["role"].should eq("system")
+      view[last_user_idx + 1]["content"].should eq("[INVISIBLE]")
     end
 
     it "handles nil invisible_append gracefully" do
