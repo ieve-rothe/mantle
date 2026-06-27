@@ -32,6 +32,12 @@ module Mantle::Tools
     # Represents the list of built-in tool names used for routing.
     BUILTIN_TOOL_NAMES = ["read_file", "list_directory", "notify_send", "write_file", "search_files"]
 
+    # Callback triggered before executing a tool call.
+    property on_tool_call : Proc(String, Hash(String, JSON::Any), Nil)?
+
+    # Callback triggered after executing a tool call, passing the name, arguments, result string, and status string.
+    property on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)?
+
     # :nodoc:
     @builtin_executor : BuiltinToolExecutor?
     # :nodoc:
@@ -42,6 +48,8 @@ module Mantle::Tools
       builtin_config : BuiltinToolConfig?,
       @custom_callback : Proc(String, Hash(String, JSON::Any), String)?,
       bot_name : String = "Assistant",
+      @on_tool_call : Proc(String, Hash(String, JSON::Any), Nil)? = nil,
+      @on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)? = nil,
     )
       @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config, bot_name) : nil
     end
@@ -85,12 +93,50 @@ module Mantle::Tools
         return {error: "Invalid arguments JSON: #{ex.message}"}.to_json
       end
 
+      # Call start hook
+      @on_tool_call.try(&.call(function_name, arguments))
+
       # Route to appropriate executor
-      if is_builtin_tool?(function_name)
-        execute_builtin(function_name, arguments)
-      else
-        execute_custom(function_name, arguments, available_tool_names)
+      begin
+        result_json = if is_builtin_tool?(function_name)
+          execute_builtin(function_name, arguments)
+        else
+          execute_custom(function_name, arguments, available_tool_names)
+        end
+
+        # Call end hook
+        if hook = @on_tool_result
+          status = failed_result?(result_json) ? "FAILED" : "SUCCESS"
+          hook.call(function_name, arguments, result_json, status)
+        end
+
+        result_json
+      rescue ex : TerminalToolError
+        if hook = @on_tool_result
+          hook.call(function_name, arguments, "TerminalToolError: #{ex.message}", "ERROR")
+        end
+        raise ex
+      rescue ex
+        err_json = {error: "Tool #{function_name} failed: #{ex.message}"}.to_json
+        if hook = @on_tool_result
+          hook.call(function_name, arguments, err_json, "ERROR")
+        end
+        err_json
       end
+    end
+
+    # Helper to check if a result contains an error
+    private def failed_result?(result : String) : Bool
+      begin
+        parsed = JSON.parse(result)
+        if parsed.as_h? && parsed.as_h.has_key?("error")
+          return true
+        end
+      rescue
+        # Not valid JSON
+      end
+      trimmed = result.strip
+      trimmed.downcase.starts_with?("error")
     end
 
     # Check if a tool name is a built-in tool

@@ -122,6 +122,8 @@ module Mantle::Flows
       on_response : Proc(Mantle::Clients::Response, Nil)? = nil,
       ephemeral_blocks : Array(String) = [] of String,
       invisible_append : String? = nil,
+      on_tool_call : Proc(String, Hash(String, JSON::Any), Nil)? = nil,
+      on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)? = nil,
     )
       # Add user message to context
       @context_manager.handle_user_message(msg, invisible_append)
@@ -136,6 +138,8 @@ module Mantle::Flows
 
       # Create tool executor
       tool_executor = Mantle::Tools::ToolExecutor.new(builtin_config, tool_callback, @context_manager.bot_name)
+      tool_executor.on_tool_call = on_tool_call
+      tool_executor.on_tool_result = on_tool_result
 
       # Tool call loop
       iteration = 0

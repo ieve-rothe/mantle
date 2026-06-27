@@ -263,4 +263,76 @@ describe "Mantle Tool Executor" do
       results[1].result.should contain("Test content")
     end
   end
+
+  describe "callbacks" do
+    it "triggers on_tool_call and on_tool_result for built-in tools" do
+      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      
+      calls = [] of {String, Hash(String, JSON::Any)}
+      results = [] of {String, Hash(String, JSON::Any), String, String}
+
+      executor = Mantle::Tools::ToolExecutor.new(
+        builtin_config: config,
+        custom_callback: nil,
+        on_tool_call: ->(name : String, args : Hash(String, JSON::Any)) {
+          calls << {name, args}
+          nil
+        },
+        on_tool_result: ->(name : String, args : Hash(String, JSON::Any), res : String, status : String) {
+          results << {name, args, res, status}
+          nil
+        }
+      )
+
+      tool_call = Mantle::Clients::ToolCall.new(
+        id: "call_builtin_cb",
+        type: "function",
+        function: Mantle::Clients::ToolCallFunction.new(
+          name: "read_file",
+          arguments: %({"file_path":"test.txt"})
+        )
+      )
+
+      executor.execute_all([tool_call])
+
+      calls.size.should eq(1)
+      calls[0][0].should eq("read_file")
+      calls[0][1]["file_path"].as_s.should eq("test.txt")
+
+      results.size.should eq(1)
+      results[0][0].should eq("read_file")
+      results[0][2].should contain("Test content")
+      results[0][3].should eq("SUCCESS")
+    end
+
+    it "triggers on_tool_call and on_tool_result with FAILED status for failed tools" do
+      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      
+      results = [] of {String, Hash(String, JSON::Any), String, String}
+
+      executor = Mantle::Tools::ToolExecutor.new(
+        builtin_config: config,
+        custom_callback: nil,
+        on_tool_result: ->(name : String, args : Hash(String, JSON::Any), res : String, status : String) {
+          results << {name, args, res, status}
+          nil
+        }
+      )
+
+      tool_call = Mantle::Clients::ToolCall.new(
+        id: "call_builtin_fail",
+        type: "function",
+        function: Mantle::Clients::ToolCallFunction.new(
+          name: "read_file",
+          arguments: %({"file_path":"nonexistent.txt"})
+        )
+      )
+
+      executor.execute_all([tool_call])
+
+      results.size.should eq(1)
+      results[0][0].should eq("read_file")
+      results[0][3].should eq("FAILED")
+    end
+  end
 end
