@@ -9,6 +9,36 @@ module Mantle::Tools
   class TerminalToolError < Exception
   end
 
+  # Represents a successful or neutral tool execution that should immediately terminate the chat loop without an error state.
+  class TerminalToolInterrupt < Exception
+    getter tool_call_id : String?
+
+    def initialize(message : String, @tool_call_id : String? = nil)
+      super(message)
+    end
+  end
+
+  # Configuration options for the automatic tool execution recovery engine.
+  struct RecoveryConfig
+    # Map of tool name to recovery helper tools allowed during its recovery phase.
+    # Example: {"switch_frame" => ["create_topic_frame"]}
+    property tool_mappings : Hash(String, Array(String)) = {} of String => Array(String)
+
+    # Optional callback triggered when a tool execution fails.
+    # Allows the host application to provide custom messages / context nudges.
+    property on_recovery_nudge : Proc(String, Hash(String, JSON::Any), String, String?)? = nil
+
+    # Number of recovery attempts allowed before giving up.
+    property max_retries : Int32 = 1
+
+    def initialize(
+      @tool_mappings = {} of String => Array(String),
+      @on_recovery_nudge = nil,
+      @max_retries = 1
+    )
+    end
+  end
+
   # Defines an individual property within a function's parameters schema.
   #
   # Describes a single parameter, including its type and what it represents.

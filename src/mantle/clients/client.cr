@@ -121,6 +121,21 @@ module Mantle::Clients
     def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil) : Response
       execute(messages, tools) { |chunk| }
     end
+
+    # Returns the temperature for this client.
+    #
+    # Subclasses should override this to expose their temperature setting.
+    # Default returns 1.0 for clients that do not support temperature control.
+    def temperature : Float64
+      1.0
+    end
+
+    # Sets the temperature for this client.
+    #
+    # Subclasses should override this to expose their temperature setting.
+    # Default is a no-op for clients that do not support temperature control.
+    def temperature=(value : Float64)
+    end
   end
 
   # Represents a client for sending inference requests to the Ollama API.

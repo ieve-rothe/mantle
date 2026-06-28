@@ -127,6 +127,7 @@ module Mantle::Flows
       invisible_append : String? = nil,
       on_tool_call : Proc(String, Hash(String, JSON::Any), Nil)? = nil,
       on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)? = nil,
+      recovery_config : Mantle::Tools::RecoveryConfig? = nil,
     )
       # Add user message to context
       @context_manager.handle_user_message(msg, invisible_append)
@@ -140,9 +141,17 @@ module Mantle::Flows
       tool_names = all_tools ? all_tools.map { |t| t.function.name } : nil
 
       # Create tool executor
-      tool_executor = Mantle::Tools::ToolExecutor.new(builtin_config, tool_callback, @context_manager.bot_name)
-      tool_executor.on_tool_call = on_tool_call
-      tool_executor.on_tool_result = on_tool_result
+      tool_executor = Mantle::Tools::ToolExecutor.new(
+        builtin_config: builtin_config,
+        custom_callback: tool_callback,
+        bot_name: @context_manager.bot_name,
+        on_tool_call: on_tool_call,
+        on_tool_result: on_tool_result,
+        client: @client,
+        context_manager: @context_manager,
+        recovery_config: recovery_config
+      )
+      tool_executor.all_tools = all_tools
 
       # Tool call loop
       iteration = 0
@@ -182,6 +191,9 @@ module Mantle::Flows
             end
 
             context_view = process_tools(tool_calls, tool_names, tool_executor, response, ephemeral_blocks, context_view, failed_calls)
+          rescue ex : Mantle::Tools::TerminalToolInterrupt
+            handle_terminal_interrupt(ex, ephemeral_blocks, on_response)
+            break
           rescue ex : Mantle::Tools::TerminalToolError
             handle_terminal_error(ex.message || "Terminal tool failure", ephemeral_blocks, on_response)
             break
@@ -284,6 +296,29 @@ module Mantle::Flows
       Mantle.emit_status(:idle)
 
       synthetic_response = Mantle::Clients::Response.new(content: response_text, tool_calls: nil)
+      on_response.try(&.call(synthetic_response))
+    end
+
+    private def handle_terminal_interrupt(
+      ex : Mantle::Tools::TerminalToolInterrupt,
+      ephemeral_blocks : Array(String),
+      on_response : Proc(Mantle::Clients::Response, Nil)?,
+    )
+      success_msg = ex.message || "Terminal tool interrupt"
+      if call_id = ex.tool_call_id
+        @context_manager.add_message("tool", success_msg, tool_call_id: call_id, check_consolidation: false)
+      else
+        @context_manager.add_message("system", success_msg, check_consolidation: false)
+      end
+
+      # Check consolidation now that the full turn is complete
+      @context_manager.check_and_consolidate
+
+      updated_context = @context_manager.current_view(ephemeral_blocks)
+      @logger.log_message(:bot, success_msg, format_messages_for_log(updated_context))
+      Mantle.emit_status(:idle)
+
+      synthetic_response = Mantle::Clients::Response.new(content: success_msg, tool_calls: nil)
       on_response.try(&.call(synthetic_response))
     end
 
