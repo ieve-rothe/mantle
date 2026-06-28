@@ -54,29 +54,29 @@ module Mantle::Storage
     #
     # Incorporates the base system prompt, optional *ephemeral_blocks*, long-term memory view,
     # chat history, and applies any pending invisible appends.
-    def current_view(ephemeral_blocks : Array(String) = [] of String) : Array(Hash(String, String))
-      messages = [] of Hash(String, String)
+    def current_view(ephemeral_blocks : Array(String) = [] of String) : Array(Mantle::Message)
+      messages = [] of Mantle::Message
 
       # 1. Base system prompt (without memory yet)
       base_system_content = @context_store.system_prompt
       unless base_system_content.empty?
-        messages << {"role" => "system", "content" => base_system_content}
+        messages << Mantle::Message.new("system", base_system_content)
       end
 
       # 2. Ephemeral blocks as separate system messages
       ephemeral_blocks.each do |block|
-        messages << {"role" => "system", "content" => block}
+        messages << Mantle::Message.new("system", block)
       end
 
       # 3. Memory view as system message
       memory_view = @memory_store.current_view
       if !memory_view.empty?
-        messages << {"role" => "system", "content" => memory_view}
+        messages << Mantle::Message.new("system", memory_view)
       end
 
       # 4. Get conversation messages from context_store (skip the system message it includes)
       context_messages = @context_store.current_view
-      conversation_messages = context_messages.select { |msg| msg["role"] != "system" }
+      conversation_messages = context_messages.select { |msg| msg.role != "system" }
       messages.concat(conversation_messages)
 
       # 5. Apply pending invisible append to the last user message if present
@@ -84,17 +84,14 @@ module Mantle::Storage
         # Find the index of the last user message
         last_user_index = nil
         messages.each_with_index do |msg, idx|
-          if msg["role"] == "user"
+          if msg.role == "user"
             last_user_index = idx
           end
         end
 
         if last_user_index
           # Inject as a separate system message immediately following the user's message
-          messages.insert(last_user_index + 1, {
-            "role"    => "system",
-            "content" => pending_append.strip,
-          })
+          messages.insert(last_user_index + 1, Mantle::Message.new("system", pending_append.strip))
         end
 
         # Clear the pending append after applying it
@@ -115,12 +112,12 @@ module Mantle::Storage
     end
 
     # Handles a bot response *msg*, optionally triggering context consolidation if *check_consolidation* is true.
-    def handle_bot_message(msg : String, check_consolidation : Bool = true)
+    def handle_bot_message(msg : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, check_consolidation : Bool = true)
       # Strip thinking tags if enabled
       processed_msg = @strip_thinking_tags ? strip_thinking(msg) : msg
 
       # Always use "Assistant" label for normalization, not custom bot_name
-      @context_store.add_message("Assistant", processed_msg)
+      @context_store.add_message("Assistant", processed_msg, tool_calls)
 
       if @context_store.current_num_tokens >= @token_softmax
         Mantle.emit_status(:context_softmax_exceeded)
@@ -131,9 +128,9 @@ module Mantle::Storage
       end
     end
 
-    # Adds a message to the context with a specific *role* and *content*, optionally checking consolidation.
-    def add_message(role : String, content : String, check_consolidation : Bool = true)
-      @context_store.add_message(role, content)
+    # Adds a message to the context with a specific *role*, *content*, and optional tool calls, optionally checking consolidation.
+    def add_message(role : String, content : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil, check_consolidation : Bool = true)
+      @context_store.add_message(role, content, tool_calls, tool_call_id)
 
       if @context_store.current_num_tokens >= @token_softmax
         Mantle.emit_status(:context_softmax_exceeded)
@@ -169,8 +166,12 @@ module Mantle::Storage
       if pruned_messages && pruned_messages.size >= 1
         # Convert message hashes to formatted strings for memory store
         formatted_messages = pruned_messages.map do |msg|
-          role_label = msg["role"] == "user" ? @user_name : @bot_name
-          "[#{role_label}] #{msg["content"]}\n"
+          role_label = msg.role == "user" ? @user_name : @bot_name
+          content = msg.content
+          if (content.nil? || content.empty?) && (tcs = msg.tool_calls)
+            content = "Called tools: " + tcs.map { |tc| tc.function.name }.join(", ")
+          end
+          "[#{role_label}] #{content}\n"
         end
         @memory_store.ingest(formatted_messages)
       else
@@ -198,8 +199,12 @@ module Mantle::Storage
       if pruned_messages && pruned_messages.size >= 1
         # Convert message hashes to formatted strings for memory store
         formatted_messages = pruned_messages.map do |msg|
-          role_label = msg["role"] == "user" ? @user_name : @bot_name
-          "[#{role_label}] #{msg["content"]}\n"
+          role_label = msg.role == "user" ? @user_name : @bot_name
+          content = msg.content
+          if (content.nil? || content.empty?) && (tcs = msg.tool_calls)
+            content = "Called tools: " + tcs.map { |tc| tc.function.name }.join(", ")
+          end
+          "[#{role_label}] #{content}\n"
         end
         @memory_store.ingest(formatted_messages)
       end

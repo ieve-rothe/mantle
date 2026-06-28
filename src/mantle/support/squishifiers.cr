@@ -20,8 +20,8 @@ module Mantle::Support::Squishifiers
       user_content = messages.join("\n")
 
       chat_messages = [
-        {"role" => "system", "content" => system_prompt},
-        {"role" => "user", "content" => user_content},
+        Mantle::Message.new("system", system_prompt),
+        Mantle::Message.new("user", user_content),
       ]
 
       response = client.execute(chat_messages)

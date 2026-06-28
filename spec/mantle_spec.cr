@@ -15,19 +15,19 @@ describe Mantle::Flows::ChatFlow do
 
     # Assert
     view = store.current_view
-    view.should be_a(Array(Hash(String, String)))
+    view.should be_a(Array(Mantle::Message))
 
     # Check system message
-    system_msg = view.find { |m| m["role"] == "system" }
+    system_msg = view.find { |m| m.role == "system" }
     system_msg.should_not be_nil
-    system_msg.not_nil!["content"].should eq("Sys Prompt")
+    system_msg.not_nil!.content.should eq("Sys Prompt")
 
     # Check user message
-    user_msg = view.find { |m| m["role"] == "user" && m["content"] == "Hello" }
+    user_msg = view.find { |m| m.role == "user" && m.content == "Hello" }
     user_msg.should_not be_nil
 
     # Check assistant response
-    assistant_msg = view.find { |m| m["role"] == "assistant" && m["content"] == "Simulated response" }
+    assistant_msg = view.find { |m| m.role == "assistant" && m.content == "Simulated response" }
     assistant_msg.should_not be_nil
   end
 
@@ -62,15 +62,15 @@ describe Mantle::Flows::ChatFlow do
 
     # Assert
     view = store.current_view
-    messages_content = view.map { |m| m["content"] }
+    messages_content = view.map { |m| m.content }
 
     # Both turns should be in the view
     messages_content.should contain("Turn 1")
     messages_content.should contain("Turn 2")
 
     # Turn 1 should appear before Turn 2
-    turn1_index = view.index { |m| m["content"] == "Turn 1" }
-    turn2_index = view.index { |m| m["content"] == "Turn 2" }
+    turn1_index = view.index { |m| m.content == "Turn 1" }
+    turn2_index = view.index { |m| m.content == "Turn 2" }
     turn1_index.should_not be_nil
     turn2_index.should_not be_nil
     turn1_index.not_nil!.should be < turn2_index.not_nil!

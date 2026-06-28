@@ -6,12 +6,12 @@ require "../../src/mantle"
 class ScriptedClient < Mantle::Clients::Client
   property responses : Array(Mantle::Clients::Response)
   property call_count : Int32 = 0
-  property recorded_messages : Array(Array(Hash(String, String))) = [] of Array(Hash(String, String))
+  property recorded_messages : Array(Array(Mantle::Message)) = [] of Array(Mantle::Message)
 
   def initialize(@responses : Array(Mantle::Clients::Response))
   end
 
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
+  def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
     @recorded_messages << messages
 
     if @call_count >= @responses.size

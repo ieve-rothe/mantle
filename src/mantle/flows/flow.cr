@@ -44,11 +44,14 @@ module Mantle::Flows
     end
 
     # :nodoc:
-    protected def format_messages_for_log(messages : Array(Hash(String, String))) : String
+    protected def format_messages_for_log(messages : Array(Mantle::Message)) : String
       String.build do |io|
         messages.join(io, "") do |msg, i|
-          role = msg["role"].capitalize
-          content = msg["content"]
+          role = msg.role.capitalize
+          content = msg.content || ""
+          if content.empty? && (tcs = msg.tool_calls)
+            content = "Called tools: " + tcs.map { |tc| tc.function.name }.join(", ")
+          end
           i << "[" << role << "] " << content << "\n"
         end
       end
@@ -220,7 +223,7 @@ module Mantle::Flows
       on_response.try(&.call(final_response))
     end
 
-    private def execute_and_parse(context_view : Array(Hash(String, String)), all_tools : Array(Mantle::Tools::Tool)?, on_chunk : Proc(String, Nil)?) : Mantle::Clients::Response
+    private def execute_and_parse(context_view : Array(Mantle::Message), all_tools : Array(Mantle::Tools::Tool)?, on_chunk : Proc(String, Nil)?) : Mantle::Clients::Response
       # If depth >= MAX_SUBAGENT_DEPTH, strip tools to prevent recursion
       tools_to_pass = (@depth >= MAX_SUBAGENT_DEPTH) ? nil : all_tools
 
@@ -290,9 +293,9 @@ module Mantle::Flows
       tool_executor : Mantle::Tools::ToolExecutor,
       response : Mantle::Clients::Response,
       ephemeral_blocks : Array(String),
-      context_view : Array(Hash(String, String)),
+      context_view : Array(Mantle::Message),
       failed_calls : Array({String, JSON::Any}),
-    ) : Array(Hash(String, String))
+    ) : Array(Mantle::Message)
       Mantle.emit_status(:tool_loop)
       # Log detailed tool call information (natural language)
       tool_calls.each do |call|
@@ -300,9 +303,11 @@ module Mantle::Flows
         @logger.log_message(:bot, formatted_call, format_messages_for_log(context_view), response.thinking)
       end
 
-      # Add assistant message to context if there's content (defer consolidation)
-      if response.content && !response.content.not_nil!.empty?
-        @context_manager.handle_bot_message(response.content.not_nil!, check_consolidation: false)
+      # Add assistant message to context if there's content OR tool calls (defer consolidation)
+      has_content = response.content && !response.content.not_nil!.empty?
+      has_tools = response.tool_calls && !response.tool_calls.not_nil!.empty?
+      if has_content || has_tools
+        @context_manager.handle_bot_message(response.content || "", response.tool_calls, check_consolidation: false)
       end
 
       # Execute tools
@@ -310,8 +315,7 @@ module Mantle::Flows
 
       # Add tool results to context with 'tool' role (defer consolidation)
       tool_results.each_with_index do |result, idx|
-        content_with_id = "Result from #{result.tool_call_id}: #{result.result}"
-        @context_manager.add_message("tool", content_with_id, check_consolidation: false)
+        @context_manager.add_message("tool", result.result, tool_call_id: result.tool_call_id, check_consolidation: false)
 
         # Log detailed tool result (natural language)
         formatted_result = Mantle::Tools::ToolFormatter.format_tool_result(result)

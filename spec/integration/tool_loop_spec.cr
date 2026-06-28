@@ -104,10 +104,10 @@ describe "Integration: Tool Loops" do
       view.size.should be >= 5
 
       # Verify the specific tool sequences are in the context history
-      tool_results_in_history = view.select { |m| m["role"] == "tool" }
+      tool_results_in_history = view.select { |m| m.role == "tool" }
       tool_results_in_history.size.should eq(2)
-      tool_results_in_history[0]["content"].should contain("intermediate")
-      tool_results_in_history[1]["content"].should contain("final_data")
+      tool_results_in_history[0].content.not_nil!.should contain("intermediate")
+      tool_results_in_history[1].content.not_nil!.should contain("final_data")
 
     ensure
       File.delete(context_file) if File.exists?(context_file)

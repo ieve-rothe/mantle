@@ -8,12 +8,12 @@ class ToolCallMockClient < Mantle::Clients::Client
   def initialize(@responses : Array(Mantle::Clients::Response))
   end
 
-def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
-  if @call_count < @responses.size
-    response = @responses[@call_count]
-  else
-    response = @responses.last
-  end
+  def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
+    if @call_count < @responses.size
+      response = @responses[@call_count]
+    else
+      response = @responses.last
+    end
     @call_count += 1
     if content = response.content
       on_chunk.call(content) unless content.empty?
@@ -210,10 +210,11 @@ describe "Mantle ToolEnabledChatFlow" do
 
         # Check that tool result was added to context with 'tool' role
         context_messages = context_store.messages
-        tool_messages = context_messages.select { |m| m["role"] == "tool" }
+        tool_messages = context_messages.select { |m| m.role == "tool" }
         tool_messages.should_not be_empty
         # Tool result should contain the file content
-        tool_messages[0]["content"].should contain("File contents")
+        tool_messages[0].content.should_not be_nil
+        tool_messages[0].content.not_nil!.should contain("File contents")
       ensure
         File.delete(temp_file) if File.exists?(temp_file)
       end
@@ -351,7 +352,7 @@ describe "Subagent depth kill-switch" do
     )
     
     # Assert - Tool should have been executed
-    context_store.messages.any? { |msg| msg["role"] == "tool" }.should be_true
+    context_store.messages.any? { |msg| msg.role == "tool" }.should be_true
   end
   
   it "strips tools at depth 1 (MAX_SUBAGENT_DEPTH)" do
@@ -382,7 +383,7 @@ describe "Subagent depth kill-switch" do
     )
     
     # Assert - No tool calls should have been executed (tools were stripped)
-    context_store.messages.none? { |msg| msg["role"] == "tool" }.should be_true
+    context_store.messages.none? { |msg| msg.role == "tool" }.should be_true
   end
   
   it "strips tools at depth 2 (beyond MAX_SUBAGENT_DEPTH)" do
@@ -411,7 +412,7 @@ describe "Subagent depth kill-switch" do
     )
     
     # Assert - No tool calls should have been executed
-    context_store.messages.none? { |msg| msg["role"] == "tool" }.should be_true
+    context_store.messages.none? { |msg| msg.role == "tool" }.should be_true
   end
   
   it "defaults to depth 0 when not specified" do
@@ -454,7 +455,7 @@ describe "Subagent depth kill-switch" do
     )
     
     # Assert - Tools should work at default depth 0
-    context_store.messages.any? { |msg| msg["role"] == "tool" }.should be_true
+    context_store.messages.any? { |msg| msg.role == "tool" }.should be_true
   end
 
   describe "infinite retry loop prevention" do

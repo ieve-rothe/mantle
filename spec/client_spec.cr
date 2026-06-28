@@ -200,8 +200,8 @@ describe Mantle::Clients::Client do
 
     # Prepare test messages
     test_messages = [
-      {"role" => "system", "content" => "You are a helpful assistant."},
-      {"role" => "user", "content" => "Why is the sky blue?"},
+      Mantle::Message.new("system", "You are a helpful assistant."),
+      Mantle::Message.new("user", "Why is the sky blue?"),
     ]
 
     # Act
@@ -275,7 +275,7 @@ describe Mantle::Clients::Client do
 
     spawn { server.listen }
 
-    test_messages = [{"role" => "user", "content" => "Read test.txt"}]
+    test_messages = [Mantle::Message.new("user", "Read test.txt")]
 
     # Act
     client.execute(test_messages, tools: [test_tool])
@@ -333,7 +333,7 @@ describe Mantle::Clients::Client do
 
     spawn { server.listen }
 
-    test_messages = [{"role" => "user", "content" => "Read test.txt"}]
+    test_messages = [Mantle::Message.new("user", "Read test.txt")]
 
     # Act
     response = client.execute(test_messages)
@@ -384,7 +384,7 @@ describe Mantle::Clients::Client do
 
     spawn { server.listen }
 
-    test_messages = [{"role" => "user", "content" => "Read test.txt"}]
+    test_messages = [Mantle::Message.new("user", "Read test.txt")]
 
     # Act
     response = client.execute(test_messages)
@@ -423,7 +423,7 @@ describe Mantle::Clients::Client do
 
     spawn { server.listen }
 
-    test_messages = [{"role" => "user", "content" => "Test"}]
+    test_messages = [Mantle::Message.new("user", "Test")]
 
     # Act
     client.execute(test_messages)

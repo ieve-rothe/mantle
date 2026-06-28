@@ -47,7 +47,7 @@ module Mantle::Clients
       end
 
       def self.to_json(value : String, builder : JSON::Builder)
-        builder.string(value)
+        JSON.parse(value).to_json(builder)
       end
     end
   end
@@ -113,12 +113,12 @@ module Mantle::Clients
     # Executes the LLM request with the provided *messages* and *tools*, yielding chunks to *on_chunk*.
     #
     # Returns a `Response`.
-    abstract def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Response
+    abstract def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Response
 
     # Executes the LLM request without streaming, discarding partial chunks.
     #
     # Returns a `Response`.
-    def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil) : Response
+    def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil) : Response
       execute(messages, tools) { |chunk| }
     end
   end
@@ -157,7 +157,7 @@ module Mantle::Clients
       @keep_alive = model_config.keep_alive
     end
 
-    def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Response
+    def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Response
       headers = HTTP::Headers{
         "Content-Type" => "application/json",
       }
@@ -171,7 +171,7 @@ module Mantle::Clients
       end
     end
 
-    private def build_request_body(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)?) : String
+    private def build_request_body(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)?) : String
       base_options = {
         model:      @model_name,
         messages:   messages,

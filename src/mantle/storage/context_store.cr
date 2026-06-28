@@ -33,24 +33,28 @@ module Mantle::Storage
     # Returns the estimated count of tokens in the store, derived via `#current_view`.
     def current_num_tokens : Int32
       # Derived via current_view
-      current_view.sum { |msg| msg["content"].size // 4 }
+      current_view.sum do |msg|
+        content_size = (msg.content || "").size
+        tool_size = msg.tool_calls.try(&.to_json.size) || 0
+        (content_size + tool_size) // 4
+      end
     end
 
-    # Returns messages in chat format: Array of hashes with `"role"` and `"content"` keys.
-    def current_view : Array(Hash(String, String))
+    # Returns messages in chat format: Array of Mantle::Message
+    def current_view : Array(Mantle::Message)
       # Implement in specific class
-      [] of Hash(String, String)
+      [] of Mantle::Message
     end
 
-    # Appends a new message to the store with the specified *label* and *message* content.
-    def add_message(label : String, message : String)
+    # Appends a new message to the store with the specified *label*, *message* content, and optional tool call details.
+    def add_message(label : String, message : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil)
       # Implement in specific class
     end
 
     # Prunes messages until the total token count is under *target_tokens*, returning the list of pruned messages.
-    def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
+    def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
       # Implement in specific class.
-      [] of Hash(String, String)
+      [] of Mantle::Message
     end
 
     # Prunes the oldest *num_to_prune* messages from the store.
@@ -97,14 +101,14 @@ module Mantle::Storage
     def initialize(system_prompt : String, messages_to_keep : Int32)
       super(system_prompt)
       @messages_to_keep = messages_to_keep
-      @messages = Deque(Hash(String, String)).new
+      @messages = Deque(Mantle::Message).new
     end
 
     # Returns the messages in chat format, prepending the system prompt if present.
-    def current_view : Array(Hash(String, String))
-      result = [] of Hash(String, String)
+    def current_view : Array(Mantle::Message)
+      result = [] of Mantle::Message
       # Add system prompt as first message if present
-      result << {"role" => "system", "content" => @system_prompt} unless @system_prompt.empty?
+      result << Mantle::Message.new("system", @system_prompt) unless @system_prompt.empty?
       # Add conversation messages
       result.concat(@messages.to_a)
       result
@@ -113,9 +117,9 @@ module Mantle::Storage
     # Adds a message to the context store, sliding the window to eject old messages if needed.
     #
     # Standardizes the *label* using `#normalize_role`.
-    def add_message(label : String, message : String)
+    def add_message(label : String, message : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil)
       role = normalize_role(label)
-      @messages << {"role" => role, "content" => message}
+      @messages << Mantle::Message.new(role, message, tool_calls, tool_call_id)
       @messages.shift if @messages.size > @messages_to_keep
       @current_num_messages = @messages.size
     end
@@ -123,11 +127,11 @@ module Mantle::Storage
     # Prunes oldest messages to keep the total token count under *target_tokens*.
     #
     # Returns the list of pruned messages.
-    def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
-      pruned_messages = [] of Hash(String, String)
+    def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
+      pruned_messages = [] of Mantle::Message
 
       while current_num_tokens > target_tokens && !@messages.empty?
-        if @messages.first["role"] == "system" && @messages.size > 1
+        if @messages.first.role == "system" && @messages.size > 1
           system_msg = @messages.shift
           pruned_messages << @messages.shift
           @messages.unshift(system_msg)
@@ -156,26 +160,26 @@ module Mantle::Storage
     private struct FileData
       include JSON::Serializable
       property system_prompt : String?
-      property messages : Array(Hash(String, String))
+      property messages : Array(Mantle::Message)
 
-      def initialize(@system_prompt : String?, @messages : Array(Hash(String, String)))
+      def initialize(@system_prompt : String?, @messages : Array(Mantle::Message))
       end
     end
 
     # Creates a JSON-backed context store, loading context from *context_file* using the specified *system_prompt*.
     def initialize(system_prompt : String, context_file : String, @persist_system_prompt : Bool = true)
       super(system_prompt)
-      @messages = Deque(Hash(String, String)).new
+      @messages = Deque(Mantle::Message).new
       @context_file = context_file
 
       load_context_from_json
     end
 
     # Returns the active messages, prepending the system prompt if present.
-    def current_view : Array(Hash(String, String))
-      result = [] of Hash(String, String)
+    def current_view : Array(Mantle::Message)
+      result = [] of Mantle::Message
       # Add system prompt as first message if present
-      result << {"role" => "system", "content" => @system_prompt} unless @system_prompt.empty?
+      result << Mantle::Message.new("system", @system_prompt) unless @system_prompt.empty?
       # Add conversation messages
       result.concat(@messages.to_a)
       result
@@ -184,9 +188,9 @@ module Mantle::Storage
     # Adds a message to the context store and saves the updated state to the JSON file.
     #
     # Standardizes the *label* using `#normalize_role`.
-    def add_message(label : String, message : String)
+    def add_message(label : String, message : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil)
       role = normalize_role(label)
-      @messages << {"role" => role, "content" => message}
+      @messages << Mantle::Message.new(role, message, tool_calls, tool_call_id)
       @current_num_messages = @messages.size
       save_context_to_json
     end
@@ -218,7 +222,7 @@ module Mantle::Storage
         @messages.clear
         data.messages.each do |msg|
           # Validate roles when loading
-          validate_role(msg["role"])
+          validate_role(msg.role)
           @messages << msg
         end
         @current_num_messages = @messages.size
@@ -233,11 +237,11 @@ module Mantle::Storage
     # Prunes conversation messages to keep total tokens under *target_tokens*, and saves the updated state.
     #
     # Returns the list of pruned messages.
-    def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
-      pruned_messages = [] of Hash(String, String)
+    def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
+      pruned_messages = [] of Mantle::Message
 
       while current_num_tokens > target_tokens && !@messages.empty?
-        if @messages.first["role"] == "system" && @messages.size > 1
+        if @messages.first.role == "system" && @messages.size > 1
           system_msg = @messages.shift
           pruned_messages << @messages.shift
           @messages.unshift(system_msg)
@@ -254,8 +258,8 @@ module Mantle::Storage
     # Prunes the oldest *num_to_prune* messages and saves the updated state.
     #
     # Returns the list of pruned messages.
-    def prune(num_to_prune : Int32) : Array(Hash(String, String))
-      pruned_messages = [] of Hash(String, String)
+    def prune(num_to_prune : Int32) : Array(Mantle::Message)
+      pruned_messages = [] of Mantle::Message
 
       count = [num_to_prune, @current_num_messages].min
 

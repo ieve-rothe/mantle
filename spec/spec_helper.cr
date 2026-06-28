@@ -4,22 +4,22 @@ require "json"
 
 class DummyContextStore < Mantle::Storage::ContextStore
   property system_prompt : String = "System: Initial Prompt"
-  property messages : Array(Hash(String, String)) = [] of Hash(String, String)
+  property messages : Array(Mantle::Message) = [] of Mantle::Message
 
   def initialize(@system_prompt : String = "System: Initial Prompt")
     super(@system_prompt)
   end
 
-  def current_view : Array(Hash(String, String))
-    result = [] of Hash(String, String)
-    result << {"role" => "system", "content" => @system_prompt} unless @system_prompt.empty?
+  def current_view : Array(Mantle::Message)
+    result = [] of Mantle::Message
+    result << Mantle::Message.new("system", @system_prompt) unless @system_prompt.empty?
     result.concat(@messages)
     result
   end
 
-  def add_message(label : String, message : String)
+  def add_message(label : String, message : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil)
     role = normalize_role(label)
-    @messages << {"role" => role, "content" => message}
+    @messages << Mantle::Message.new(role, message, tool_calls, tool_call_id)
     @current_num_messages = @messages.size
   end
 end
@@ -47,13 +47,13 @@ class DummyContextManager < Mantle::Storage::ContextManager
     @context_store.add_message("User", msg)
   end
 
-  def handle_bot_message(msg : String)
-    @context_store.add_message("Assistant", msg)
+  def handle_bot_message(msg : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil)
+    @context_store.add_message("Assistant", msg, tool_calls)
   end
 end
 
 class DummyClient < Mantle::Clients::Client
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
+  def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
     on_chunk.call("Simulated response")
     Mantle::Clients::Response.new(content: "Simulated response", tool_calls: nil)
   end

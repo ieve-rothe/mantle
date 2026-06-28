@@ -17,10 +17,10 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
       # Assert
       store.system_prompt.should eq(sys_prompt)
       view = store.current_view
-      view.should be_a(Array(Hash(String, String)))
+      view.should be_a(Array(Mantle::Message))
       view.size.should eq(1)  # Only system message
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq(sys_prompt)
+      view[0].role.should eq("system")
+      view[0].content.should eq(sys_prompt)
       store.messages_to_keep.should eq(messages_to_keep)
     end
 
@@ -39,14 +39,14 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
       # Assert - Should have system message + last 3 conversation messages
       view = store.current_view
       view.size.should eq(4)  # system + 3 messages (oldest dropped)
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq(sys_prompt)
-      view[1]["role"].should eq("assistant")
-      view[1]["content"].should eq("Message2")
-      view[2]["role"].should eq("user")
-      view[2]["content"].should eq("Message3")
-      view[3]["role"].should eq("assistant")
-      view[3]["content"].should eq("Message4")
+      view[0].role.should eq("system")
+      view[0].content.should eq(sys_prompt)
+      view[1].role.should eq("assistant")
+      view[1].content.should eq("Message2")
+      view[2].role.should eq("user")
+      view[2].content.should eq("Message3")
+      view[3].role.should eq("assistant")
+      view[3].content.should eq("Message4")
     end
 
     it "supports 'tool' role for tool results" do
@@ -64,12 +64,12 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
       # Assert
       view = store.current_view
       view.size.should eq(5)  # system + 4 messages
-      view[0]["role"].should eq("system")
-      view[1]["role"].should eq("user")
-      view[2]["role"].should eq("assistant")
-      view[3]["role"].should eq("tool")
-      view[3]["content"].should eq("Result: file1.txt, file2.txt")
-      view[4]["role"].should eq("assistant")
+      view[0].role.should eq("system")
+      view[1].role.should eq("user")
+      view[2].role.should eq("assistant")
+      view[3].role.should eq("tool")
+      view[3].content.should eq("Result: file1.txt, file2.txt")
+      view[4].role.should eq("assistant")
     end
   end
 
@@ -87,7 +87,7 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
       store.current_num_messages.should eq(0)
       view = store.current_view
       view.size.should eq(1) # Only system prompt remains
-      view[0]["role"].should eq("system")
+      view[0].role.should eq("system")
     end
   end
 
@@ -102,8 +102,8 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
       # Assert
       store.system_prompt.should eq("New Prompt")
       view = store.current_view
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq("New Prompt")
+      view[0].role.should eq("system")
+      view[0].content.should eq("New Prompt")
     end
   end
 end
@@ -146,10 +146,10 @@ describe Mantle::Storage::JSONContextStore do
       # Assert
       store.system_prompt.should eq(sys_prompt)
       view = store.current_view
-      view.should be_a(Array(Hash(String, String)))
+      view.should be_a(Array(Mantle::Message))
       view.size.should eq(1)  # Only system message
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq(sys_prompt)
+      view[0].role.should eq("system")
+      view[0].content.should eq(sys_prompt)
       File.exists?(test_file).should be_true
 
       # Cleanup
@@ -177,12 +177,12 @@ describe Mantle::Storage::JSONContextStore do
       # Assert
       view = store.current_view
       view.size.should eq(3)  # system + 2 messages
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq(sys_prompt)
-      view[1]["role"].should eq("user")
-      view[1]["content"].should eq("Hello")
-      view[2]["role"].should eq("assistant")
-      view[2]["content"].should eq("Hi there")
+      view[0].role.should eq("system")
+      view[0].content.should eq(sys_prompt)
+      view[1].role.should eq("user")
+      view[1].content.should eq("Hello")
+      view[2].role.should eq("assistant")
+      view[2].content.should eq("Hi there")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -201,10 +201,10 @@ describe Mantle::Storage::JSONContextStore do
       # Assert
       view = store.current_view
       view.size.should eq(2)  # system + 1 message
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq("System:")
-      view[1]["role"].should eq("user")
-      view[1]["content"].should eq("Hello!")
+      view[0].role.should eq("system")
+      view[0].content.should eq("System:")
+      view[1].role.should eq("user")
+      view[1].content.should eq("Hello!")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -244,12 +244,12 @@ describe Mantle::Storage::JSONContextStore do
       # Assert
       view = store.current_view
       view.size.should eq(3)  # system + 2 messages
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq("SysPrompt")
-      view[1]["role"].should eq("user")
-      view[1]["content"].should eq("Msg1")
-      view[2]["role"].should eq("assistant")  # Bot normalized to assistant
-      view[2]["content"].should eq("Msg2")
+      view[0].role.should eq("system")
+      view[0].content.should eq("SysPrompt")
+      view[1].role.should eq("user")
+      view[1].content.should eq("Msg1")
+      view[2].role.should eq("assistant")  # Bot normalized to assistant
+      view[2].content.should eq("Msg2")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -273,12 +273,12 @@ describe Mantle::Storage::JSONContextStore do
       # Assert - Second instance should have same context
       view = store2.current_view
       view.size.should eq(3)  # system + 2 messages
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq(sys_prompt)
-      view[1]["role"].should eq("user")
-      view[1]["content"].should eq("Hello")
-      view[2]["role"].should eq("assistant")
-      view[2]["content"].should eq("Hi")
+      view[0].role.should eq("system")
+      view[0].content.should eq(sys_prompt)
+      view[1].role.should eq("user")
+      view[1].content.should eq("Hello")
+      view[2].role.should eq("assistant")
+      view[2].content.should eq("Hi")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -301,19 +301,19 @@ describe Mantle::Storage::JSONContextStore do
 
       # Assert - Check return value
       pruned_messages.size.should eq(2)
-      pruned_messages[0]["role"].should eq("user")
-      pruned_messages[0]["content"].should eq("One")
-      pruned_messages[1]["role"].should eq("assistant")
-      pruned_messages[1]["content"].should eq("Two")
+      pruned_messages[0].role.should eq("user")
+      pruned_messages[0].content.should eq("One")
+      pruned_messages[1].role.should eq("assistant")
+      pruned_messages[1].content.should eq("Two")
 
       # Assert - Check current state (only the last 2 should remain)
       view = store.current_view
       view.size.should eq(3)  # system + 2 remaining messages
-      view[0]["role"].should eq("system")
-      view[1]["role"].should eq("user")
-      view[1]["content"].should eq("Three")
-      view[2]["role"].should eq("assistant")
-      view[2]["content"].should eq("Four")
+      view[0].role.should eq("system")
+      view[1].role.should eq("user")
+      view[1].content.should eq("Three")
+      view[2].role.should eq("assistant")
+      view[2].content.should eq("Four")
 
       # Assert - Check persistence (file should be updated)
       json_content = JSON.parse(File.read(test_file))
@@ -335,12 +335,12 @@ describe Mantle::Storage::JSONContextStore do
 
       # Assert
       pruned.size.should eq(1)
-      pruned[0]["role"].should eq("user")
-      pruned[0]["content"].should eq("Only Message")
+      pruned[0].role.should eq("user")
+      pruned[0].content.should eq("Only Message")
 
       view = store.current_view
       view.size.should eq(1)  # Only system message remains
-      view[0]["role"].should eq("system")
+      view[0].role.should eq("system")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -383,8 +383,8 @@ describe Mantle::Storage::JSONContextStore do
       # Assert
       store.system_prompt.should eq("New Prompt")
       view = store.current_view
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq("New Prompt")
+      view[0].role.should eq("system")
+      view[0].content.should eq("New Prompt")
 
       # Check persistence
       json_content = JSON.parse(File.read(test_file))
@@ -425,7 +425,7 @@ describe Mantle::Storage::JSONContextStore do
 
       # Assert - The prompt should be the one passed to the constructor, not overridden to nil
       store2.system_prompt.should eq("New Memory Prompt")
-      store2.current_view[0]["content"].should eq("New Memory Prompt")
+      store2.current_view[0].content.should eq("New Memory Prompt")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
@@ -441,7 +441,7 @@ describe Mantle::Storage::JSONContextStore do
 
       # Assert - Updated in memory
       store.system_prompt.should eq("New Dynamic Prompt")
-      store.current_view[0]["content"].should eq("New Dynamic Prompt")
+      store.current_view[0].content.should eq("New Dynamic Prompt")
 
       # Assert - Still null in file
       json_content = JSON.parse(File.read(test_file))

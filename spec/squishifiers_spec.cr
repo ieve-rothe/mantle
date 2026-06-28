@@ -3,13 +3,13 @@ require "./spec_helper"
 
 # Mock client that captures the messages it receives
 class CapturingClient < Mantle::Clients::Client
-  property captured_messages : Array(Hash(String, String))? = nil
+  property captured_messages : Array(Mantle::Message)? = nil
   property response_to_return : String
 
   def initialize(@response_to_return : String = "Mocked summary response")
   end
 
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
+  def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
     @captured_messages = messages
     on_chunk.call(@response_to_return)
     Mantle::Clients::Response.new(content: @response_to_return, tool_calls: nil)
@@ -18,7 +18,7 @@ end
 
 # Mock client that always fails
 class FailingClient < Mantle::Clients::Client
-  def execute(messages : Array(Hash(String, String)), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
+  def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
     raise Exception.new("LLM service unavailable")
   end
 end
@@ -55,15 +55,17 @@ describe Mantle::Support::Squishifiers do
       messages.size.should eq(2)  # system + user message
 
       # First message should be system prompt
-      messages[0]["role"].should eq("system")
-      messages[0]["content"].should contain("Extract factual data")
-      messages[0]["content"].should contain("bulleted list")
+      messages[0].role.should eq("system")
+      messages[0].content.should_not be_nil
+      messages[0].content.not_nil!.should contain("Extract factual data")
+      messages[0].content.not_nil!.should contain("bulleted list")
 
       # Second message should be user content with joined messages
-      messages[1]["role"].should eq("user")
-      messages[1]["content"].should contain("[User] Hello there")
-      messages[1]["content"].should contain("[Assistant] Hi back")
-      messages[1]["content"].should contain("[User] How are you?")
+      messages[1].role.should eq("user")
+      messages[1].content.should_not be_nil
+      messages[1].content.not_nil!.should contain("[User] Hello there")
+      messages[1].content.not_nil!.should contain("[Assistant] Hi back")
+      messages[1].content.not_nil!.should contain("[User] How are you?")
     end
 
     it "returns the stripped response from the client" do
@@ -96,7 +98,7 @@ describe Mantle::Support::Squishifiers do
 
       # Assert
       messages = client.captured_messages.not_nil!
-      user_content = messages[1]["content"]
+      user_content = messages[1].content
 
       user_content.should eq("Message 1\nMessage 2\nMessage 3")
     end
@@ -112,7 +114,7 @@ describe Mantle::Support::Squishifiers do
       # Assert
       result.should eq("Empty summary")
       messages = client.captured_messages.not_nil!
-      messages[1]["content"].should eq("")  # Empty user content
+      messages[1].content.should eq("")  # Empty user content
     end
 
     it "handles single message arrays" do
@@ -126,7 +128,7 @@ describe Mantle::Support::Squishifiers do
       # Assert
       result.should eq("Single message summary")
       messages = client.captured_messages.not_nil!
-      messages[1]["content"].should eq("[User] Only one message")
+      messages[1].content.should eq("[User] Only one message")
     end
 
     it "passes through any client exceptions" do
@@ -156,8 +158,8 @@ describe Mantle::Support::Squishifiers do
       result1.should eq("Response 1")
       result2.should eq("Response 2")
 
-      client1.captured_messages.not_nil![1]["content"].should eq("Message A")
-      client2.captured_messages.not_nil![1]["content"].should eq("Message B")
+      client1.captured_messages.not_nil![1].content.should eq("Message A")
+      client2.captured_messages.not_nil![1].content.should eq("Message B")
     end
 
     it "accepts custom system prompt" do
@@ -173,8 +175,8 @@ describe Mantle::Support::Squishifiers do
 
       # Assert
       messages = client.captured_messages.not_nil!
-      messages[0]["role"].should eq("system")
-      messages[0]["content"].should eq(custom_prompt)
+      messages[0].role.should eq("system")
+      messages[0].content.should eq(custom_prompt)
       result.should eq("Custom summary")
     end
 
@@ -190,8 +192,8 @@ describe Mantle::Support::Squishifiers do
 
       # Assert
       messages = client.captured_messages.not_nil!
-      messages[0]["role"].should eq("system")
-      messages[0]["content"].should eq("Extract factual data from the following conversation log into a concise bulleted list.")
+      messages[0].role.should eq("system")
+      messages[0].content.should eq("Extract factual data from the following conversation log into a concise bulleted list.")
       result.should eq("Default summary")
     end
   end

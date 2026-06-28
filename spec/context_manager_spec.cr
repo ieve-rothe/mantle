@@ -4,57 +4,60 @@ require "./spec_helper"
 # Test-specific context store that tracks messages and supports pruning
 class TrackingContextStore < Mantle::Storage::ContextStore
   property system_prompt : String
-  property messages : Array(Hash(String, String))
+  property messages : Array(Mantle::Message)
   property add_message_calls : Array({String, String})
 
   def initialize(@system_prompt : String)
     super(system_prompt)
-    @messages = [] of Hash(String, String)
+    @messages = [] of Mantle::Message
     @add_message_calls = [] of {String, String}
   end
 
   def current_num_tokens : Int32
-    current_view.sum { |msg| msg["content"].size // 4 }
+    current_view.sum do |msg|
+      content_size = (msg.content || "").size
+      tool_size = msg.tool_calls.try(&.to_json.size) || 0
+      (content_size + tool_size) // 4
+    end
   end
 
-  def current_view : Array(Hash(String, String))
-    result = [] of Hash(String, String)
-    result << {"role" => "system", "content" => @system_prompt} unless @system_prompt.empty?
+  def current_view : Array(Mantle::Message)
+    result = [] of Mantle::Message
+    result << Mantle::Message.new("system", @system_prompt) unless @system_prompt.empty?
     result.concat(@messages)
     result
   end
 
-  def add_message(label : String, message : String)
+  def add_message(label : String, message : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil)
     @add_message_calls << {label, message}
     role = normalize_role(label)
-    @messages << {"role" => role, "content" => message}
+    @messages << Mantle::Message.new(role, message, tool_calls, tool_call_id)
     @current_num_messages = @messages.size
   end
 
-  def prune(num : Int32) : Array(Hash(String, String))
+  def prune(num : Int32) : Array(Mantle::Message)
     num_to_prune = Math.min(num, @messages.size)
     pruned = @messages.shift(num_to_prune)
     @current_num_messages = @messages.size
     pruned
   end
 
-def prune_to_tokens(target_tokens : Int32) : Array(Hash(String, String))
-  pruned_messages = [] of Hash(String, String)
-  while current_num_tokens > target_tokens && !@messages.empty?
-    if @messages.first["role"] == "system" && @messages.size > 1
-      system_msg = @messages.shift
-      pruned_messages << @messages.shift
-      @messages.unshift(system_msg)
-    else
-      pruned_messages << @messages.shift
+  def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
+    pruned_messages = [] of Mantle::Message
+    while current_num_tokens > target_tokens && !@messages.empty?
+      if @messages.first.role == "system" && @messages.size > 1
+        system_msg = @messages.shift
+        pruned_messages << @messages.shift
+        @messages.unshift(system_msg)
+      else
+        pruned_messages << @messages.shift
+      end
     end
+    @current_num_messages = @messages.size
+    return pruned_messages
   end
-  @current_num_messages = @messages.size
-  return pruned_messages
-end
 
-def clear
-
+  def clear
     @messages.clear
     @current_num_messages = 0
   end
@@ -173,22 +176,22 @@ describe Mantle::Storage::ContextManager do
       view = manager.current_view
 
       # Assert
-      view.should be_a(Array(Hash(String, String)))
+      view.should be_a(Array(Mantle::Message))
       view.size.should eq(4)  # base system + memory system + 2 conversation messages
 
       # Base system message
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq("System Prompt")
+      view[0].role.should eq("system")
+      view[0].content.should eq("System Prompt")
 
       # Memory as separate system message
-      view[1]["role"].should eq("system")
-      view[1]["content"].should eq("[Memory Layer 0] Previous conversation summary\n")
+      view[1].role.should eq("system")
+      view[1].content.should eq("[Memory Layer 0] Previous conversation summary\n")
 
       # Conversation messages
-      view[2]["role"].should eq("user")
-      view[2]["content"].should eq("Hello")
-      view[3]["role"].should eq("assistant")
-      view[3]["content"].should eq("Hi there")
+      view[2].role.should eq("user")
+      view[2].content.should eq("Hello")
+      view[3].role.should eq("assistant")
+      view[3].content.should eq("Hi there")
     end
   end
 
@@ -208,9 +211,9 @@ describe Mantle::Storage::ContextManager do
 
       # Check that message was added with correct role and content
       view = context_store.current_view
-      user_message = view.find { |msg| msg["content"] == "Hello world" }
+      user_message = view.find { |msg| msg.content == "Hello world" }
       user_message.should_not be_nil
-      user_message.not_nil!["role"].should eq("user")
+      user_message.not_nil!.role.should eq("user")
     end
 
     it "does not trigger consolidate_memory even when exceeding token_hardmax" do
@@ -253,9 +256,9 @@ describe Mantle::Storage::ContextManager do
       context_store.add_message_calls[0].should eq({"Assistant", "How can I help?"})
 
       view = context_store.current_view
-      bot_message = view.find { |msg| msg["content"] == "How can I help?" }
+      bot_message = view.find { |msg| msg.content == "How can I help?" }
       bot_message.should_not be_nil
-      bot_message.not_nil!["role"].should eq("assistant")
+      bot_message.not_nil!.role.should eq("assistant")
     end
 
     it "handles multiple bot messages in sequence" do
@@ -272,13 +275,13 @@ describe Mantle::Storage::ContextManager do
       context_store.add_message_calls.size.should eq(2)
 
       view = context_store.current_view
-      first_msg = view.find { |msg| msg["content"] == "First response" }
-      second_msg = view.find { |msg| msg["content"] == "Second response" }
+      first_msg = view.find { |msg| msg.content == "First response" }
+      second_msg = view.find { |msg| msg.content == "Second response" }
 
       first_msg.should_not be_nil
-      first_msg.not_nil!["role"].should eq("assistant")
+      first_msg.not_nil!.role.should eq("assistant")
       second_msg.should_not be_nil
-      second_msg.not_nil!["role"].should eq("assistant")
+      second_msg.not_nil!.role.should eq("assistant")
     end
 
     it "does not trigger consolidate_memory when below token_hardmax" do
@@ -467,7 +470,7 @@ end
       # Most recent messages should still be in context
       view = context_store.current_view
       # At token_target=5, many messages will be pruned. Let's make sure the last message is there
-      last_message = view.find { |msg| msg["content"] == "Happy to help!" }
+      last_message = view.find { |msg| msg.content == "Happy to help!" }
       last_message.should_not be_nil
     end
   end
@@ -529,11 +532,11 @@ end
 
         # Assert - thinking block should be removed
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should eq("The answer is 42.")
-        bot_message.not_nil!["content"].should_not contain("<think>")
-        bot_message.not_nil!["content"].should_not contain("Let me analyze this")
+        bot_message.not_nil!.content.not_nil!.should eq("The answer is 42.")
+        bot_message.not_nil!.content.not_nil!.should_not contain("<think>")
+        bot_message.not_nil!.content.not_nil!.should_not contain("Let me analyze this")
       end
 
       it "strips multiple <think> blocks from bot message" do
@@ -553,12 +556,12 @@ end
 
         # Assert - both thinking blocks should be removed
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should eq("Answer part 1.Answer part 2.")
-        bot_message.not_nil!["content"].should_not contain("<think>")
-        bot_message.not_nil!["content"].should_not contain("First thought")
-        bot_message.not_nil!["content"].should_not contain("Second thought")
+        bot_message.not_nil!.content.not_nil!.should eq("Answer part 1.Answer part 2.")
+        bot_message.not_nil!.content.not_nil!.should_not contain("<think>")
+        bot_message.not_nil!.content.not_nil!.should_not contain("First thought")
+        bot_message.not_nil!.content.not_nil!.should_not contain("Second thought")
       end
 
       it "handles thinking blocks with newlines and complex content" do
@@ -579,11 +582,11 @@ end
 
         # Assert
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should eq("Here's my answer.")
-        bot_message.not_nil!["content"].should_not contain("<think>")
-        bot_message.not_nil!["content"].should_not contain("First point")
+        bot_message.not_nil!.content.not_nil!.should eq("Here's my answer.")
+        bot_message.not_nil!.content.not_nil!.should_not contain("<think>")
+        bot_message.not_nil!.content.not_nil!.should_not contain("First point")
       end
 
       it "handles malformed tags gracefully (unmatched opening tag)" do
@@ -603,9 +606,9 @@ end
 
         # Assert - should handle gracefully, keeping the original message
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should contain("The answer is 42.")
+        bot_message.not_nil!.content.not_nil!.should contain("The answer is 42.")
       end
 
       it "preserves message when no thinking tags are present" do
@@ -625,9 +628,9 @@ end
 
         # Assert - message should be unchanged
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should eq("Just a normal response without any thinking tags.")
+        bot_message.not_nil!.content.not_nil!.should eq("Just a normal response without any thinking tags.")
       end
 
       it "strips thinking tags before storing in context during consolidation" do
@@ -673,10 +676,10 @@ end
 
         # Assert - thinking tags should be preserved
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should contain("<think>My reasoning process</think>")
-        bot_message.not_nil!["content"].should contain("The answer is 42.")
+        bot_message.not_nil!.content.not_nil!.should contain("<think>My reasoning process</think>")
+        bot_message.not_nil!.content.not_nil!.should contain("The answer is 42.")
       end
 
       it "preserves thinking tags when explicitly set to false" do
@@ -696,9 +699,9 @@ end
 
         # Assert
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should eq("<think>Analysis</think>Result")
+        bot_message.not_nil!.content.not_nil!.should eq("<think>Analysis</think>Result")
       end
     end
 
@@ -720,9 +723,9 @@ end
 
         # Assert
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should eq("Answer")
+        bot_message.not_nil!.content.not_nil!.should eq("Answer")
       end
 
       it "handles thinking blocks at the end of message" do
@@ -742,9 +745,9 @@ end
 
         # Assert
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should eq("The answer is 42.")
+        bot_message.not_nil!.content.not_nil!.should eq("The answer is 42.")
       end
 
       it "handles message that is only thinking tags" do
@@ -764,9 +767,9 @@ end
 
         # Assert
         view = context_store.current_view
-        bot_message = view.find { |msg| msg["role"] == "assistant" }
+        bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!["content"].should eq("")
+        bot_message.not_nil!.content.not_nil!.should eq("")
       end
     end
   end
@@ -789,19 +792,19 @@ end
       view.size.should eq(4)  # base system + 2 ephemeral + 1 user message
 
       # Base system message comes first
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq("Base System Prompt")
+      view[0].role.should eq("system")
+      view[0].content.should eq("Base System Prompt")
 
       # Ephemeral blocks follow as separate system messages
-      view[1]["role"].should eq("system")
-      view[1]["content"].should eq("K-Line 1: Critical info")
+      view[1].role.should eq("system")
+      view[1].content.should eq("K-Line 1: Critical info")
 
-      view[2]["role"].should eq("system")
-      view[2]["content"].should eq("Demon: Switch to dev mode")
+      view[2].role.should eq("system")
+      view[2].content.should eq("Demon: Switch to dev mode")
 
       # User message comes last
-      view[3]["role"].should eq("user")
-      view[3]["content"].should eq("Hello")
+      view[3].role.should eq("user")
+      view[3].content.should eq("Hello")
     end
 
     it "maintains correct order with memory and ephemeral blocks" do
@@ -823,20 +826,20 @@ end
       view = manager.current_view(ephemeral_blocks)
 
       # Assert - Order: base system → ephemeral → memory → context
-      view[0]["role"].should eq("system")
-      view[0]["content"].should eq("System Prompt")
+      view[0].role.should eq("system")
+      view[0].content.should eq("System Prompt")
 
-      view[1]["role"].should eq("system")
-      view[1]["content"].should eq("Ephemeral instruction")
+      view[1].role.should eq("system")
+      view[1].content.should eq("Ephemeral instruction")
 
-      view[2]["role"].should eq("system")
-      view[2]["content"].should eq("[Memory] Previous conversation\n")
+      view[2].role.should eq("system")
+      view[2].content.should eq("[Memory] Previous conversation\n")
 
-      view[3]["role"].should eq("user")
-      view[3]["content"].should eq("Hello")
+      view[3].role.should eq("user")
+      view[3].content.should eq("Hello")
 
-      view[4]["role"].should eq("assistant")
-      view[4]["content"].should eq("Hi")
+      view[4].role.should eq("assistant")
+      view[4].content.should eq("Hi")
     end
 
     it "does not persist ephemeral blocks in context store" do
@@ -858,10 +861,10 @@ end
 
       # But not in second call (not persisted)
       view_without_ephemeral.size.should eq(2)  # system + 1 user
-      view_without_ephemeral[0]["role"].should eq("system")
-      view_without_ephemeral[0]["content"].should eq("System")
-      view_without_ephemeral[1]["role"].should eq("user")
-      view_without_ephemeral[1]["content"].should eq("Test message")
+      view_without_ephemeral[0].role.should eq("system")
+      view_without_ephemeral[0].content.should eq("System")
+      view_without_ephemeral[1].role.should eq("user")
+      view_without_ephemeral[1].content.should eq("Test message")
     end
 
     it "handles empty ephemeral_blocks array gracefully" do
@@ -877,8 +880,8 @@ end
 
       # Assert
       view.size.should eq(2)  # system + 1 user
-      view[0]["role"].should eq("system")
-      view[1]["role"].should eq("user")
+      view[0].role.should eq("system")
+      view[1].role.should eq("user")
     end
 
     it "applies ephemeral blocks only for single call without affecting context" do
@@ -897,13 +900,13 @@ end
       view2 = manager.current_view
 
       # Assert - First call had ephemeral block
-      view1.any? { |msg| msg["content"] == "Ephemeral instruction" }.should be_true
+      view1.any? { |msg| msg.content == "Ephemeral instruction" }.should be_true
 
       # Second call does not have ephemeral block
-      view2.any? { |msg| msg["content"] == "Ephemeral instruction" }.should be_false
+      view2.any? { |msg| msg.content == "Ephemeral instruction" }.should be_false
 
       # Context store was not affected
-      context_store.messages.none? { |msg| msg["content"] == "Ephemeral instruction" }.should be_true
+      context_store.messages.none? { |msg| msg.content == "Ephemeral instruction" }.should be_true
     end
   end
 
@@ -919,17 +922,17 @@ end
       view = manager.current_view
 
       # Assert - user message content is unmodified
-      user_message = view.find { |msg| msg["role"] == "user" }
+      user_message = view.find { |msg| msg.role == "user" }
       user_message.should_not be_nil
-      user_message.not_nil!["content"].should eq("Let's fix the bug.")
+      user_message.not_nil!.content.should eq("Let's fix the bug.")
 
       # And a separate system message is inserted immediately following the user message
       user_idx = view.index(user_message).not_nil!
-      view[user_idx + 1]["role"].should eq("system")
-      view[user_idx + 1]["content"].should eq("[System: Dev intent detected. Switch frames.]")
+      view[user_idx + 1].role.should eq("system")
+      view[user_idx + 1].content.should eq("[System: Dev intent detected. Switch frames.]")
 
       # But not in context store
-      context_store.messages.last["content"].should eq("Let's fix the bug.")
+      context_store.messages.last.content.should eq("Let's fix the bug.")
     end
 
     it "applies invisible append exactly once and clears it" do
@@ -944,16 +947,16 @@ end
       view2 = manager.current_view
 
       # Assert - First call has the system message following user message
-      user_msg1 = view1.find { |msg| msg["role"] == "user" }
+      user_msg1 = view1.find { |msg| msg.role == "user" }
       user_idx1 = view1.index(user_msg1).not_nil!
-      view1[user_idx1 + 1]["role"].should eq("system")
-      view1[user_idx1 + 1]["content"].should eq("[APPEND]")
+      view1[user_idx1 + 1].role.should eq("system")
+      view1[user_idx1 + 1].content.should eq("[APPEND]")
 
       # Second call does NOT have the system message following user message (it was cleared)
-      user_msg2 = view2.find { |msg| msg["role"] == "user" }
+      user_msg2 = view2.find { |msg| msg.role == "user" }
       user_idx2 = view2.index(user_msg2).not_nil!
       if user_idx2 + 1 < view2.size
-        view2[user_idx2 + 1]["role"].should_not eq("system")
+        view2[user_idx2 + 1].role.should_not eq("system")
       end
     end
 
@@ -972,15 +975,15 @@ end
       view = manager.current_view
 
       # Assert - Last user message is followed by the system message
-      user_messages = view.select { |msg| msg["role"] == "user" }
+      user_messages = view.select { |msg| msg.role == "user" }
       user_messages.size.should eq(2)
-      user_messages[0]["content"].should eq("First message")
-      user_messages[1]["content"].should eq("Second message")
+      user_messages[0].content.should eq("First message")
+      user_messages[1].content.should eq("Second message")
 
-      last_user_message = view.select { |msg| msg["role"] == "user" }.last
+      last_user_message = view.select { |msg| msg.role == "user" }.last
       last_user_idx = view.index(last_user_message).not_nil!
-      view[last_user_idx + 1]["role"].should eq("system")
-      view[last_user_idx + 1]["content"].should eq("[INVISIBLE]")
+      view[last_user_idx + 1].role.should eq("system")
+      view[last_user_idx + 1].content.should eq("[INVISIBLE]")
     end
 
     it "handles nil invisible_append gracefully" do
@@ -994,8 +997,8 @@ end
       view = manager.current_view
 
       # Assert
-      user_message = view.find { |msg| msg["role"] == "user" }
-      user_message.not_nil!["content"].should eq("Normal message")
+      user_message = view.find { |msg| msg.role == "user" }
+      user_message.not_nil!.content.should eq("Normal message")
     end
 
     it "does not affect context store even after consolidation" do
@@ -1090,9 +1093,9 @@ end
       view = manager.current_view
 
       # Assert - View should reflect new stores
-      view.any? { |msg| msg["content"] == "New message" }.should be_true
-      view.any? { |msg| msg["content"].includes?("New memory layer") }.should be_true
-      view.any? { |msg| msg["content"] == "Old message" }.should be_false
+      view.any? { |msg| (msg.content || "").includes?("New message") }.should be_true
+      view.any? { |msg| (msg.content || "").includes?("New memory layer") }.should be_true
+      view.any? { |msg| (msg.content || "").includes?("Old message") }.should be_false
     end
 
     it "clears pending invisible append during swap" do
@@ -1113,10 +1116,10 @@ end
       view = manager.current_view
 
       # Assert - Pending append should be cleared, new message should not have it
-      user_msg = view.find { |msg| msg["content"].includes?("New message") }
+      user_msg = view.find { |msg| (msg.content || "").includes?("New message") }
       user_msg.should_not be_nil
-      user_msg.not_nil!["content"].should eq("New message")
-      user_msg.not_nil!["content"].should_not contain("[PENDING]")
+      user_msg.not_nil!.content.not_nil!.should eq("New message")
+      user_msg.not_nil!.content.not_nil!.should_not contain("[PENDING]")
     end
   end
 
@@ -1132,7 +1135,7 @@ end
 
       # Assert
       context_store.system_prompt.should eq("New System")
-      manager.current_view[0]["content"].should eq("New System")
+      manager.current_view[0].content.should eq("New System")
     end
   end
 
