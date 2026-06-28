@@ -125,7 +125,7 @@ module Mantle::Flows
       on_response : Proc(Mantle::Clients::Response, Nil)? = nil,
       ephemeral_blocks : Array(String) = [] of String,
       invisible_append : String? = nil,
-      on_tool_call : Proc(String, Hash(String, JSON::Any), Nil)? = nil,
+      on_tool_call : Proc(String, Hash(String, JSON::Any), String, Nil)? = nil,
       on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)? = nil,
       recovery_config : Mantle::Tools::RecoveryConfig? = nil,
     )

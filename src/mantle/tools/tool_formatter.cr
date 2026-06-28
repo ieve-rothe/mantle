@@ -31,7 +31,7 @@ module Mantle::Tools
         # Use String.build to efficiently construct the string without creating
         # many small intermediate pieces in memory.
         String.build do |io|
-          io << "Called " << function_name << "("
+          io << "Called " << function_name << " (ID: " << tool_call.id << ") ("
           # We iterate through each argument and write it directly to the output buffer
           args_h.each_with_index do |(key, value), i|
             io << ", " if i > 0
@@ -42,7 +42,7 @@ module Mantle::Tools
         end
       rescue
         # If JSON parsing fails, show raw arguments
-        "Called #{function_name}(#{arguments})"
+        "Called #{function_name} (ID: #{tool_call.id}) (#{arguments})"
       end
     end
 

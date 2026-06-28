@@ -274,7 +274,7 @@ describe "Mantle Tool Executor" do
       executor = Mantle::Tools::ToolExecutor.new(
         builtin_config: config,
         custom_callback: nil,
-        on_tool_call: ->(name : String, args : Hash(String, JSON::Any)) {
+        on_tool_call: ->(name : String, args : Hash(String, JSON::Any), call_id : String) {
           calls << {name, args}
           nil
         },

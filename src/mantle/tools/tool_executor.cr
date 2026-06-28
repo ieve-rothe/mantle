@@ -33,7 +33,7 @@ module Mantle::Tools
     BUILTIN_TOOL_NAMES = ["read_file", "list_directory", "notify_send", "write_file", "search_files"]
 
     # Callback triggered before executing a tool call.
-    property on_tool_call : Proc(String, Hash(String, JSON::Any), Nil)?
+    property on_tool_call : Proc(String, Hash(String, JSON::Any), String, Nil)?
 
     # Callback triggered after executing a tool call, passing the name, arguments, result string, and status string.
     property on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)?
@@ -55,7 +55,7 @@ module Mantle::Tools
       builtin_config : BuiltinToolConfig?,
       @custom_callback : Proc(String, Hash(String, JSON::Any), String)?,
       bot_name : String = "Assistant",
-      @on_tool_call : Proc(String, Hash(String, JSON::Any), Nil)? = nil,
+      @on_tool_call : Proc(String, Hash(String, JSON::Any), String, Nil)? = nil,
       @on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)? = nil,
       @client : Mantle::Clients::Client? = nil,
       @context_manager : Mantle::Storage::ContextManager? = nil,
@@ -112,7 +112,7 @@ module Mantle::Tools
       end
 
       # Call start hook
-      @on_tool_call.try(&.call(function_name, arguments))
+      @on_tool_call.try(&.call(function_name, arguments, tool_call.id))
 
       actual_retries = retries || @recovery_config.try(&.max_retries) || 0
 
