@@ -106,6 +106,27 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
       view[0].content.should eq("New Prompt")
     end
   end
+
+  describe "#prune_to_tokens" do
+    it "returns an empty array and leaves messages intact when target_tokens is very high" do
+      # Arrange
+      store = Mantle::Storage::EphemeralSlidingContextStore.new("System", 5)
+      store.add_message("User", "Msg1")
+      store.add_message("Assistant", "Msg2")
+
+      # Act
+      pruned = store.prune_to_tokens(10000)
+
+      # Assert
+      pruned.should be_empty
+      view = store.current_view
+      view.size.should eq(3) # system + 2 messages
+      view[1].role.should eq("user")
+      view[1].content.should eq("Msg1")
+      view[2].role.should eq("assistant")
+      view[2].content.should eq("Msg2")
+    end
+  end
 end
 
 # ------------------------------------------------------------------------------
@@ -341,6 +362,31 @@ describe Mantle::Storage::JSONContextStore do
       view = store.current_view
       view.size.should eq(1)  # Only system message remains
       view[0].role.should eq("system")
+
+      # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+
+  describe "#prune_to_tokens" do
+    it "returns an empty array and leaves messages intact when target_tokens is very high" do
+      # Arrange
+      test_file = "/tmp/mantle_test_prune_tokens_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
+      store.add_message("User", "Msg1")
+      store.add_message("Assistant", "Msg2")
+
+      # Act
+      pruned = store.prune_to_tokens(10000)
+
+      # Assert
+      pruned.should be_empty
+      view = store.current_view
+      view.size.should eq(3) # system + 2 messages
+      view[1].role.should eq("user")
+      view[1].content.should eq("Msg1")
+      view[2].role.should eq("assistant")
+      view[2].content.should eq("Msg2")
 
       # Cleanup
       File.delete(test_file) if File.exists?(test_file)
