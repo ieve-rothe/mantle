@@ -115,12 +115,13 @@ module Mantle::Storage
       end
 
       processed_count = 0
+      remaining_tokens = current_layer_index == -1 ? 0 : calculate_tokens(source, 0)
 
       begin
         # For layer -1, we process everything.
         # For other layers, we process until the remaining tokens in source are <= @layer_token_target
         while (current_layer_index == -1 && source.size - processed_count > 0) ||
-              (current_layer_index != -1 && calculate_tokens(source, processed_count) > @layer_token_target)
+              (current_layer_index != -1 && remaining_tokens > @layer_token_target)
           # Before adding, check if target layer is already at capacity
           # If so, consolidate it first to make room
           while current_num_tokens(target_layer_index) >= @layer_token_capacity
@@ -143,7 +144,7 @@ module Mantle::Storage
           if current_layer_index == -1
             chunk_size = source.size - processed_count
           else
-            chunk_size = calculate_chunk_size_to_reach_target(source, processed_count, @layer_token_target)
+            chunk_size = calculate_chunk_size_to_reach_target(source, processed_count, @layer_token_target, remaining_tokens)
           end
 
           chunk = source[processed_count, chunk_size]
@@ -151,12 +152,15 @@ module Mantle::Storage
           begin
             summary = @squishifier.call(chunk)
             # Strip thinking tags from the squishified summary
-            summary = strip_thinking(summary)
+            summary = Mantle::Support::Text.strip_thinking(summary)
             # If no exception from squishifier, then successful response from LLM
             timestamp = Time.utc.to_s("%Y-%m-%d %H:%M")
             @layers[target_layer_index] << "[#{timestamp}] #{summary}"
 
             processed_count += chunk_size
+            if current_layer_index != -1
+              remaining_tokens -= calculate_tokens(chunk, 0)
+            end
           rescue ex
             Mantle::Support::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
             return
@@ -183,8 +187,7 @@ module Mantle::Storage
       sum
     end
 
-    private def calculate_chunk_size_to_reach_target(msgs : Array(String), start_idx : Int32, target_tokens : Int32) : Int32
-      total_tokens = calculate_tokens(msgs, start_idx)
+    private def calculate_chunk_size_to_reach_target(msgs : Array(String), start_idx : Int32, target_tokens : Int32, total_tokens : Int32) : Int32
       return 0 if total_tokens <= target_tokens
 
       tokens_to_remove = total_tokens - target_tokens
@@ -217,7 +220,7 @@ module Mantle::Storage
 
     private def load_memories_from_json : Nil
       begin
-        data = FileData.from_json(File.read(@memory_file))
+        data = File.open(@memory_file, "r") { |f| FileData.from_json(f) }
         @ingest_pending = data.ingest_pending
         @layers = data.layers
       rescue e : File::NotFoundError
@@ -228,12 +231,6 @@ module Mantle::Storage
     private def save_memories_to_json : Nil
       data = FileData.new(@ingest_pending, @layers)
       File.open(@memory_file, "w") { |f| data.to_json(f) }
-    end
-
-    private def strip_thinking(msg : String) : String
-      # Remove <think>...</think> blocks and their contents
-      # Uses regex with multiline flag to handle thinking blocks that span multiple lines
-      msg.gsub(/<think>.*?<\/think>/m, "")
     end
   end
 end

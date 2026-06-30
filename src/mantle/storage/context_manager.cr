@@ -114,7 +114,7 @@ module Mantle::Storage
     # Handles a bot response *msg*, optionally triggering context consolidation if *check_consolidation* is true.
     def handle_bot_message(msg : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, check_consolidation : Bool = true)
       # Strip thinking tags if enabled
-      processed_msg = @strip_thinking_tags ? strip_thinking(msg) : msg
+      processed_msg = @strip_thinking_tags ? Mantle::Support::Text.strip_thinking(msg) : msg
 
       # Always use "Assistant" label for normalization, not custom bot_name
       @context_store.add_message("Assistant", processed_msg, tool_calls)
@@ -256,7 +256,7 @@ module Mantle::Storage
     def flush_and_swap(new_context : ContextStore, new_memory : JSONLayeredMemoryStore)
       # 1. Force the outgoing memory store to process any remaining ingest_pending items
       if !@memory_store.ingest_pending.empty?
-        @memory_store.ingest([] of String)  # Trigger cascade without adding new items
+        @memory_store.ingest([] of String) # Trigger cascade without adding new items
       end
 
       # 2. Ensure all data is flushed to disk
@@ -271,13 +271,6 @@ module Mantle::Storage
       @pending_invisible_append = nil
 
       # Token tracking is delegated to the stores, so no need to reset it manually
-    end
-
-    # :nodoc:
-    private def strip_thinking(msg : String) : String
-      # Remove <think>...</think> blocks and their contents
-      # Uses regex with multiline flag to handle thinking blocks that span multiple lines
-      msg.gsub(/<think>.*?<\/think>/m, "")
     end
   end
 end
