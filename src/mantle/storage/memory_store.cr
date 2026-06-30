@@ -227,7 +227,7 @@ module Mantle::Storage
 
     private def save_memories_to_json : Nil
       data = FileData.new(@ingest_pending, @layers)
-      File.write(@memory_file, data.to_json)
+      File.open(@memory_file, "w") { |f| data.to_json(f) }
     end
 
     private def strip_thinking(msg : String) : String
