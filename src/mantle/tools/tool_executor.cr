@@ -59,7 +59,7 @@ module Mantle::Tools
       @on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)? = nil,
       @client : Mantle::Clients::Client? = nil,
       @context_manager : Mantle::Storage::ContextManager? = nil,
-      @recovery_config : RecoveryConfig? = nil
+      @recovery_config : RecoveryConfig? = nil,
     )
       @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config, bot_name) : nil
     end
@@ -71,7 +71,7 @@ module Mantle::Tools
     def execute_all(
       tool_calls : Array(Mantle::Clients::ToolCall),
       available_tool_names : Array(String)? = nil,
-      retries : Int32? = nil
+      retries : Int32? = nil,
     ) : Array(ToolResult)
       tool_calls.map do |call|
         result_json = execute_single(call, available_tool_names, retries)
@@ -99,7 +99,7 @@ module Mantle::Tools
     private def execute_single(
       tool_call : Mantle::Clients::ToolCall,
       available_tool_names : Array(String)?,
-      retries : Int32? = nil
+      retries : Int32? = nil,
     ) : String
       function_name = tool_call.function.name
       arguments_json = tool_call.function.arguments
@@ -119,10 +119,10 @@ module Mantle::Tools
       # Route to appropriate executor
       begin
         result_json = if is_builtin_tool?(function_name)
-          execute_builtin(function_name, arguments)
-        else
-          execute_custom(function_name, arguments, available_tool_names)
-        end
+                        execute_builtin(function_name, arguments)
+                      else
+                        execute_custom(function_name, arguments, available_tool_names)
+                      end
 
         if failed_result?(result_json) && actual_retries > 0
           if recovered = attempt_recovery(tool_call, result_json, actual_retries, available_tool_names)
@@ -139,10 +139,10 @@ module Mantle::Tools
         result_json
       rescue ex : TerminalToolInterrupt
         interrupt_ex = if ex.tool_call_id.nil?
-          TerminalToolInterrupt.new(ex.message || "", tool_call.id)
-        else
-          ex
-        end
+                         TerminalToolInterrupt.new(ex.message || "", tool_call.id)
+                       else
+                         ex
+                       end
         if hook = @on_tool_result
           hook.call(function_name, arguments, "TerminalToolInterrupt: #{ex.message}", "SUCCESS")
         end
@@ -174,7 +174,7 @@ module Mantle::Tools
       tool_call : Mantle::Clients::ToolCall,
       error_msg : String,
       retries : Int32,
-      available_tool_names : Array(String)?
+      available_tool_names : Array(String)?,
     ) : String?
       client = @client
       context_manager = @context_manager
@@ -235,10 +235,10 @@ module Mantle::Tools
       orig_temp = client.temperature
       begin
         client.temperature = 0.0
-        
+
         5.times do |i|
           response = client.execute(ephemeral_context, recovery_tools.empty? ? nil : recovery_tools)
-          
+
           if content = response.content
             unless content.empty?
               ephemeral_context << Mantle::Message.new("assistant", content)

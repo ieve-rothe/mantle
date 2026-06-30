@@ -34,7 +34,7 @@ module Mantle::Tools
     def initialize(
       @tool_mappings = {} of String => Array(String),
       @on_recovery_nudge = nil,
-      @max_retries = 1
+      @max_retries = 1,
     )
     end
   end
