@@ -217,7 +217,7 @@ module Mantle::Storage
 
     private def load_memories_from_json : Nil
       begin
-        data = FileData.from_json(File.read(@memory_file))
+        data = File.open(@memory_file, "r") { |f| FileData.from_json(f) }
         @ingest_pending = data.ingest_pending
         @layers = data.layers
       rescue e : File::NotFoundError
@@ -227,7 +227,7 @@ module Mantle::Storage
 
     private def save_memories_to_json : Nil
       data = FileData.new(@ingest_pending, @layers)
-      File.write(@memory_file, data.to_json)
+      File.open(@memory_file, "w") { |f| data.to_json(f) }
     end
   end
 end
