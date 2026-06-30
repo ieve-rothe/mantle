@@ -206,6 +206,7 @@ module Mantle::Storage
       begin
         prompt_to_save = @persist_system_prompt ? @system_prompt : nil
         data = FileData.new(prompt_to_save, @messages.to_a)
+        # Stream JSON directly to file without intermediate string allocation
         File.open(@context_file, "w") { |f| data.to_json(f) }
       rescue e : File::Error
         Mantle::Support::Log.error { "Failed to save context to #{@context_file}: #{e.message}" }
