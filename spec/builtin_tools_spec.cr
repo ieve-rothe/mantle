@@ -601,6 +601,30 @@ describe "Mantle Built-in Tools" do
     end
 
     describe "search_files" do
+      it "rejects queries with invalid characters" do
+        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+
+        result_str = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("test; echo bad")}
+        )
+
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should eq("Security violation: query contains invalid characters.")
+
+        # Test newline character
+        result_str2 = executor.execute(
+          "search_files",
+          {"query" => JSON::Any.new("test\n")}
+        )
+
+        result2 = JSON.parse(result_str2)
+        result2["success"].as_bool.should be_false
+        result2["error"].as_s.should eq("Security violation: query contains invalid characters.")
+      end
+
       it "returns missing query error" do
         config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
         executor = Mantle::Tools::BuiltinToolExecutor.new(config)
