@@ -220,6 +220,33 @@ describe "Mantle Tools" do
     end
   end
 
+  describe "BuiltinToolExecutor" do
+    describe "execute_notify_send" do
+      it "strips control characters, backticks, and ANSI escapes" do
+        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: ".")
+        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+
+        # Reopen module for testing private method
+        wrapper = ->(args : Hash(String, JSON::Any)) {
+          executor.as(Mantle::Tools::BuiltinToolExecutor).execute("notify_send", args)
+        }
+
+        # Create a malicious payload with a backtick, ANSI escape code and null byte
+        malicious_message = "hello\e[31mworld\x00`ls`"
+        args = {"message" => JSON::Any.new(malicious_message)}
+
+        # Execute it
+        result_json = wrapper.call(args)
+
+        # It shouldn't contain the backtick, the escape char or null byte
+        # It will contain "[31mworldls" as the rest of the ANSI and the ls get left behind
+        result_json.should_not contain("`")
+        result_json.should_not contain("\\u001b") # JSON escaped \e
+        result_json.should_not contain("\\u0000") # JSON escaped \x00
+      end
+    end
+  end
+
   describe "Tool array serialization" do
     it "serializes array of tools to JSON" do
       tools = [
