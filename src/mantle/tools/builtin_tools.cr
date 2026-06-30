@@ -303,10 +303,10 @@ module Mantle::Tools
       begin
         content = File.read(absolute_path)
         {
-          success: true,
-          file_path: file_path,
+          success:    true,
+          file_path:  file_path,
           bytes_read: content.bytesize,
-          content: content
+          content:    content,
         }.to_json
       rescue ex
         {success: false, error: "Error reading file: #{ex.message}", file_path: file_path}.to_json
@@ -329,10 +329,10 @@ module Mantle::Tools
       begin
         entries = Dir.children(absolute_path)
         {
-          success: true,
+          success:        true,
           directory_path: dir_path,
-          entry_count: entries.size,
-          entries: entries
+          entry_count:    entries.size,
+          entries:        entries,
         }.to_json
       rescue ex
         {success: false, error: "Error listing directory: #{ex.message}", directory_path: dir_path}.to_json
@@ -350,8 +350,8 @@ module Mantle::Tools
       if query.strip.starts_with?("-")
         return {
           success: false,
-          error: "Security violation: query cannot start with a hyphen.",
-          query: query
+          error:   "Security violation: query cannot start with a hyphen.",
+          query:   query,
         }.to_json
       end
 
@@ -363,21 +363,21 @@ module Mantle::Tools
         # Validate file_pattern to prevent argument injection and malicious payloads
         if file_pattern.strip.starts_with?("-")
           return {
-            success: false,
-            error: "Security violation: file_pattern cannot start with a hyphen.",
-            query: query,
+            success:        false,
+            error:          "Security violation: file_pattern cannot start with a hyphen.",
+            query:          query,
             directory_path: dir_path,
-            file_pattern: file_pattern
+            file_pattern:   file_pattern,
           }.to_json
         end
 
         if file_pattern =~ /[;\n\r&|`$]/
           return {
-            success: false,
-            error: "Security violation: file_pattern contains invalid characters.",
-            query: query,
+            success:        false,
+            error:          "Security violation: file_pattern contains invalid characters.",
+            query:          query,
             directory_path: dir_path,
-            file_pattern: file_pattern
+            file_pattern:   file_pattern,
           }.to_json
         end
       end
@@ -388,11 +388,11 @@ module Mantle::Tools
       # Check if path is allowed
       unless path_allowed?(absolute_path)
         return {
-          success: false,
-          error: "Access to path not allowed: #{absolute_path}",
-          query: query,
+          success:        false,
+          error:          "Access to path not allowed: #{absolute_path}",
+          query:          query,
           directory_path: dir_path,
-          file_pattern: file_pattern
+          file_pattern:   file_pattern,
         }.to_json
       end
 
@@ -400,11 +400,11 @@ module Mantle::Tools
         # If absolute_path exists but is a file, we want to skip directory logic and just search the file
         unless File.exists?(absolute_path)
           return {
-            success: false,
-            error: "Path does not exist: #{absolute_path}",
-            query: query,
+            success:        false,
+            error:          "Path does not exist: #{absolute_path}",
+            query:          query,
             directory_path: dir_path,
-            file_pattern: file_pattern
+            file_pattern:   file_pattern,
           }.to_json
         end
 
@@ -443,23 +443,23 @@ module Mantle::Tools
           err_msg = error.to_s.strip
           err_msg = "Command failed with exit code #{status.exit_code}" if err_msg.empty?
           return {
-            success: false,
-            error: "Search failed: #{err_msg}",
-            query: query,
+            success:        false,
+            error:          "Search failed: #{err_msg}",
+            query:          query,
             directory_path: dir_path,
-            file_pattern: file_pattern
+            file_pattern:   file_pattern,
           }.to_json
         end
 
         unless status.success? && !output_str.empty?
           # grep/rg return 1 if no lines are found
           return {
-            success: true,
-            query: query,
+            success:        true,
+            query:          query,
             directory_path: dir_path,
-            file_pattern: file_pattern,
-            total_matches: 0,
-            matches: [] of String
+            file_pattern:   file_pattern,
+            total_matches:  0,
+            matches:        [] of String,
           }.to_json
         end
 
@@ -490,11 +490,11 @@ module Mantle::Tools
         end
       rescue ex
         {
-          success: false,
-          error: "Error executing search: #{ex.message}",
-          query: query,
+          success:        false,
+          error:          "Error executing search: #{ex.message}",
+          query:          query,
           directory_path: dir_path,
-          file_pattern: file_pattern
+          file_pattern:   file_pattern,
         }.to_json
       end
     end
@@ -506,12 +506,15 @@ module Mantle::Tools
         return {success: false, error: "Missing required parameter: message"}.to_json
       end
 
+      # Sanitize message: remove control characters and backticks
+      message = message.gsub(/[[:cntrl:]`]/, "")
+
       # Validate message to prevent argument injection and malicious payloads
       if message.strip.starts_with?("-")
         return {
           success: false,
-          error: "Security violation: message cannot start with a hyphen.",
-          message: message
+          error:   "Security violation: message cannot start with a hyphen.",
+          message: message,
         }.to_json
       end
 
@@ -529,22 +532,22 @@ module Mantle::Tools
         status = Process.run("notify-send", args)
         if status.success?
           {
-            success: true,
-            message: "Notification sent successfully",
-            notification_message: message
+            success:              true,
+            message:              "Notification sent successfully",
+            notification_message: message,
           }.to_json
         else
           {
             success: false,
-            error: "Error sending notification. Exit code: #{status.exit_code}",
-            message: message
+            error:   "Error sending notification. Exit code: #{status.exit_code}",
+            message: message,
           }.to_json
         end
       rescue ex
         {
           success: false,
-          error: "Error executing notify-send: #{ex.message}",
-          message: message
+          error:   "Error executing notify-send: #{ex.message}",
+          message: message,
         }.to_json
       end
     end

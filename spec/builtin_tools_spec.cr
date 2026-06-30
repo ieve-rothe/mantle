@@ -902,6 +902,31 @@ describe "Mantle Built-in Tools" do
         result["error"].as_s.should contain("Security violation")
         result["message"].as_s.should eq("-u critical")
       end
+
+      it "sanitizes control characters and backticks" do
+        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+
+        # Assuming notify-send might fail in CI since it doesn't exist or connect,
+        # but the JSON response includes the sanitized notification_message if it succeeds,
+        # or the message if it fails. Let's capture what it returns.
+        result_str = executor.execute(
+          "notify_send",
+          {
+            "message" => JSON::Any.new("hello\nworld`\e[31mred"),
+          }
+        )
+
+        result = JSON.parse(result_str)
+        # Process.run could succeed or fail depending on CI environment, but the message in the response should be sanitized
+        returned_message = if result["success"].as_bool
+                             result["notification_message"].as_s
+                           else
+                             result["message"].as_s
+                           end
+
+        returned_message.should eq("helloworld[31mred")
+      end
     end
 
     describe "unknown tools" do
