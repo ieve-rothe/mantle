@@ -117,10 +117,12 @@ module Mantle::Storage
       processed_count = 0
 
       begin
+        remaining_tokens = current_layer_index == -1 ? 0 : calculate_tokens(source)
+
         # For layer -1, we process everything.
         # For other layers, we process until the remaining tokens in source are <= @layer_token_target
         while (current_layer_index == -1 && source.size - processed_count > 0) ||
-              (current_layer_index != -1 && calculate_tokens(source, processed_count) > @layer_token_target)
+              (current_layer_index != -1 && remaining_tokens > @layer_token_target)
           # Before adding, check if target layer is already at capacity
           # If so, consolidate it first to make room
           while current_num_tokens(target_layer_index) >= @layer_token_capacity
@@ -140,10 +142,18 @@ module Mantle::Storage
             Mantle::Support::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_token_capacity} tokens). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_token_target} tokens." }
           end
 
+          removed_tokens = 0
           if current_layer_index == -1
             chunk_size = source.size - processed_count
           else
-            chunk_size = calculate_chunk_size_to_reach_target(source, processed_count, @layer_token_target)
+            tokens_to_remove = remaining_tokens - @layer_token_target
+            chunk_size = 0
+
+            processed_count.upto(source.size - 1) do |i|
+              removed_tokens += source[i].size // 4
+              chunk_size += 1
+              break if removed_tokens >= tokens_to_remove
+            end
           end
 
           chunk = source[processed_count, chunk_size]
@@ -157,6 +167,7 @@ module Mantle::Storage
             @layers[target_layer_index] << "[#{timestamp}] #{summary}"
 
             processed_count += chunk_size
+            remaining_tokens -= removed_tokens
           rescue ex
             Mantle::Support::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
             return
@@ -181,23 +192,6 @@ module Mantle::Storage
         sum += msgs[i].size // 4
       end
       sum
-    end
-
-    private def calculate_chunk_size_to_reach_target(msgs : Array(String), start_idx : Int32, target_tokens : Int32) : Int32
-      total_tokens = calculate_tokens(msgs, start_idx)
-      return 0 if total_tokens <= target_tokens
-
-      tokens_to_remove = total_tokens - target_tokens
-      removed_tokens = 0
-      chunk_size = 0
-
-      start_idx.upto(msgs.size - 1) do |i|
-        removed_tokens += msgs[i].size // 4
-        chunk_size += 1
-        break if removed_tokens >= tokens_to_remove
-      end
-
-      chunk_size
     end
 
     # Data transfer object
