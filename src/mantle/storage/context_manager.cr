@@ -256,7 +256,7 @@ module Mantle::Storage
     def flush_and_swap(new_context : ContextStore, new_memory : JSONLayeredMemoryStore)
       # 1. Force the outgoing memory store to process any remaining ingest_pending items
       if !@memory_store.ingest_pending.empty?
-        @memory_store.ingest([] of String)  # Trigger cascade without adding new items
+        @memory_store.ingest([] of String) # Trigger cascade without adding new items
       end
 
       # 2. Ensure all data is flushed to disk

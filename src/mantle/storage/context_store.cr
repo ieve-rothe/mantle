@@ -217,7 +217,7 @@ module Mantle::Storage
     # Emits `:new_context_file` if the context file is not found.
     def load_context_from_json
       begin
-        data = FileData.from_json(File.read(@context_file))
+        data = File.open(@context_file, "r") { |f| FileData.from_json(f) }
         @system_prompt = data.system_prompt || @system_prompt
         @messages.clear
         data.messages.each do |msg|
