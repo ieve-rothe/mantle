@@ -217,9 +217,11 @@ module Mantle::Storage
 
     private def load_memories_from_json : Nil
       begin
-        data = FileData.from_json(File.read(@memory_file))
-        @ingest_pending = data.ingest_pending
-        @layers = data.layers
+        File.open(@memory_file, "r") do |f|
+          data = FileData.from_json(f)
+          @ingest_pending = data.ingest_pending
+          @layers = data.layers
+        end
       rescue e : File::NotFoundError
         save_memories_to_json
       end
@@ -227,7 +229,9 @@ module Mantle::Storage
 
     private def save_memories_to_json : Nil
       data = FileData.new(@ingest_pending, @layers)
-      File.write(@memory_file, data.to_json)
+      File.open(@memory_file, "w") do |f|
+        data.to_json(f)
+      end
     end
 
     private def strip_thinking(msg : String) : String
