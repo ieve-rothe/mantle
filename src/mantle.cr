@@ -8,6 +8,7 @@ require "./mantle/clients/*"
 require "./mantle/tools/*"
 require "./mantle/storage/*"
 require "./mantle/flows/*"
+require "./mantle/subagents/*"
 
 # Represents the core module of the Mantle LLM agent library.
 module Mantle
