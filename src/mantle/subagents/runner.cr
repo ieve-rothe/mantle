@@ -52,12 +52,11 @@ module Mantle::Subagents
       full_prompt = build_subagent_prompt(profile, query, context)
 
       begin
-        orig_max_tokens = nil
+        orig_max_tokens = get_max_tokens(client)
         orig_temp = client.temperature
 
-        if client.is_a?(Mantle::Clients::LlamaClient)
-          orig_max_tokens = client.as(Mantle::Clients::LlamaClient).max_tokens
-          client.as(Mantle::Clients::LlamaClient).max_tokens = profile.max_tokens
+        if orig_max_tokens
+          set_max_tokens(client, profile.max_tokens)
         end
         client.temperature = profile.temperature
 
@@ -83,8 +82,8 @@ module Mantle::Subagents
         "Error spawning subagent '#{profile.name}': #{ex.message}"
       ensure
         if client
-          if client.is_a?(Mantle::Clients::LlamaClient) && orig_max_tokens
-            client.as(Mantle::Clients::LlamaClient).max_tokens = orig_max_tokens
+          if orig_max_tokens
+            set_max_tokens(client, orig_max_tokens)
           end
           client.temperature = orig_temp if orig_temp
         end
@@ -117,59 +116,79 @@ module Mantle::Subagents
       end
 
       full_prompt = build_subagent_prompt(profile, initial_query, context)
+      parent_sequence_id = Mantle::LogContext.sequence_id || UUID.random.to_s
 
       # Run in a separate fiber for concurrency
       spawn do
-        begin
-          orig_max_tokens = nil
-          orig_temp = client.temperature
+        Mantle::LogContext.with_sequence_id(parent_sequence_id) do
+          begin
+            orig_max_tokens = get_max_tokens(client)
+            orig_temp = client.temperature
 
-          if client.is_a?(Mantle::Clients::LlamaClient)
-            orig_max_tokens = client.as(Mantle::Clients::LlamaClient).max_tokens
-            client.as(Mantle::Clients::LlamaClient).max_tokens = profile.max_tokens
-          end
-          client.temperature = profile.temperature
+            if orig_max_tokens
+              set_max_tokens(client, profile.max_tokens)
+            end
+            client.temperature = profile.temperature
 
-          messages = [Mantle::Message.new(role: "user", content: full_prompt)]
-          
-          turns = 0
-          while turns < max_turns
-            response = client.execute(messages)
+            messages = [Mantle::Message.new(role: "user", content: full_prompt)]
             
-            c = response.content || ""
-            t = response.thinking || ""
-            
-            output = if !c.strip.empty?
-                       if !t.strip.empty?
-                         "🤔 [Thinking Process]\n#{t.strip}\n\n[Response]\n#{c.strip}"
+            turns = 0
+            while turns < max_turns
+              response = client.execute(messages)
+              
+              c = response.content || ""
+              t = response.thinking || ""
+              
+              output = if !c.strip.empty?
+                         if !t.strip.empty?
+                           "🤔 [Thinking Process]\n#{t.strip}\n\n[Response]\n#{c.strip}"
+                         else
+                           c
+                         end
                        else
-                         c
+                         t
                        end
-                     else
-                       t
-                     end
-                     
-            if !output.strip.empty?
-              formatted = format_subagent_response(profile, output)
-              on_message.call(formatted)
-            end
+                       
+              if !output.strip.empty?
+                formatted = format_subagent_response(profile, output)
+                on_message.call(formatted)
+              end
 
-            # In a real multi-turn we would accept user input back, but for now 
-            # we just run the single completion, or we could set up a channel for input.
-            # Assuming a basic multi-turn for demonstration, breaking after 1 turn if no tools
-            # If there were tools, we would execute them and append to messages.
-            break # For now, break after one response if we don't have interactive feedback loop
-          end
-        rescue ex
-          on_message.call("Error in interactive subagent '#{profile.name}': #{ex.message}")
-        ensure
-          if client
-            if client.is_a?(Mantle::Clients::LlamaClient) && orig_max_tokens
-              client.as(Mantle::Clients::LlamaClient).max_tokens = orig_max_tokens
+              # In a real multi-turn we would accept user input back, but for now 
+              # we just run the single completion, or we could set up a channel for input.
+              # Assuming a basic multi-turn for demonstration, breaking after 1 turn if no tools
+              # If there were tools, we would execute them and append to messages.
+              break # For now, break after one response if we don't have interactive feedback loop
             end
-            client.temperature = orig_temp if orig_temp
+          rescue ex
+            on_message.call("Error in interactive subagent '#{profile.name}': #{ex.message}")
+          ensure
+            if client
+              if orig_max_tokens
+                set_max_tokens(client, orig_max_tokens)
+              end
+              client.temperature = orig_temp if orig_temp
+            end
           end
         end
+      end
+    end
+
+    private def get_max_tokens(client : Mantle::Clients::Client) : Int32?
+      if client.is_a?(Mantle::Clients::LlamaClient)
+        client.as(Mantle::Clients::LlamaClient).max_tokens
+      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::LlamaClient))
+        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::LlamaClient)).client.max_tokens
+      else
+        nil
+      end
+    end
+
+    private def set_max_tokens(client : Mantle::Clients::Client, value : Int32)
+      if client.is_a?(Mantle::Clients::LlamaClient)
+        client.as(Mantle::Clients::LlamaClient).max_tokens = value
+      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::LlamaClient))
+        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::LlamaClient)).client.max_tokens = value
       end
     end
 

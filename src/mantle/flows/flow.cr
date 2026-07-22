@@ -64,26 +64,29 @@ module Mantle::Flows
     #
     # Custom callback *on_response* is executed with the final `Response` payload.
     def run(msg : String, on_response : Proc(Mantle::Clients::Response, Nil), ephemeral_blocks : Array(String) = [] of String, invisible_append : String? = nil)
-      @context_manager.handle_user_message(msg, invisible_append)
-      context_view = @context_manager.current_view(ephemeral_blocks)
-      @logger.log_message(:user, msg, format_messages_for_log(context_view))
+      seq_id = Mantle::LogContext.sequence_id || UUID.random.to_s
+      Mantle::LogContext.with_sequence_id(seq_id) do
+        @context_manager.handle_user_message(msg, invisible_append)
+        context_view = @context_manager.current_view(ephemeral_blocks)
+        @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
-      # Execute LLM request
-      response = @client.execute(context_view)
+        # Execute LLM request
+        response = @client.execute(context_view)
 
-      if (req = response.raw_request) && (res = response.raw_response)
-        @logger.log_api_payloads(req, res)
+        if (req = response.raw_request) && (res = response.raw_response)
+          @logger.log_api_payloads(req, res)
+        end
+
+        # Extract text content from Response (ignore tool_calls in base ChatFlow)
+        response_text = response.content || ""
+
+        @context_manager.handle_bot_message(response_text)
+        updated_context = @context_manager.current_view(ephemeral_blocks)
+        @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
+        Mantle.emit_status(:idle)
+
+        on_response.call(response)
       end
-
-      # Extract text content from Response (ignore tool_calls in base ChatFlow)
-      response_text = response.content || ""
-
-      @context_manager.handle_bot_message(response_text)
-      updated_context = @context_manager.current_view(ephemeral_blocks)
-      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
-      Mantle.emit_status(:idle)
-
-      on_response.call(response)
     end
   end
 
@@ -129,79 +132,82 @@ module Mantle::Flows
       on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)? = nil,
       recovery_config : Mantle::Tools::RecoveryConfig? = nil,
     )
-      # Add user message to context
-      @context_manager.handle_user_message(msg, invisible_append)
-      context_view = @context_manager.current_view(ephemeral_blocks)
-      @logger.log_message(:user, msg, format_messages_for_log(context_view))
+      seq_id = Mantle::LogContext.sequence_id || UUID.random.to_s
+      Mantle::LogContext.with_sequence_id(seq_id) do
+        # Add user message to context
+        @context_manager.handle_user_message(msg, invisible_append)
+        context_view = @context_manager.current_view(ephemeral_blocks)
+        @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
-      # Merge tool definitions
-      all_tools = merge_tools(builtins, custom_tools)
+        # Merge tool definitions
+        all_tools = merge_tools(builtins, custom_tools)
 
-      # Extract tool names for error messages
-      tool_names = all_tools ? all_tools.map { |t| t.function.name } : nil
+        # Extract tool names for error messages
+        tool_names = all_tools ? all_tools.map { |t| t.function.name } : nil
 
-      # Create tool executor
-      tool_executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: builtin_config,
-        custom_callback: tool_callback,
-        bot_name: @context_manager.bot_name,
-        on_tool_call: on_tool_call,
-        on_tool_result: on_tool_result,
-        client: @client,
-        context_manager: @context_manager,
-        recovery_config: recovery_config
-      )
-      tool_executor.all_tools = all_tools
+        # Create tool executor
+        tool_executor = Mantle::Tools::ToolExecutor.new(
+          builtin_config: builtin_config,
+          custom_callback: tool_callback,
+          bot_name: @context_manager.bot_name,
+          on_tool_call: on_tool_call,
+          on_tool_result: on_tool_result,
+          client: @client,
+          context_manager: @context_manager,
+          recovery_config: recovery_config
+        )
+        tool_executor.all_tools = all_tools
 
-      # Tool call loop
-      iteration = 0
-      failed_calls = [] of {String, JSON::Any}
-      loop do
-        iteration += 1
+        # Tool call loop
+        iteration = 0
+        failed_calls = [] of {String, JSON::Any}
+        loop do
+          iteration += 1
 
-        if iteration > max_iterations
-          handle_tool_limit(max_iterations, ephemeral_blocks, on_chunk, on_response)
-          break
-        end
-
-        # Execute LLM with tools
-        response = execute_and_parse(context_view, all_tools, on_chunk)
-
-        # Check if we have a text response (end of loop)
-        if response.content && (response.tool_calls.nil? || response.tool_calls.not_nil!.empty?)
-          handle_final_response(response, ephemeral_blocks, on_response)
-          break
-        end
-
-        # We have tool calls - process them
-        if tool_calls = response.tool_calls
-          begin
-            # Check for repeated failures before executing
-            tool_calls.each do |call|
-              begin
-                parsed_args = JSON.parse(call.function.arguments)
-                if failed_calls.includes?({call.function.name, parsed_args})
-                  raise Mantle::Tools::TerminalToolError.new("Tool '#{call.function.name}' with arguments '#{call.function.arguments}' has already failed in this turn. Aborting tool loop to prevent infinite loop.")
-                end
-              rescue ex : Mantle::Tools::TerminalToolError
-                raise ex
-              rescue
-                # Ignore JSON parse errors for arguments check, let execution handle it
-              end
-            end
-
-            context_view = process_tools(tool_calls, tool_names, tool_executor, response, ephemeral_blocks, context_view, failed_calls)
-          rescue ex : Mantle::Tools::TerminalToolInterrupt
-            handle_terminal_interrupt(ex, ephemeral_blocks, on_response)
-            break
-          rescue ex : Mantle::Tools::TerminalToolError
-            handle_terminal_error(ex.message || "Terminal tool failure", ephemeral_blocks, on_response)
+          if iteration > max_iterations
+            handle_tool_limit(max_iterations, ephemeral_blocks, on_chunk, on_response)
             break
           end
-        else
-          # No content and no tool calls - shouldn't happen, but handle it
-          handle_empty_response(response, ephemeral_blocks, on_response)
-          break
+
+          # Execute LLM with tools
+          response = execute_and_parse(context_view, all_tools, on_chunk)
+
+          # Check if we have a text response (end of loop)
+          if response.content && (response.tool_calls.nil? || response.tool_calls.not_nil!.empty?)
+            handle_final_response(response, ephemeral_blocks, on_response)
+            break
+          end
+
+          # We have tool calls - process them
+          if tool_calls = response.tool_calls
+            begin
+              # Check for repeated failures before executing
+              tool_calls.each do |call|
+                begin
+                  parsed_args = JSON.parse(call.function.arguments)
+                  if failed_calls.includes?({call.function.name, parsed_args})
+                    raise Mantle::Tools::TerminalToolError.new("Tool '#{call.function.name}' with arguments '#{call.function.arguments}' has already failed in this turn. Aborting tool loop to prevent infinite loop.")
+                  end
+                rescue ex : Mantle::Tools::TerminalToolError
+                  raise ex
+                rescue
+                  # Ignore JSON parse errors for arguments check, let execution handle it
+                end
+              end
+
+              context_view = process_tools(tool_calls, tool_names, tool_executor, response, ephemeral_blocks, context_view, failed_calls)
+            rescue ex : Mantle::Tools::TerminalToolInterrupt
+              handle_terminal_interrupt(ex, ephemeral_blocks, on_response)
+              break
+            rescue ex : Mantle::Tools::TerminalToolError
+              handle_terminal_error(ex.message || "Terminal tool failure", ephemeral_blocks, on_response)
+              break
+            end
+          else
+            # No content and no tool calls - shouldn't happen, but handle it
+            handle_empty_response(response, ephemeral_blocks, on_response)
+            break
+          end
         end
       end
     end
