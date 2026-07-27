@@ -107,6 +107,51 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
     end
   end
 
+  describe "turn replay & editing" do
+    it "identifies purely conversational turns as replayable" do
+      store = Mantle::Storage::EphemeralSlidingContextStore.new("System", 5)
+      store.add_message("User", "Hello bot")
+      store.add_message("Assistant", "Hello user")
+
+      store.last_turn_replayable?.should be_true
+      store.last_user_message.not_nil!.content.should eq("Hello bot")
+      store.last_bot_message.not_nil!.content.should eq("Hello user")
+    end
+
+    it "rejects turns with tool calls or tool role messages" do
+      store = Mantle::Storage::EphemeralSlidingContextStore.new("System", 5)
+      tool_calls = [Mantle::Clients::ToolCall.new("call_1", Mantle::Clients::ToolCallFunction.new("test_tool", "{}"))]
+      store.add_message("User", "Run tool")
+      store.add_message("Assistant", "", tool_calls: tool_calls)
+      store.add_message("Tool", "Result", tool_call_id: "call_1")
+      store.add_message("Assistant", "Tool completed")
+
+      store.last_turn_replayable?.should be_false
+    end
+
+    it "allows editing the last bot message in-place" do
+      store = Mantle::Storage::EphemeralSlidingContextStore.new("System", 5)
+      store.add_message("User", "Question")
+      store.add_message("Assistant", "Original Answer")
+
+      store.edit_last_bot_message("Edited Answer").should be_true
+      store.last_bot_message.not_nil!.content.should eq("Edited Answer")
+      view = store.current_view
+      view.last.content.should eq("Edited Answer")
+    end
+
+    it "pops the last turn for replay returning original user input" do
+      store = Mantle::Storage::EphemeralSlidingContextStore.new("System", 5)
+      store.add_message("User", "Original Question")
+      store.add_message("Assistant", "Answer")
+
+      popped_prompt = store.pop_last_turn_for_replay
+      popped_prompt.should eq("Original Question")
+      store.current_num_messages.should eq(0)
+      store.last_turn_replayable?.should be_false
+    end
+  end
+
   describe "#prune_to_tokens" do
     it "returns an empty array and leaves messages intact when target_tokens is very high" do
       # Arrange
@@ -494,6 +539,41 @@ describe Mantle::Storage::JSONContextStore do
       json_content["system_prompt"]?.try(&.raw).should be_nil
 
       # Cleanup
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+
+  describe "JSONContextStore turn replay & editing" do
+    it "edits last bot response in-place and persists to JSON file" do
+      test_file = "/tmp/mantle_test_json_replay_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
+
+      store.add_message("User", "What is 2+2?")
+      store.add_message("Assistant", "4")
+
+      store.last_turn_replayable?.should be_true
+      store.edit_last_bot_message("2+2 equals 4.").should be_true
+
+      json_content = JSON.parse(File.read(test_file))
+      messages = json_content["messages"].as_a
+      messages.last.as_h["content"].as_s.should eq("2+2 equals 4.")
+
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "pops last turn for replay and persists truncation to JSON file" do
+      test_file = "/tmp/mantle_test_json_pop_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
+
+      store.add_message("User", "Old Query")
+      store.add_message("Assistant", "Old Response")
+
+      popped = store.pop_last_turn_for_replay
+      popped.should eq("Old Query")
+
+      json_content = JSON.parse(File.read(test_file))
+      json_content["messages"].as_a.size.should eq(0)
+
       File.delete(test_file) if File.exists?(test_file)
     end
   end

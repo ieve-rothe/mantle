@@ -218,6 +218,32 @@ module Mantle::Storage
       @context_store.clear
     end
 
+    # Returns whether the last conversation turn in context_store is replayable.
+    def last_turn_replayable? : Bool
+      @context_store.last_turn_replayable?
+    end
+
+    # Returns the last user message if the last turn is replayable.
+    def last_user_message : Mantle::Message?
+      @context_store.last_user_message
+    end
+
+    # Returns the last bot message if the last turn is replayable.
+    def last_bot_message : Mantle::Message?
+      @context_store.last_bot_message
+    end
+
+    # Edits the content of the last bot message in context_store in-place.
+    def edit_last_bot_message(new_content : String) : Bool
+      @context_store.edit_last_bot_message(new_content)
+    end
+
+    # Removes the last bot response and user prompt from context_store for replay.
+    def pop_last_turn_for_replay : String?
+      @pending_invisible_append = nil
+      @context_store.pop_last_turn_for_replay
+    end
+
     # Updates the system prompt in the active context store with *new_prompt*.
     def update_system_prompt(new_prompt : String)
       @context_store.update_system_prompt(new_prompt)

@@ -67,6 +67,32 @@ module Mantle::Storage
       # Implement in specific class.
     end
 
+    # Returns whether the last conversation turn is replayable (purely conversational user/bot turn without tool calls).
+    def last_turn_replayable? : Bool
+      false
+    end
+
+    # Returns the last user message if the last turn is replayable.
+    def last_user_message : Mantle::Message?
+      nil
+    end
+
+    # Returns the last bot message if the last turn is replayable.
+    def last_bot_message : Mantle::Message?
+      nil
+    end
+
+    # Edits the content of the last bot message in-place if the last turn is replayable.
+    def edit_last_bot_message(new_content : String) : Bool
+      false
+    end
+
+    # Removes the last bot message and last user message from context if replayable,
+    # returning the original content of the user message.
+    def pop_last_turn_for_replay : String?
+      nil
+    end
+
     # Normalizes a *label* to a valid chat role (e.g., `"user"`, `"assistant"`, `"system"`, `"tool"`).
     protected def normalize_role(label : String) : String
       normalized = label.downcase
@@ -148,6 +174,45 @@ module Mantle::Storage
     def clear
       @messages.clear
       @current_num_messages = 0
+    end
+
+    def last_turn_replayable? : Bool
+      return false if @messages.size < 2
+      last_msg = @messages[-1]
+      prev_msg = @messages[-2]
+
+      return false unless last_msg.role == "assistant"
+      return false unless prev_msg.role == "user"
+      return false if last_msg.tool_calls.try(&.any?)
+      return false if prev_msg.tool_calls.try(&.any?)
+      return false if last_msg.tool_call_id || prev_msg.tool_call_id
+
+      true
+    end
+
+    def last_user_message : Mantle::Message?
+      last_turn_replayable? ? @messages[-2] : nil
+    end
+
+    def last_bot_message : Mantle::Message?
+      last_turn_replayable? ? @messages[-1] : nil
+    end
+
+    def edit_last_bot_message(new_content : String) : Bool
+      return false unless last_turn_replayable?
+
+      last_msg = @messages[-1]
+      @messages[-1] = Mantle::Message.new(last_msg.role, new_content, last_msg.tool_calls, last_msg.tool_call_id)
+      true
+    end
+
+    def pop_last_turn_for_replay : String?
+      return nil unless last_turn_replayable?
+
+      bot_msg = @messages.pop
+      user_msg = @messages.pop
+      @current_num_messages = @messages.size
+      user_msg.content
     end
   end
 
@@ -276,6 +341,47 @@ module Mantle::Storage
       @messages.clear
       @current_num_messages = 0
       save_context_to_json
+    end
+
+    def last_turn_replayable? : Bool
+      return false if @messages.size < 2
+      last_msg = @messages[-1]
+      prev_msg = @messages[-2]
+
+      return false unless last_msg.role == "assistant"
+      return false unless prev_msg.role == "user"
+      return false if last_msg.tool_calls.try(&.any?)
+      return false if prev_msg.tool_calls.try(&.any?)
+      return false if last_msg.tool_call_id || prev_msg.tool_call_id
+
+      true
+    end
+
+    def last_user_message : Mantle::Message?
+      last_turn_replayable? ? @messages[-2] : nil
+    end
+
+    def last_bot_message : Mantle::Message?
+      last_turn_replayable? ? @messages[-1] : nil
+    end
+
+    def edit_last_bot_message(new_content : String) : Bool
+      return false unless last_turn_replayable?
+
+      last_msg = @messages[-1]
+      @messages[-1] = Mantle::Message.new(last_msg.role, new_content, last_msg.tool_calls, last_msg.tool_call_id)
+      save_context_to_json
+      true
+    end
+
+    def pop_last_turn_for_replay : String?
+      return nil unless last_turn_replayable?
+
+      bot_msg = @messages.pop
+      user_msg = @messages.pop
+      @current_num_messages = @messages.size
+      save_context_to_json
+      user_msg.content
     end
   end
 end
