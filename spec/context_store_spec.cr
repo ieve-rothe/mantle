@@ -499,4 +499,74 @@ describe Mantle::Storage::JSONContextStore do
       File.delete(test_file) if File.exists?(test_file)
     end
   end
+
+  describe "LLM Summarization & Fallback Handling (TKT-057)" do
+    it "uses custom summarizer proc to generate summary content for subsumed nodes" do
+      test_file = "/tmp/mantle_test_summarizer_proc_#{Time.utc.to_unix_ms}.json"
+      summarizer = Proc(Array(Mantle::Message), String).new do |msgs|
+        "Proc summary of #{msgs.map(&.content).join(", ")}"
+      end
+
+      store = Mantle::Storage::JSONContextStore.new("System", test_file, summarizer: summarizer)
+      store.add_message("User", "First message")
+      store.add_message("Assistant", "Second message")
+
+      store.prune(1)
+
+      view = store.current_view
+      summary_msg = view.find { |m| m.role == "system" && m.content.try(&.starts_with?("Proc summary")) }
+      summary_msg.should_not be_nil
+      summary_msg.not_nil!.content.should eq("Proc summary of First message")
+
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "uses LLM client to generate summary content when client is provided" do
+      test_file = "/tmp/mantle_test_llm_client_#{Time.utc.to_unix_ms}.json"
+      mock_client = SpecSummaryMockClient.new("LLM generated summary of subsumed turn.")
+
+      store = Mantle::Storage::JSONContextStore.new("System", test_file, client: mock_client)
+      store.add_message("User", "Key request details", turn_id: "turn_100")
+      store.add_message("Assistant", "Response details", turn_id: "turn_100")
+
+      store.prune(1)
+
+      view = store.current_view
+      summary_msg = view.find { |m| m.role == "system" && m.content == "LLM generated summary of subsumed turn." }
+      summary_msg.should_not be_nil
+
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "falls back to structured text and logs warning when no summarizer/client is provided or fails" do
+      test_file = "/tmp/mantle_test_fallback_#{Time.utc.to_unix_ms}.json"
+      failing_summarizer = Proc(Array(Mantle::Message), String).new do |_msgs|
+        raise Exception.new("LLM API connection timed out")
+      end
+
+      store = Mantle::Storage::JSONContextStore.new("System", test_file, summarizer: failing_summarizer)
+      store.add_message("User", "Original prompt", turn_id: "turn_42")
+
+      store.prune(1)
+
+      view = store.current_view
+      fallback_msg = view.find { |m| m.role == "system" && m.content.try(&.includes?("[Context subsumed from turn turn_42]")) }
+      fallback_msg.should_not be_nil
+
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
 end
+
+class SpecSummaryMockClient < Mantle::Clients::Client
+  property return_text : String
+
+  def initialize(@return_text : String)
+  end
+
+  def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
+    on_chunk.call(@return_text)
+    Mantle::Clients::Response.new(content: @return_text, tool_calls: nil)
+  end
+end
+
