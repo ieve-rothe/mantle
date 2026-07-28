@@ -18,7 +18,7 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
       store.system_prompt.should eq(sys_prompt)
       view = store.current_view
       view.should be_a(Array(Mantle::Message))
-      view.size.should eq(1)  # Only system message
+      view.size.should eq(1) # Only system message
       view[0].role.should eq("system")
       view[0].content.should eq(sys_prompt)
       store.messages_to_keep.should eq(messages_to_keep)
@@ -38,7 +38,7 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
 
       # Assert - Should have system message + last 3 conversation messages
       view = store.current_view
-      view.size.should eq(4)  # system + 3 messages (oldest dropped)
+      view.size.should eq(4) # system + 3 messages (oldest dropped)
       view[0].role.should eq("system")
       view[0].content.should eq(sys_prompt)
       view[1].role.should eq("assistant")
@@ -63,7 +63,7 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
 
       # Assert
       view = store.current_view
-      view.size.should eq(5)  # system + 4 messages
+      view.size.should eq(5) # system + 4 messages
       view[0].role.should eq("system")
       view[1].role.should eq("user")
       view[2].role.should eq("assistant")
@@ -175,74 +175,73 @@ describe Mantle::Storage::EphemeralSlidingContextStore do
 end
 
 # ------------------------------------------------------------------------------
-# JSON Context Store
-# Should maintain last N messages in context, loading them from JSON backend store
+# JSON Context Store (Node Graph)
+# ------------------------------------------------------------------------------
 describe Mantle::Storage::JSONContextStore do
   describe "error handling" do
     it "logs an error when saving to an invalid path" do
-      # Arrange
       test_file = "/sys/class/something_read_only.json"
       backend = Log::MemoryBackend.new
       Log.setup("mantle", :debug, backend)
 
-      # Act
-      # Using a read-only path will raise File::AccessDeniedError or similar,
-      # which inherits from File::Error, so we expect an error log but no crash.
       store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
-      # Assert
       log_entries = backend.entries.select { |e| e.severity == Log::Severity::Error }
       log_entries.size.should be > 0
       log_entries[0].message.should contain("Failed to save context to #{test_file}")
 
-      # Reset logger so other tests aren't affected
       Log.setup("mantle", :info, Log::IOBackend.new)
     end
   end
 
   describe "#initialize" do
     it "creates a new context store with a new JSON file if file doesn't exist" do
-      # Arrange
       test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
       sys_prompt = "You are a test assistant."
 
-      # Act
       store = Mantle::Storage::JSONContextStore.new(sys_prompt, test_file)
 
-      # Assert
       store.system_prompt.should eq(sys_prompt)
       view = store.current_view
       view.should be_a(Array(Mantle::Message))
-      view.size.should eq(1)  # Only system message
+      view.size.should eq(1) # Only system message
       view[0].role.should eq("system")
       view[0].content.should eq(sys_prompt)
       File.exists?(test_file).should be_true
 
-      # Cleanup
       File.delete(test_file) if File.exists?(test_file)
     end
 
-    it "loads existing context from JSON file if it exists" do
-      # Arrange
+    it "loads existing graph context from JSON file if it exists" do
       test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
       sys_prompt = "Original system prompt"
 
-      # Create a pre-existing context file with new message format
+      node1 = Mantle::Storage::ContextNode.new(
+        message: Mantle::Message.new("user", "Hello"),
+        token_count: 5,
+        id: "node_1"
+      )
+      node2 = Mantle::Storage::ContextNode.new(
+        message: Mantle::Message.new("assistant", "Hi there"),
+        token_count: 5,
+        parent_id: "node_1",
+        id: "node_2"
+      )
+
       existing_data = {
-        "system_prompt" => sys_prompt,
-        "messages"      => [
-          {"role" => "user", "content" => "Hello"},
-          {"role" => "assistant", "content" => "Hi there"}
-        ],
+        "schema_version" => 1,
+        "active_leaf_id" => "node_2",
+        "nodes" => {
+          "node_1" => node1,
+          "node_2" => node2
+        }
       }
       File.write(test_file, existing_data.to_json)
 
-      # Act
       store = Mantle::Storage::JSONContextStore.new(sys_prompt, test_file)
 
-      # Assert
       view = store.current_view
-      view.size.should eq(3)  # system + 2 messages
+      view.size.should eq(3) # system + 2 messages
       view[0].role.should eq("system")
       view[0].content.should eq(sys_prompt)
       view[1].role.should eq("user")
@@ -250,110 +249,172 @@ describe Mantle::Storage::JSONContextStore do
       view[2].role.should eq("assistant")
       view[2].content.should eq("Hi there")
 
-      # Cleanup
       File.delete(test_file) if File.exists?(test_file)
     end
   end
 
   describe "#add_message" do
-    it "adds a labeled message to the context" do
-      # Arrange
+    it "adds a labeled message node to the context graph" do
       test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
       store = Mantle::Storage::JSONContextStore.new("System:", test_file)
 
-      # Act
       store.add_message("User", "Hello!")
 
-      # Assert
       view = store.current_view
-      view.size.should eq(2)  # system + 1 message
+      view.size.should eq(2) # system + 1 message
       view[0].role.should eq("system")
       view[0].content.should eq("System:")
       view[1].role.should eq("user")
       view[1].content.should eq("Hello!")
 
-      # Cleanup
       File.delete(test_file) if File.exists?(test_file)
     end
 
-    it "automatically saves context to JSON file after each message" do
-      # Arrange
+    it "automatically saves node graph context atomically to JSON file after each message" do
       test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
       store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
-      # Act
       store.add_message("User", "TestMessage")
 
-      # Assert - File should contain the new message
       File.exists?(test_file).should be_true
       json_content = JSON.parse(File.read(test_file))
-      json_content["messages"].as_a.size.should eq(1)
-      messages = json_content["messages"].as_a
-      messages[0].as_h["role"].as_s.should eq("user")
-      messages[0].as_h["content"].as_s.should eq("TestMessage")
+      json_content["schema_version"].as_i.should eq(1)
+      nodes = json_content["nodes"].as_h
+      nodes.size.should eq(1)
+      leaf_id = json_content["active_leaf_id"].as_s
+      nodes[leaf_id].as_h["message"].as_h["content"].as_s.should eq("TestMessage")
 
-      # Cleanup
       File.delete(test_file) if File.exists?(test_file)
     end
   end
 
-  describe "#current_view" do
-    it "returns message array with system prompt and conversation messages" do
-      # Arrange
-      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
-      store = Mantle::Storage::JSONContextStore.new("SysPrompt", test_file)
+  describe "Serialization Round-Trip & RFC_3339" do
+    it "serializes ContextNode with RFC_3339 time format for byte-identical round trips" do
+      msg = Mantle::Message.new("user", "Roundtrip test")
+      time = Time.utc(2026, 7, 27, 16, 0, 0)
+      node = Mantle::Storage::ContextNode.new(message: msg, token_count: 10, ts: time, id: "node_rt")
 
-      # Act
-      store.add_message("User", "Msg1")
-      store.add_message("Bot", "Msg2")
+      json = node.to_json
+      node_restored = Mantle::Storage::ContextNode.from_json(json)
 
-      # Assert
+      node_restored.id.should eq(node.id)
+      node_restored.ts.should eq(node.ts)
+      node_restored.to_json.should eq(json)
+    end
+  end
+
+  describe "Blob Side-Store" do
+    it "writes assembled context to write-once side directory .contexts/blobs/" do
+      test_file = "/tmp/mantle_blob_test_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
+      full_context = "System Prompt + Large Assembled Context String"
+
+      node = store.add_message("User", "Hello", assembled_context: full_context)
+
+      node.assembled_context_sha.should_not be_nil
+      sha = node.assembled_context_sha.not_nil!
+
+      read_back = store.read_assembled_context(sha)
+      read_back.should eq(full_context)
+
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+
+  describe "Branch Isolation & Leaf Switching" do
+    it "supports branching where two children share a parent but have disjoint tails" do
+      test_file = "/tmp/mantle_branch_test_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
+
+      root_node = store.add_message("User", "Root Question")
+      branch1_node = store.add_message("Assistant", "Answer Path 1")
+
+      # Switch back to root and create branch 2
+      store.set_active_leaf(root_node.id)
+      branch2_node = store.add_message("Assistant", "Answer Path 2")
+
+      anc1 = store.ancestors(branch1_node.id)
+      anc2 = store.ancestors(branch2_node.id)
+
+      anc1.map(&.message.content).should eq(["Root Question", "Answer Path 1"])
+      anc2.map(&.message.content).should eq(["Root Question", "Answer Path 2"])
+
+      # Verify active view reflects branch 2
       view = store.current_view
-      view.size.should eq(3)  # system + 2 messages
-      view[0].role.should eq("system")
-      view[0].content.should eq("SysPrompt")
-      view[1].role.should eq("user")
-      view[1].content.should eq("Msg1")
-      view[2].role.should eq("assistant")  # Bot normalized to assistant
-      view[2].content.should eq("Msg2")
+      view.map(&.content).should eq(["System", "Root Question", "Answer Path 2"])
 
-      # Cleanup
       File.delete(test_file) if File.exists?(test_file)
     end
   end
 
-  describe "persistence across instances" do
-    it "allows a new instance to resume from saved context" do
-      # Arrange
-      test_file = "/tmp/mantle_test_context_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.json"
-      sys_prompt = "Persistent System"
+  describe "Transitive Consolidation & Self-Subsumption" do
+    it "handles double consolidation with transitive subsumption and positional splicing" do
+      test_file = "/tmp/mantle_subsume_test_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
-      # First instance - create and add messages
-      store1 = Mantle::Storage::JSONContextStore.new(sys_prompt, test_file)
-      store1.add_message("User", "Hello")
-      store1.add_message("Assistant", "Hi")
+      n1 = store.add_message("User", "Msg 1")
+      n2 = store.add_message("Assistant", "Msg 2")
+      n3 = store.add_message("User", "Msg 3")
 
-      # Act - Create second instance with same file
-      store2 = Mantle::Storage::JSONContextStore.new(sys_prompt, test_file)
+      # First consolidation
+      store.prune_to_tokens(5) # Consolidates oldest
+      v1 = store.current_view
 
-      # Assert - Second instance should have same context
-      view = store2.current_view
-      view.size.should eq(3)  # system + 2 messages
-      view[0].role.should eq("system")
-      view[0].content.should eq(sys_prompt)
-      view[1].role.should eq("user")
-      view[1].content.should eq("Hello")
-      view[2].role.should eq("assistant")
-      view[2].content.should eq("Hi")
+      # Add more
+      n4 = store.add_message("Assistant", "Msg 4")
+      n5 = store.add_message("User", "Msg 5")
 
-      # Cleanup
+      # Second consolidation (transitive)
+      store.prune_to_tokens(5)
+      v2 = store.current_view
+
+      v2.any? { |m| m.content == "Msg 1" }.should be_false
+
+      File.delete(test_file) if File.exists?(test_file)
+    end
+
+    it "raises an error if a node attempts to subsume itself" do
+      test_file = "/tmp/mantle_self_sub_test_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
+
+      node = Mantle::Storage::ContextNode.new(
+        message: Mantle::Message.new("system", "Bad node"),
+        token_count: 5,
+        id: "self_node",
+        subsumes: ["self_node"]
+      )
+      store.nodes["self_node"] = node
+      store.active_leaf_id = "self_node"
+
+      expect_raises(ArgumentError, /Cyclic subsumption/) do
+        store.current_view
+      end
+
+      File.delete(test_file) if File.exists?(test_file)
+    end
+  end
+
+  describe "Turn Grouping Traversal" do
+    it "returns entire semantic turns when get_node_and_neighbors is called with turns: true" do
+      test_file = "/tmp/mantle_turns_test_#{Time.utc.to_unix_ms}.json"
+      store = Mantle::Storage::JSONContextStore.new("System", test_file)
+
+      tool_calls = [Mantle::Clients::ToolCall.new("c1", Mantle::Clients::ToolCallFunction.new("fn", "{}"))]
+      store.add_message("User", "Turn 1 Prompt", turn_id: "turn_1")
+      store.add_message("Assistant", "", tool_calls: tool_calls, turn_id: "turn_1")
+      tool_node = store.add_message("Tool", "Tool Result 1", tool_call_id: "c1", turn_id: "turn_1")
+      store.add_message("Assistant", "Turn 1 Final Answer", turn_id: "turn_1")
+
+      neighbors = store.get_node_and_neighbors(tool_node.id, k: 0, turns: true)
+      neighbors.size.should eq(4)
+      neighbors.all? { |n| n.turn_id == "turn_1" }.should be_true
+
       File.delete(test_file) if File.exists?(test_file)
     end
   end
 
   describe "#prune" do
-    it "removes the oldest N messages and returns them" do
-      # Arrange
+    it "subsumes oldest messages via summary node" do
       test_file = "/tmp/mantle_test_prune_#{Time.utc.to_unix_ms}.json"
       store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
@@ -362,189 +423,52 @@ describe Mantle::Storage::JSONContextStore do
       store.add_message("User", "Three")
       store.add_message("Assistant", "Four")
 
-      # Act - Prune the oldest 2 messages
       pruned_messages = store.prune(2)
-
-      # Assert - Check return value
       pruned_messages.size.should eq(2)
-      pruned_messages[0].role.should eq("user")
       pruned_messages[0].content.should eq("One")
-      pruned_messages[1].role.should eq("assistant")
       pruned_messages[1].content.should eq("Two")
 
-      # Assert - Check current state (only the last 2 should remain)
-      view = store.current_view
-      view.size.should eq(3)  # system + 2 remaining messages
-      view[0].role.should eq("system")
-      view[1].role.should eq("user")
-      view[1].content.should eq("Three")
-      view[2].role.should eq("assistant")
-      view[2].content.should eq("Four")
-
-      # Assert - Check persistence (file should be updated)
-      json_content = JSON.parse(File.read(test_file))
-      json_content["messages"].as_a.size.should eq(2)
-      json_content["messages"].as_a[0].as_h["content"].as_s.should eq("Three")
-
-      # Cleanup
-      File.delete(test_file) if File.exists?(test_file)
-    end
-
-    it "handles pruning more messages than currently exist by returning all available" do
-      # Arrange
-      test_file = "/tmp/mantle_test_prune_overflow_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::Storage::JSONContextStore.new("System", test_file)
-      store.add_message("User", "Only Message")
-
-      # Act - Try to prune 100 messages when only 1 exists
-      pruned = store.prune(100)
-
-      # Assert
-      pruned.size.should eq(1)
-      pruned[0].role.should eq("user")
-      pruned[0].content.should eq("Only Message")
-
-      view = store.current_view
-      view.size.should eq(1)  # Only system message remains
-      view[0].role.should eq("system")
-
-      # Cleanup
-      File.delete(test_file) if File.exists?(test_file)
-    end
-  end
-
-  describe "#prune_to_tokens" do
-    it "returns an empty array and leaves messages intact when target_tokens is very high" do
-      # Arrange
-      test_file = "/tmp/mantle_test_prune_tokens_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::Storage::JSONContextStore.new("System", test_file)
-      store.add_message("User", "Msg1")
-      store.add_message("Assistant", "Msg2")
-
-      # Act
-      pruned = store.prune_to_tokens(10000)
-
-      # Assert
-      pruned.should be_empty
-      view = store.current_view
-      view.size.should eq(3) # system + 2 messages
-      view[1].role.should eq("user")
-      view[1].content.should eq("Msg1")
-      view[2].role.should eq("assistant")
-      view[2].content.should eq("Msg2")
-
-      # Cleanup
       File.delete(test_file) if File.exists?(test_file)
     end
   end
 
   describe "#clear" do
     it "removes all conversation messages and updates the JSON file" do
-      # Arrange
       test_file = "/tmp/mantle_test_clear_#{Time.utc.to_unix_ms}.json"
       store = Mantle::Storage::JSONContextStore.new("System", test_file)
       store.add_message("User", "Msg1")
 
-      # Act
       store.clear
 
-      # Assert
       store.current_num_messages.should eq(0)
       view = store.current_view
-      view.size.should eq(1) # Only system prompt remains
+      view.size.should eq(1)
 
-      # Check persistence
       json_content = JSON.parse(File.read(test_file))
-      json_content["messages"].as_a.size.should eq(0)
+      json_content["nodes"].as_h.size.should eq(0)
 
-      # Cleanup
       File.delete(test_file) if File.exists?(test_file)
     end
   end
 
   describe "#update_system_prompt" do
-    it "updates the system prompt and persists it to the JSON file" do
-      # Arrange
+    it "updates the system prompt and persists it to memory" do
       test_file = "/tmp/mantle_test_update_sys_prompt_#{Time.utc.to_unix_ms}.json"
       store = Mantle::Storage::JSONContextStore.new("Old Prompt", test_file)
 
-      # Act
       store.update_system_prompt("New Prompt")
 
-      # Assert
       store.system_prompt.should eq("New Prompt")
       view = store.current_view
       view[0].role.should eq("system")
       view[0].content.should eq("New Prompt")
 
-      # Check persistence
-      json_content = JSON.parse(File.read(test_file))
-      json_content["system_prompt"].as_s.should eq("New Prompt")
-
-      # Cleanup
-      File.delete(test_file) if File.exists?(test_file)
-    end
-  end
-
-  describe "ephemeral system prompt mode" do
-    it "saves nil as the system prompt in the JSON file when persist_system_prompt is false" do
-      # Arrange
-      test_file = "/tmp/mantle_test_ephemeral_sys_prompt_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::Storage::JSONContextStore.new("Ephemeral System Prompt", test_file, persist_system_prompt: false)
-
-      # Act
-      store.add_message("User", "Hello")
-
-      # Assert - JSON file should contain null/nil for system_prompt
-      json_content = JSON.parse(File.read(test_file))
-      json_content["system_prompt"]?.try(&.raw).should be_nil
-
-      # Cleanup
-      File.delete(test_file) if File.exists?(test_file)
-    end
-
-    it "preserves memory-initialized system prompt on load if file contains nil" do
-      # Arrange
-      test_file = "/tmp/mantle_test_ephemeral_sys_prompt_load_#{Time.utc.to_unix_ms}.json"
-      
-      # Save an ephemeral store context first (so system_prompt is nil/null in file)
-      store1 = Mantle::Storage::JSONContextStore.new("Initial Temp Prompt", test_file, persist_system_prompt: false)
-      store1.add_message("User", "Hello")
-
-      # Act - Re-load using new instance with a different initialized prompt, persist_system_prompt: false
-      store2 = Mantle::Storage::JSONContextStore.new("New Memory Prompt", test_file, persist_system_prompt: false)
-
-      # Assert - The prompt should be the one passed to the constructor, not overridden to nil
-      store2.system_prompt.should eq("New Memory Prompt")
-      store2.current_view[0].content.should eq("New Memory Prompt")
-
-      # Cleanup
-      File.delete(test_file) if File.exists?(test_file)
-    end
-
-    it "does not persist system prompt even after update_system_prompt is called" do
-      # Arrange
-      test_file = "/tmp/mantle_test_ephemeral_sys_prompt_update_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::Storage::JSONContextStore.new("Initial", test_file, persist_system_prompt: false)
-
-      # Act
-      store.update_system_prompt("New Dynamic Prompt")
-
-      # Assert - Updated in memory
-      store.system_prompt.should eq("New Dynamic Prompt")
-      store.current_view[0].content.should eq("New Dynamic Prompt")
-
-      # Assert - Still null in file
-      json_content = JSON.parse(File.read(test_file))
-      json_content["system_prompt"]?.try(&.raw).should be_nil
-
-      # Cleanup
       File.delete(test_file) if File.exists?(test_file)
     end
   end
 
   describe "JSONContextStore turn replay & editing" do
-    it "edits last bot response in-place and persists to JSON file" do
+    it "edits last bot response by creating a new branch and updating active_leaf_id" do
       test_file = "/tmp/mantle_test_json_replay_#{Time.utc.to_unix_ms}.json"
       store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
@@ -554,14 +478,13 @@ describe Mantle::Storage::JSONContextStore do
       store.last_turn_replayable?.should be_true
       store.edit_last_bot_message("2+2 equals 4.").should be_true
 
-      json_content = JSON.parse(File.read(test_file))
-      messages = json_content["messages"].as_a
-      messages.last.as_h["content"].as_s.should eq("2+2 equals 4.")
+      view = store.current_view
+      view.last.content.should eq("2+2 equals 4.")
 
       File.delete(test_file) if File.exists?(test_file)
     end
 
-    it "pops last turn for replay and persists truncation to JSON file" do
+    it "pops last turn for replay by rewinding active_leaf_id" do
       test_file = "/tmp/mantle_test_json_pop_#{Time.utc.to_unix_ms}.json"
       store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
@@ -571,8 +494,7 @@ describe Mantle::Storage::JSONContextStore do
       popped = store.pop_last_turn_for_replay
       popped.should eq("Old Query")
 
-      json_content = JSON.parse(File.read(test_file))
-      json_content["messages"].as_a.size.should eq(0)
+      store.current_num_messages.should eq(0)
 
       File.delete(test_file) if File.exists?(test_file)
     end

@@ -1,38 +1,28 @@
 # mantle/context_store.cr
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
-#
-# Context store manages ... context. Not identity, not memory - just manages the ongoing chat and potentially functionality for storing chats when 'finished' and resuming previous chats.
 
 require "json"
+require "digest/sha256"
 require "../support/app_logger"
 require "../support/status"
+require "./context_node"
 
 module Mantle::Storage
-  # Represents the abstract base class for context stores, managing conversation context.
-  #
-  # A context store handles the ongoing chat history, allowing for persistence, formatting, and pruning.
+  # Base abstract class for context stores.
   class ContextStore
-    # Represents the active system prompt.
     property system_prompt : String
-
-    # Represents the count of conversation messages currently in the store.
     property current_num_messages : Int32
 
-    # Creates a context store with the specified *system_prompt*.
-    def initialize(system_prompt : String)
-      @system_prompt = system_prompt
+    def initialize(@system_prompt : String)
       @current_num_messages = 0
     end
 
-    # Updates the system prompt to *new_prompt*.
     def update_system_prompt(new_prompt : String)
       @system_prompt = new_prompt
     end
 
-    # Returns the estimated count of tokens in the store, derived via `#current_view`.
     def current_num_tokens : Int32
-      # Derived via current_view
       current_view.sum do |msg|
         content_size = (msg.content || "").size
         tool_size = msg.tool_calls.try(&.to_json.size) || 0
@@ -40,60 +30,52 @@ module Mantle::Storage
       end
     end
 
-    # Returns messages in chat format: Array of Mantle::Message
     def current_view : Array(Mantle::Message)
-      # Implement in specific class
       [] of Mantle::Message
     end
 
-    # Appends a new message to the store with the specified *label*, *message* content, and optional tool call details.
-    def add_message(label : String, message : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil)
-      # Implement in specific class
+    def add_message(
+      label : String,
+      message : String,
+      tool_calls : Array(Mantle::Clients::ToolCall)? = nil,
+      tool_call_id : String? = nil,
+      token_count : Int32? = nil,
+      turn_id : String? = nil,
+      assembled_context : String? = nil,
+      generation : GenerationParams? = nil
+    )
     end
 
-    # Prunes messages until the total token count is under *target_tokens*, returning the list of pruned messages.
     def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
-      # Implement in specific class.
       [] of Mantle::Message
     end
 
-    # Prunes the oldest *num_to_prune* messages from the store.
     def prune(num_to_prune : Int32)
-      # Implement in specific class.
     end
 
-    # Clears all conversation messages from the store.
     def clear
-      # Implement in specific class.
     end
 
-    # Returns whether the last conversation turn is replayable (purely conversational user/bot turn without tool calls).
     def last_turn_replayable? : Bool
       false
     end
 
-    # Returns the last user message if the last turn is replayable.
     def last_user_message : Mantle::Message?
       nil
     end
 
-    # Returns the last bot message if the last turn is replayable.
     def last_bot_message : Mantle::Message?
       nil
     end
 
-    # Edits the content of the last bot message in-place if the last turn is replayable.
     def edit_last_bot_message(new_content : String) : Bool
       false
     end
 
-    # Removes the last bot message and last user message from context if replayable,
-    # returning the original content of the user message.
     def pop_last_turn_for_replay : String?
       nil
     end
 
-    # Normalizes a *label* to a valid chat role (e.g., `"user"`, `"assistant"`, `"system"`, `"tool"`).
     protected def normalize_role(label : String) : String
       normalized = label.downcase
       case normalized
@@ -110,7 +92,6 @@ module Mantle::Storage
       end
     end
 
-    # Validates that the specified *role* is one of the allowed values.
     protected def validate_role(role : String)
       unless ["user", "assistant", "system", "tool"].includes?(role)
         raise ArgumentError.new("Invalid role: #{role}. Must be user, assistant, system, or tool.")
@@ -118,44 +99,41 @@ module Mantle::Storage
     end
   end
 
-  # Represents an ephemeral sliding window context store that keeps a fixed number of recent messages.
+  # Ephemeral sliding window context store.
   class EphemeralSlidingContextStore < ContextStore
-    # Represents the maximum number of recent messages to keep in the sliding window.
     property messages_to_keep : Int32
 
-    # Creates an ephemeral sliding context store with *system_prompt* and *messages_to_keep* count.
     def initialize(system_prompt : String, messages_to_keep : Int32)
       super(system_prompt)
       @messages_to_keep = messages_to_keep
       @messages = Deque(Mantle::Message).new
     end
 
-    # Returns the messages in chat format, prepending the system prompt if present.
     def current_view : Array(Mantle::Message)
       result = [] of Mantle::Message
-      # Add system prompt as first message if present
       result << Mantle::Message.new("system", @system_prompt) unless @system_prompt.empty?
-      # Add conversation messages
       result.concat(@messages.to_a)
       result
     end
 
-    # Adds a message to the context store, sliding the window to eject old messages if needed.
-    #
-    # Standardizes the *label* using `#normalize_role`.
-    def add_message(label : String, message : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil)
+    def add_message(
+      label : String,
+      message : String,
+      tool_calls : Array(Mantle::Clients::ToolCall)? = nil,
+      tool_call_id : String? = nil,
+      token_count : Int32? = nil,
+      turn_id : String? = nil,
+      assembled_context : String? = nil,
+      generation : GenerationParams? = nil
+    )
       role = normalize_role(label)
       @messages << Mantle::Message.new(role, message, tool_calls, tool_call_id)
       @messages.shift if @messages.size > @messages_to_keep
       @current_num_messages = @messages.size
     end
 
-    # Prunes oldest messages to keep the total token count under *target_tokens*.
-    #
-    # Returns the list of pruned messages.
     def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
       pruned_messages = [] of Mantle::Message
-
       while current_num_tokens > target_tokens && !@messages.empty?
         if @messages.first.role == "system" && @messages.size > 1
           system_msg = @messages.shift
@@ -165,12 +143,10 @@ module Mantle::Storage
           pruned_messages << @messages.shift
         end
       end
-
       @current_num_messages = @messages.size
       return pruned_messages
     end
 
-    # Clears all messages in the sliding store.
     def clear
       @messages.clear
       @current_num_messages = 0
@@ -200,7 +176,6 @@ module Mantle::Storage
 
     def edit_last_bot_message(new_content : String) : Bool
       return false unless last_turn_replayable?
-
       last_msg = @messages[-1]
       @messages[-1] = Mantle::Message.new(last_msg.role, new_content, last_msg.tool_calls, last_msg.tool_call_id)
       true
@@ -208,7 +183,6 @@ module Mantle::Storage
 
     def pop_last_turn_for_replay : String?
       return nil unless last_turn_replayable?
-
       bot_msg = @messages.pop
       user_msg = @messages.pop
       @current_num_messages = @messages.size
@@ -216,172 +190,448 @@ module Mantle::Storage
     end
   end
 
-  # Represents a context store that persists conversation state and system prompt to a JSON file.
+  # Node graph context store backing data to JSON with atomic updates and blob side-stores.
   class JSONContextStore < ContextStore
-    # Represents whether to persist the system prompt to the JSON file.
     property persist_system_prompt : Bool
+    property context_file : String
+    property active_leaf_id : String?
+    property nodes : Hash(String, ContextNode)
 
-    # :nodoc:
     private struct FileData
       include JSON::Serializable
-      property system_prompt : String?
-      property messages : Array(Mantle::Message)
 
-      def initialize(@system_prompt : String?, @messages : Array(Mantle::Message))
+      @[JSON::Field(default: 1)]
+      property schema_version : Int32 = 1
+
+      property active_leaf_id : String?
+
+      @[JSON::Field(default: Hash(String, ContextNode).new)]
+      property nodes : Hash(String, ContextNode) = Hash(String, ContextNode).new
+
+      def initialize(@active_leaf_id : String?, @nodes : Hash(String, ContextNode) = Hash(String, ContextNode).new, @schema_version : Int32 = 1)
       end
     end
 
-    # Creates a JSON-backed context store, loading context from *context_file* using the specified *system_prompt*.
     def initialize(system_prompt : String, context_file : String, @persist_system_prompt : Bool = true)
       super(system_prompt)
-      @messages = Deque(Mantle::Message).new
       @context_file = context_file
+      @nodes = Hash(String, ContextNode).new
+      @children_index = Hash(String, Array(String)).new
+      @active_leaf_id = nil
 
       load_context_from_json
     end
 
-    # Returns the active messages, prepending the system prompt if present.
-    def current_view : Array(Mantle::Message)
-      result = [] of Mantle::Message
-      # Add system prompt as first message if present
-      result << Mantle::Message.new("system", @system_prompt) unless @system_prompt.empty?
-      # Add conversation messages
-      result.concat(@messages.to_a)
+    # Graph Traversal APIs
+
+    def each_node(&block : ContextNode ->)
+      @nodes.each_value(&block)
+    end
+
+    def ancestors(start_node_id : String?) : Array(ContextNode)
+      result = [] of ContextNode
+      curr_id = start_node_id
+      visited = Set(String).new
+      while curr_id
+        break if visited.includes?(curr_id)
+        visited.add(curr_id)
+        if node = @nodes[curr_id]?
+          result << node
+          curr_id = node.parent_id
+        else
+          break
+        end
+      end
+      result.reverse
+    end
+
+    def descendants(start_node_id : String) : Array(ContextNode)
+      result = [] of ContextNode
+      queue = Deque(String).new
+      queue.concat(@children_index[start_node_id]? || [] of String)
+      visited = Set(String).new
+      while !queue.empty?
+        curr = queue.pop
+        next if visited.includes?(curr)
+        visited.add(curr)
+        if node = @nodes[curr]?
+          result << node
+          queue.concat(@children_index[curr]? || [] of String)
+        end
+      end
       result
     end
 
-    # Adds a message to the context store and saves the updated state to the JSON file.
-    #
-    # Standardizes the *label* using `#normalize_role`.
-    def add_message(label : String, message : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil)
-      role = normalize_role(label)
-      @messages << Mantle::Message.new(role, message, tool_calls, tool_call_id)
-      @current_num_messages = @messages.size
-      save_context_to_json
+    def get_node_and_neighbors(target_node_id : String, k : Int32 = 1, turns : Bool = false) : Array(ContextNode)
+      target_node = @nodes[target_node_id]?
+      return [] of ContextNode unless target_node
+
+      if turns && (target_turn = target_node.turn_id)
+        branch = ancestors(@active_leaf_id)
+        branch = ancestors(target_node_id) if branch.none? { |n| n.id == target_node_id }
+
+        turn_ids = branch.compact_map(&.turn_id).uniq
+        if idx = turn_ids.index(target_turn)
+          min_idx = [0, idx - k].max
+          max_idx = [turn_ids.size - 1, idx + k].min
+          selected_turns = turn_ids[min_idx..max_idx].to_set
+          branch.select { |n| n.turn_id && selected_turns.includes?(n.turn_id) }
+        else
+          [target_node]
+        end
+      else
+        anc = ancestors(target_node_id)
+        desc = descendants(target_node_id)
+        anc_subset = anc.last([anc.size, k + 1].min)
+        desc_subset = desc.first([desc.size, k].min)
+        (anc_subset + desc_subset).uniq
+      end
     end
 
-    # Updates the system prompt to *new_prompt* and saves the context.
+    # Dynamic View Assembly & Positional Subsumption
+
+    def current_view : Array(Mantle::Message)
+      result = [] of Mantle::Message
+      result << Mantle::Message.new("system", @system_prompt) unless @system_prompt.empty?
+
+      branch = ancestors(@active_leaf_id)
+      return result if branch.empty?
+
+      subsumed_set = Set(String).new
+      branch.each do |node|
+        if subs = node.subsumes
+          if subs.includes?(node.id)
+            raise ArgumentError.new("Cyclic subsumption detected in node #{node.id}")
+          end
+          collect_transitive_subsumes(subs, subsumed_set)
+        end
+      end
+
+      subsumed_to_summary = Hash(String, ContextNode).new
+      branch.each do |node|
+        if subs = node.subsumes
+          subs.each do |sub_id|
+            subsumed_to_summary[sub_id] = node
+          end
+        end
+      end
+
+      inserted_summaries = Set(String).new
+
+      branch.each do |node|
+        if subsumed_set.includes?(node.id)
+          summary_node = subsumed_to_summary[node.id]?
+          if summary_node && !inserted_summaries.includes?(summary_node.id) && !subsumed_set.includes?(summary_node.id)
+            result << summary_node.message
+            inserted_summaries.add(summary_node.id)
+          end
+        else
+          if node.subsumes
+            unless inserted_summaries.includes?(node.id)
+              result << node.message
+              inserted_summaries.add(node.id)
+            end
+          else
+            result << node.message
+          end
+        end
+      end
+
+      result
+    end
+
+    def current_num_tokens : Int32
+      current_view.sum do |msg|
+        content_size = (msg.content || "").size
+        tool_size = msg.tool_calls.try(&.to_json.size) || 0
+        (content_size + tool_size) // 4
+      end
+    end
+
+    def current_num_messages : Int32
+      ancestors(@active_leaf_id).size
+    end
+
+    def add_message(
+      label : String,
+      message : String,
+      tool_calls : Array(Mantle::Clients::ToolCall)? = nil,
+      tool_call_id : String? = nil,
+      token_count : Int32? = nil,
+      turn_id : String? = nil,
+      assembled_context : String? = nil,
+      generation : GenerationParams? = nil
+    )
+      role = normalize_role(label)
+      msg_obj = Mantle::Message.new(role, message, tool_calls, tool_call_id)
+
+      tc = token_count || begin
+        content_size = message.size
+        tool_size = tool_calls.try(&.to_json.size) || 0
+        [ (content_size + tool_size) // 4, 1 ].max
+      end
+
+      sha = assembled_context ? write_assembled_context(assembled_context) : nil
+
+      node = ContextNode.new(
+        message: msg_obj,
+        token_count: tc,
+        parent_id: @active_leaf_id,
+        turn_id: turn_id,
+        assembled_context_sha: sha,
+        generation: generation
+      )
+
+      @nodes[node.id] = node
+      if pid = node.parent_id
+        (@children_index[pid] ||= [] of String) << node.id
+      end
+      @active_leaf_id = node.id
+      @current_num_messages = ancestors(@active_leaf_id).size
+
+      save_context_to_json
+      node
+    end
+
     def update_system_prompt(new_prompt : String)
       @system_prompt = new_prompt
       save_context_to_json
     end
 
-    # Saves the current messages and optional system prompt to the JSON file.
-    def save_context_to_json : Nil
-      begin
-        prompt_to_save = @persist_system_prompt ? @system_prompt : nil
-        data = FileData.new(prompt_to_save, @messages.to_a)
-        File.open(@context_file, "w") { |f| data.to_json(f) }
-      rescue e : File::Error
-        Mantle::Support::Log.error { "Failed to save context to #{@context_file}: #{e.message}" }
+    def set_active_leaf(node_id : String?)
+      if node_id && !@nodes.has_key?(node_id)
+        raise KeyError.new("Node ID #{node_id} does not exist in store")
       end
+      @active_leaf_id = node_id
+      @current_num_messages = ancestors(@active_leaf_id).size
+      save_context_to_json
     end
 
-    # Loads conversation context and system prompt from the JSON file.
-    #
-    # Emits `:new_context_file` if the context file is not found.
-    def load_context_from_json
-      begin
-        data = FileData.from_json(File.read(@context_file))
-        @system_prompt = data.system_prompt || @system_prompt
-        @messages.clear
-        data.messages.each do |msg|
-          # Validate roles when loading
-          validate_role(msg.role)
-          @messages << msg
-        end
-        @current_num_messages = @messages.size
-        Mantle::Support::Log.info { "Loaded context from #{@context_file}" }
-      rescue e : File::NotFoundError
-        save_context_to_json
-        Mantle::Support::Log.warn { "Context file was not found - creating a new one." }
-        Mantle.emit_status(:new_context_file)
-      end
+    # Blob Side-Store Operations
+
+    def blob_dir : String
+      dir = File.join(File.dirname(@context_file), ".contexts", "blobs")
+      Dir.mkdir_p(dir) unless Dir.exists?(dir)
+      dir
     end
 
-    # Prunes conversation messages to keep total tokens under *target_tokens*, and saves the updated state.
-    #
-    # Returns the list of pruned messages.
+    def write_assembled_context(context_str : String) : String
+      sha = Digest::SHA256.hexdigest(context_str)
+      blob_path = File.join(blob_dir, sha)
+      unless File.exists?(blob_path)
+        File.write(blob_path, context_str)
+      end
+      sha
+    end
+
+    def read_assembled_context(sha : String) : String?
+      blob_path = File.join(blob_dir, sha)
+      File.exists?(blob_path) ? File.read(blob_path) : nil
+    end
+
+    # Pruning & Consolidation
+
     def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
       pruned_messages = [] of Mantle::Message
 
-      while current_num_tokens > target_tokens && !@messages.empty?
-        if @messages.first.role == "system" && @messages.size > 1
-          system_msg = @messages.shift
-          pruned_messages << @messages.shift
-          @messages.unshift(system_msg)
-        else
-          pruned_messages << @messages.shift
+      while current_num_tokens > target_tokens
+        branch = ancestors(@active_leaf_id)
+        subsumed_set = Set(String).new
+        branch.each do |n|
+          if subs = n.subsumes
+            collect_transitive_subsumes(subs, subsumed_set)
+          end
         end
+
+        visible_nodes = [] of ContextNode
+        branch.each do |n|
+          next if subsumed_set.includes?(n.id) || n.subsumes
+          visible_nodes << n
+        end
+
+        break if visible_nodes.empty?
+
+        node_to_subsume = visible_nodes.first
+        pruned_messages << node_to_subsume.message
+
+        summary_msg = Mantle::Message.new("system", "[Summary of subsumed context]")
+        summary_node = ContextNode.new(
+          message: summary_msg,
+          token_count: [node_to_subsume.token_count // 2, 1].max,
+          parent_id: @active_leaf_id,
+          subsumes: [node_to_subsume.id]
+        )
+
+        @nodes[summary_node.id] = summary_node
+        if pid = summary_node.parent_id
+          (@children_index[pid] ||= [] of String) << summary_node.id
+        end
+        @active_leaf_id = summary_node.id
       end
 
-      @current_num_messages = @messages.size
+      @current_num_messages = ancestors(@active_leaf_id).size
       save_context_to_json
       return pruned_messages
     end
 
-    # Prunes the oldest *num_to_prune* messages and saves the updated state.
-    #
-    # Returns the list of pruned messages.
     def prune(num_to_prune : Int32) : Array(Mantle::Message)
       pruned_messages = [] of Mantle::Message
+      num_to_prune.times do
+        branch = ancestors(@active_leaf_id)
+        subsumed_set = Set(String).new
+        branch.each do |n|
+          if subs = n.subsumes
+            collect_transitive_subsumes(subs, subsumed_set)
+          end
+        end
 
-      count = [num_to_prune, @current_num_messages].min
+        visible_nodes = [] of ContextNode
+        branch.each do |n|
+          next if subsumed_set.includes?(n.id) || n.subsumes
+          visible_nodes << n
+        end
 
-      count.times do
-        pruned_messages << @messages.shift
+        break if visible_nodes.empty?
+        node_to_subsume = visible_nodes.first
+        pruned_messages << node_to_subsume.message
+
+        summary_msg = Mantle::Message.new("system", "[Summary of subsumed context]")
+        summary_node = ContextNode.new(
+          message: summary_msg,
+          token_count: [node_to_subsume.token_count // 2, 1].max,
+          parent_id: @active_leaf_id,
+          subsumes: [node_to_subsume.id]
+        )
+
+        @nodes[summary_node.id] = summary_node
+        if pid = summary_node.parent_id
+          (@children_index[pid] ||= [] of String) << summary_node.id
+        end
+        @active_leaf_id = summary_node.id
       end
-      @current_num_messages = @messages.size
+
+      @current_num_messages = ancestors(@active_leaf_id).size
       save_context_to_json
       return pruned_messages
     end
 
-    # Clears all messages in the store and updates the JSON file.
     def clear
-      @messages.clear
+      @nodes.clear
+      @children_index.clear
+      @active_leaf_id = nil
       @current_num_messages = 0
       save_context_to_json
     end
 
     def last_turn_replayable? : Bool
-      return false if @messages.size < 2
-      last_msg = @messages[-1]
-      prev_msg = @messages[-2]
+      branch = ancestors(@active_leaf_id)
+      return false if branch.size < 2
+      last_node = branch[-1]
+      prev_node = branch[-2]
 
-      return false unless last_msg.role == "assistant"
-      return false unless prev_msg.role == "user"
-      return false if last_msg.tool_calls.try(&.any?)
-      return false if prev_msg.tool_calls.try(&.any?)
-      return false if last_msg.tool_call_id || prev_msg.tool_call_id
+      return false unless last_node.message.role == "assistant"
+      return false unless prev_node.message.role == "user"
+      return false if last_node.message.tool_calls.try(&.any?)
+      return false if prev_node.message.tool_calls.try(&.any?)
+      return false if last_node.message.tool_call_id || prev_node.message.tool_call_id
 
       true
     end
 
     def last_user_message : Mantle::Message?
-      last_turn_replayable? ? @messages[-2] : nil
+      return nil unless last_turn_replayable?
+      branch = ancestors(@active_leaf_id)
+      branch[-2].message
     end
 
     def last_bot_message : Mantle::Message?
-      last_turn_replayable? ? @messages[-1] : nil
+      return nil unless last_turn_replayable?
+      branch = ancestors(@active_leaf_id)
+      branch[-1].message
     end
 
     def edit_last_bot_message(new_content : String) : Bool
       return false unless last_turn_replayable?
+      branch = ancestors(@active_leaf_id)
+      user_node = branch[-2]
+      last_node = branch[-1]
 
-      last_msg = @messages[-1]
-      @messages[-1] = Mantle::Message.new(last_msg.role, new_content, last_msg.tool_calls, last_msg.tool_call_id)
+      new_msg = Mantle::Message.new("assistant", new_content, last_node.message.tool_calls, last_node.message.tool_call_id)
+      new_node = ContextNode.new(
+        message: new_msg,
+        token_count: [new_content.size // 4, 1].max,
+        parent_id: user_node.id
+      )
+      @nodes[new_node.id] = new_node
+      (@children_index[user_node.id] ||= [] of String) << new_node.id
+      @active_leaf_id = new_node.id
+
       save_context_to_json
       true
     end
 
     def pop_last_turn_for_replay : String?
       return nil unless last_turn_replayable?
+      branch = ancestors(@active_leaf_id)
+      user_node = branch[-2]
 
-      bot_msg = @messages.pop
-      user_msg = @messages.pop
-      @current_num_messages = @messages.size
+      @active_leaf_id = user_node.parent_id
+      @current_num_messages = ancestors(@active_leaf_id).size
       save_context_to_json
-      user_msg.content
+      user_node.message.content
+    end
+
+    # Atomic Persistence
+
+    def save_context_to_json : Nil
+      begin
+        data = FileData.new(@active_leaf_id, @nodes)
+        tmp_file = "#{@context_file}.tmp"
+        File.open(tmp_file, "w") { |f| data.to_json(f) }
+        File.rename(tmp_file, @context_file)
+      rescue e : Exception
+        Mantle::Support::Log.error { "Failed to save context to #{@context_file}: #{e.message}" }
+      end
+    end
+
+    def load_context_from_json
+      begin
+        data = File.open(@context_file, "r") { |f| FileData.from_json(f) }
+        @nodes = data.nodes
+        @active_leaf_id = data.active_leaf_id
+        rebuild_children_index
+        @current_num_messages = ancestors(@active_leaf_id).size
+        Mantle::Support::Log.info { "Loaded context from #{@context_file}" }
+      rescue e : File::NotFoundError
+        save_context_to_json
+        Mantle::Support::Log.warn { "Context file was not found - creating a new one." }
+        Mantle.emit_status(:new_context_file)
+      rescue e : Exception
+        Mantle::Support::Log.warn { "Context file #{@context_file} could not be parsed as graph data (#{e.message}) - re-initializing." }
+        clear
+        Mantle.emit_status(:new_context_file)
+      end
+    end
+
+    private def rebuild_children_index
+      @children_index.clear
+      @nodes.each_value do |node|
+        if parent_id = node.parent_id
+          (@children_index[parent_id] ||= [] of String) << node.id
+        end
+      end
+    end
+
+    private def collect_transitive_subsumes(direct_subs : Array(String), set : Set(String))
+      direct_subs.each do |sub_id|
+        next if set.includes?(sub_id)
+        set.add(sub_id)
+        if node = @nodes[sub_id]?
+          if child_subs = node.subsumes
+            collect_transitive_subsumes(child_subs, set)
+          end
+        end
+      end
     end
   end
 end
