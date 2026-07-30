@@ -74,13 +74,9 @@ module Mantle::Storage
         messages << Mantle::Message.new("system", memory_view)
       end
 
-      # 4. Get conversation messages from context_store (skip only the leading system prompt message it includes)
+      # 4. Get conversation messages from context_store (skip the system message it includes)
       context_messages = @context_store.current_view
-      if context_messages.first? && context_messages.first.role == "system" && context_messages.first.content == base_system_content
-        conversation_messages = context_messages[1..]
-      else
-        conversation_messages = context_messages
-      end
+      conversation_messages = context_messages.select { |msg| msg.role != "system" }
       messages.concat(conversation_messages)
 
       # 5. Apply pending invisible append to the last user message if present

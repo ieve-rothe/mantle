@@ -46,12 +46,11 @@ module Mantle::Storage
     )
     end
 
-    def prune_to_tokens(target_tokens : Int32, summarizer : Proc(Array(Mantle::Message), String)? = nil, client : Mantle::Clients::Client? = nil) : Array(Mantle::Message)
+    def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
       [] of Mantle::Message
     end
 
-    def prune(num_to_prune : Int32, summarizer : Proc(Array(Mantle::Message), String)? = nil, client : Mantle::Clients::Client? = nil) : Array(Mantle::Message)
-      [] of Mantle::Message
+    def prune(num_to_prune : Int32)
     end
 
     def clear
@@ -133,7 +132,7 @@ module Mantle::Storage
       @current_num_messages = @messages.size
     end
 
-    def prune_to_tokens(target_tokens : Int32, summarizer : Proc(Array(Mantle::Message), String)? = nil, client : Mantle::Clients::Client? = nil) : Array(Mantle::Message)
+    def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
       pruned_messages = [] of Mantle::Message
       while current_num_tokens > target_tokens && !@messages.empty?
         if @messages.first.role == "system" && @messages.size > 1
@@ -197,8 +196,6 @@ module Mantle::Storage
     property context_file : String
     property active_leaf_id : String?
     property nodes : Hash(String, ContextNode)
-    property summarizer : Proc(Array(Mantle::Message), String)?
-    property client : Mantle::Clients::Client?
 
     private struct FileData
       include JSON::Serializable
@@ -215,7 +212,7 @@ module Mantle::Storage
       end
     end
 
-    def initialize(system_prompt : String, context_file : String, @persist_system_prompt : Bool = true, @summarizer : Proc(Array(Mantle::Message), String)? = nil, @client : Mantle::Clients::Client? = nil)
+    def initialize(system_prompt : String, context_file : String, @persist_system_prompt : Bool = true)
       super(system_prompt)
       @context_file = context_file
       @nodes = Hash(String, ContextNode).new
@@ -434,7 +431,7 @@ module Mantle::Storage
 
     # Pruning & Consolidation
 
-    def prune_to_tokens(target_tokens : Int32, summarizer : Proc(Array(Mantle::Message), String)? = nil, client : Mantle::Clients::Client? = nil) : Array(Mantle::Message)
+    def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
       pruned_messages = [] of Mantle::Message
 
       while current_num_tokens > target_tokens
@@ -457,11 +454,10 @@ module Mantle::Storage
         node_to_subsume = visible_nodes.first
         pruned_messages << node_to_subsume.message
 
-        summary_text = generate_subsumed_summary(node_to_subsume, summarizer, client)
-        summary_msg = Mantle::Message.new("system", summary_text)
+        summary_msg = Mantle::Message.new("system", "[Summary of subsumed context]")
         summary_node = ContextNode.new(
           message: summary_msg,
-          token_count: [summary_text.size // 4, 1].max,
+          token_count: [node_to_subsume.token_count // 2, 1].max,
           parent_id: @active_leaf_id,
           subsumes: [node_to_subsume.id]
         )
@@ -478,7 +474,7 @@ module Mantle::Storage
       return pruned_messages
     end
 
-    def prune(num_to_prune : Int32, summarizer : Proc(Array(Mantle::Message), String)? = nil, client : Mantle::Clients::Client? = nil) : Array(Mantle::Message)
+    def prune(num_to_prune : Int32) : Array(Mantle::Message)
       pruned_messages = [] of Mantle::Message
       num_to_prune.times do
         branch = ancestors(@active_leaf_id)
@@ -499,11 +495,10 @@ module Mantle::Storage
         node_to_subsume = visible_nodes.first
         pruned_messages << node_to_subsume.message
 
-        summary_text = generate_subsumed_summary(node_to_subsume, summarizer, client)
-        summary_msg = Mantle::Message.new("system", summary_text)
+        summary_msg = Mantle::Message.new("system", "[Summary of subsumed context]")
         summary_node = ContextNode.new(
           message: summary_msg,
-          token_count: [summary_text.size // 4, 1].max,
+          token_count: [node_to_subsume.token_count // 2, 1].max,
           parent_id: @active_leaf_id,
           subsumes: [node_to_subsume.id]
         )
@@ -518,41 +513,6 @@ module Mantle::Storage
       @current_num_messages = ancestors(@active_leaf_id).size
       save_context_to_json
       return pruned_messages
-    end
-
-    private def generate_subsumed_summary(node_to_subsume : ContextNode, summarizer_arg : Proc(Array(Mantle::Message), String)?, client_arg : Mantle::Clients::Client?) : String
-      active_summarizer = summarizer_arg || @summarizer
-      active_client = client_arg || @client
-
-      subsumed_messages = [node_to_subsume.message]
-
-      if active_summarizer
-        begin
-          res = active_summarizer.call(subsumed_messages)
-          return res.strip unless res.strip.empty?
-        rescue ex : Exception
-          Mantle::Support::Log.warn { "Summarizer proc failed during context node subsumption: #{ex.message}" }
-        end
-      end
-
-      if active_client
-        begin
-          prompt_messages = [
-            Mantle::Message.new("system", "You are a context summarizer. Provide a concise 1-3 sentence summary capturing key facts, user requests, and decisions from the following subsumed conversation turn(s)."),
-            Mantle::Message.new("user", subsumed_messages.map { |m| "[#{m.role}]: #{m.content}" }.join("\n"))
-          ]
-          response = active_client.execute(prompt_messages)
-          if content = response.content.try(&.strip)
-            return content unless content.empty?
-          end
-        rescue ex : Exception
-          Mantle::Support::Log.warn { "LLM client call failed during context node subsumption: #{ex.message}" }
-        end
-      end
-
-      fallback_id = node_to_subsume.turn_id ? "turn #{node_to_subsume.turn_id}" : "node #{node_to_subsume.id}"
-      Mantle::Support::Log.warn { "Using fallback text for subsumed context node #{node_to_subsume.id}" }
-      "[Context subsumed from #{fallback_id}]"
     end
 
     def clear
