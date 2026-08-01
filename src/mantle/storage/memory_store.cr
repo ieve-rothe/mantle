@@ -230,7 +230,9 @@ module Mantle::Storage
 
     private def save_memories_to_json : Nil
       data = FileData.new(@ingest_pending, @layers)
-      File.open(@memory_file, "w") { |f| data.to_json(f) }
+      tmp_file = "#{@memory_file}.tmp"
+      File.open(tmp_file, "w") { |f| data.to_json(f) }
+      File.rename(tmp_file, @memory_file)
     end
   end
 end
