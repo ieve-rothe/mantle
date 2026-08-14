@@ -78,9 +78,6 @@ module Mantle::Storage
     @[JSON::Field(emit_null: false)]
     property generation : GenerationParams?
 
-    @[JSON::Field(emit_null: false)]
-    property subsumes : Array(String)?
-
     def initialize(
       @message : Mantle::Message,
       @token_count : Int32,
@@ -89,8 +86,7 @@ module Mantle::Storage
       @id : String = UUID.random.to_s,
       @ts : Time = Time.utc,
       @assembled_context_sha : String? = nil,
-      @generation : GenerationParams? = nil,
-      @subsumes : Array(String)? = nil
+      @generation : GenerationParams? = nil
     )
     end
   end

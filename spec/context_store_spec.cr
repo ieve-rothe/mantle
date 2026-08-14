@@ -347,48 +347,20 @@ describe Mantle::Storage::JSONContextStore do
     end
   end
 
-  describe "Transitive Consolidation & Self-Subsumption" do
-    it "handles double consolidation with transitive subsumption and positional splicing" do
-      test_file = "/tmp/mantle_subsume_test_#{Time.utc.to_unix_ms}.json"
+  describe "#prune_to_tokens" do
+    it "prunes oldest messages cleanly from active branch to reach target tokens" do
+      test_file = "/tmp/mantle_prune_tokens_test_#{Time.utc.to_unix_ms}.json"
       store = Mantle::Storage::JSONContextStore.new("System", test_file)
 
       n1 = store.add_message("User", "Msg 1")
       n2 = store.add_message("Assistant", "Msg 2")
       n3 = store.add_message("User", "Msg 3")
 
-      # First consolidation
-      store.prune_to_tokens(5) # Consolidates oldest
-      v1 = store.current_view
+      pruned = store.prune_to_tokens(2)
+      pruned.size.should be >= 1
 
-      # Add more
-      n4 = store.add_message("Assistant", "Msg 4")
-      n5 = store.add_message("User", "Msg 5")
-
-      # Second consolidation (transitive)
-      store.prune_to_tokens(5)
-      v2 = store.current_view
-
-      v2.any? { |m| m.content == "Msg 1" }.should be_false
-
-      File.delete(test_file) if File.exists?(test_file)
-    end
-
-    it "raises an error if a node attempts to subsume itself" do
-      test_file = "/tmp/mantle_self_sub_test_#{Time.utc.to_unix_ms}.json"
-      store = Mantle::Storage::JSONContextStore.new("System", test_file)
-
-      node = Mantle::Storage::ContextNode.new(
-        message: Mantle::Message.new("system", "Bad node"),
-        token_count: 5,
-        id: "self_node",
-        subsumes: ["self_node"]
-      )
-      store.nodes["self_node"] = node
-      store.active_leaf_id = "self_node"
-
-      expect_raises(ArgumentError, /Cyclic subsumption/) do
-        store.current_view
-      end
+      view = store.current_view
+      view.any? { |m| m.content == "Msg 1" }.should be_false
 
       File.delete(test_file) if File.exists?(test_file)
     end
@@ -414,7 +386,7 @@ describe Mantle::Storage::JSONContextStore do
   end
 
   describe "#prune" do
-    it "subsumes oldest messages via summary node" do
+    it "prunes oldest messages cleanly from active branch" do
       test_file = "/tmp/mantle_test_prune_#{Time.utc.to_unix_ms}.json"
       store = Mantle::Storage::JSONContextStore.new("System", test_file)
 

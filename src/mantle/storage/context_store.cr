@@ -196,6 +196,7 @@ module Mantle::Storage
     property context_file : String
     property active_leaf_id : String?
     property nodes : Hash(String, ContextNode)
+    property pruned_node_ids : Set(String)
 
     private struct FileData
       include JSON::Serializable
@@ -208,7 +209,10 @@ module Mantle::Storage
       @[JSON::Field(default: Hash(String, ContextNode).new)]
       property nodes : Hash(String, ContextNode) = Hash(String, ContextNode).new
 
-      def initialize(@active_leaf_id : String?, @nodes : Hash(String, ContextNode) = Hash(String, ContextNode).new, @schema_version : Int32 = 1)
+      @[JSON::Field(default: Set(String).new)]
+      property pruned_node_ids : Set(String) = Set(String).new
+
+      def initialize(@active_leaf_id : String?, @nodes : Hash(String, ContextNode) = Hash(String, ContextNode).new, @pruned_node_ids : Set(String) = Set(String).new, @schema_version : Int32 = 1)
       end
     end
 
@@ -217,6 +221,7 @@ module Mantle::Storage
       @context_file = context_file
       @nodes = Hash(String, ContextNode).new
       @children_index = Hash(String, Array(String)).new
+      @pruned_node_ids = Set(String).new
       @active_leaf_id = nil
 
       load_context_from_json
@@ -297,44 +302,9 @@ module Mantle::Storage
       branch = ancestors(@active_leaf_id)
       return result if branch.empty?
 
-      subsumed_set = Set(String).new
       branch.each do |node|
-        if subs = node.subsumes
-          if subs.includes?(node.id)
-            raise ArgumentError.new("Cyclic subsumption detected in node #{node.id}")
-          end
-          collect_transitive_subsumes(subs, subsumed_set)
-        end
-      end
-
-      subsumed_to_summary = Hash(String, ContextNode).new
-      branch.each do |node|
-        if subs = node.subsumes
-          subs.each do |sub_id|
-            subsumed_to_summary[sub_id] = node
-          end
-        end
-      end
-
-      inserted_summaries = Set(String).new
-
-      branch.each do |node|
-        if subsumed_set.includes?(node.id)
-          summary_node = subsumed_to_summary[node.id]?
-          if summary_node && !inserted_summaries.includes?(summary_node.id) && !subsumed_set.includes?(summary_node.id)
-            result << summary_node.message
-            inserted_summaries.add(summary_node.id)
-          end
-        else
-          if node.subsumes
-            unless inserted_summaries.includes?(node.id)
-              result << node.message
-              inserted_summaries.add(node.id)
-            end
-          else
-            result << node.message
-          end
-        end
+        next if @pruned_node_ids.includes?(node.id)
+        result << node.message
       end
 
       result
@@ -436,40 +406,15 @@ module Mantle::Storage
 
       while current_num_tokens > target_tokens
         branch = ancestors(@active_leaf_id)
-        subsumed_set = Set(String).new
-        branch.each do |n|
-          if subs = n.subsumes
-            collect_transitive_subsumes(subs, subsumed_set)
-          end
-        end
-
-        visible_nodes = [] of ContextNode
-        branch.each do |n|
-          next if subsumed_set.includes?(n.id) || n.subsumes
-          visible_nodes << n
-        end
-
+        visible_nodes = branch.reject { |n| @pruned_node_ids.includes?(n.id) }
         break if visible_nodes.empty?
 
-        node_to_subsume = visible_nodes.first
-        pruned_messages << node_to_subsume.message
-
-        summary_msg = Mantle::Message.new("system", "[Summary of subsumed context]")
-        summary_node = ContextNode.new(
-          message: summary_msg,
-          token_count: [node_to_subsume.token_count // 2, 1].max,
-          parent_id: @active_leaf_id,
-          subsumes: [node_to_subsume.id]
-        )
-
-        @nodes[summary_node.id] = summary_node
-        if pid = summary_node.parent_id
-          (@children_index[pid] ||= [] of String) << summary_node.id
-        end
-        @active_leaf_id = summary_node.id
+        node_to_prune = visible_nodes.first
+        pruned_messages << node_to_prune.message
+        @pruned_node_ids.add(node_to_prune.id)
       end
 
-      @current_num_messages = ancestors(@active_leaf_id).size
+      @current_num_messages = current_view.size
       save_context_to_json
       return pruned_messages
     end
@@ -478,39 +423,15 @@ module Mantle::Storage
       pruned_messages = [] of Mantle::Message
       num_to_prune.times do
         branch = ancestors(@active_leaf_id)
-        subsumed_set = Set(String).new
-        branch.each do |n|
-          if subs = n.subsumes
-            collect_transitive_subsumes(subs, subsumed_set)
-          end
-        end
-
-        visible_nodes = [] of ContextNode
-        branch.each do |n|
-          next if subsumed_set.includes?(n.id) || n.subsumes
-          visible_nodes << n
-        end
-
+        visible_nodes = branch.reject { |n| @pruned_node_ids.includes?(n.id) }
         break if visible_nodes.empty?
-        node_to_subsume = visible_nodes.first
-        pruned_messages << node_to_subsume.message
 
-        summary_msg = Mantle::Message.new("system", "[Summary of subsumed context]")
-        summary_node = ContextNode.new(
-          message: summary_msg,
-          token_count: [node_to_subsume.token_count // 2, 1].max,
-          parent_id: @active_leaf_id,
-          subsumes: [node_to_subsume.id]
-        )
-
-        @nodes[summary_node.id] = summary_node
-        if pid = summary_node.parent_id
-          (@children_index[pid] ||= [] of String) << summary_node.id
-        end
-        @active_leaf_id = summary_node.id
+        node_to_prune = visible_nodes.first
+        pruned_messages << node_to_prune.message
+        @pruned_node_ids.add(node_to_prune.id)
       end
 
-      @current_num_messages = ancestors(@active_leaf_id).size
+      @current_num_messages = current_view.size
       save_context_to_json
       return pruned_messages
     end
@@ -518,6 +439,7 @@ module Mantle::Storage
     def clear
       @nodes.clear
       @children_index.clear
+      @pruned_node_ids.clear
       @active_leaf_id = nil
       @current_num_messages = 0
       save_context_to_json
@@ -585,7 +507,7 @@ module Mantle::Storage
 
     def save_context_to_json : Nil
       begin
-        data = FileData.new(@active_leaf_id, @nodes)
+        data = FileData.new(@active_leaf_id, @nodes, @pruned_node_ids)
         tmp_file = "#{@context_file}.tmp"
         File.open(tmp_file, "w") { |f| data.to_json(f) }
         File.rename(tmp_file, @context_file)
@@ -599,8 +521,9 @@ module Mantle::Storage
         data = File.open(@context_file, "r") { |f| FileData.from_json(f) }
         @nodes = data.nodes
         @active_leaf_id = data.active_leaf_id
+        @pruned_node_ids = data.pruned_node_ids
         rebuild_children_index
-        @current_num_messages = ancestors(@active_leaf_id).size
+        @current_num_messages = current_view.size
         Mantle::Support::Log.info { "Loaded context from #{@context_file}" }
       rescue e : File::NotFoundError
         save_context_to_json
@@ -618,18 +541,6 @@ module Mantle::Storage
       @nodes.each_value do |node|
         if parent_id = node.parent_id
           (@children_index[parent_id] ||= [] of String) << node.id
-        end
-      end
-    end
-
-    private def collect_transitive_subsumes(direct_subs : Array(String), set : Set(String))
-      direct_subs.each do |sub_id|
-        next if set.includes?(sub_id)
-        set.add(sub_id)
-        if node = @nodes[sub_id]?
-          if child_subs = node.subsumes
-            collect_transitive_subsumes(child_subs, set)
-          end
         end
       end
     end
