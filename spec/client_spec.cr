@@ -437,4 +437,84 @@ describe Mantle::Clients::Client do
     # Cleanup
     server.close
   end
+
+  it "parses done_reason and token evaluation counts in standard mode" do
+    model_config = Mantle::Clients::ModelConfig.new(
+      "test-model", false, 0.6, 0.7, 700, "http://localhost:43005/"
+    )
+    client = Mantle::Clients::LlamaClient.new(model_config)
+
+    api_response = {
+      "model": "test-model",
+      "message": {
+        "role": "assistant",
+        "content": "Finished normally",
+      },
+      "done": true,
+      "done_reason": "stop",
+      "prompt_eval_count": 42,
+      "eval_count": 128,
+    }.to_json
+
+    server = HTTP::Server.new do |context|
+      context.response.content_type = "application/json"
+      context.response.print api_response
+    end
+    address = server.bind_tcp 43005
+
+    spawn { server.listen }
+
+    test_messages = [Mantle::Message.new("user", "Hello")]
+    response = client.execute(test_messages)
+
+    response.content.should eq("Finished normally")
+    response.done_reason.should eq("stop")
+    response.prompt_eval_count.should eq(42)
+    response.eval_count.should eq(128)
+    response.truncated?.should be_false
+
+    server.close
+  end
+
+  it "parses streaming chunks, captures done_reason, and detects thinking-truncation" do
+    model_config = Mantle::Clients::ModelConfig.new(
+      "reasoning-model", true, 0.6, 0.7, 100, "http://localhost:43006/"
+    )
+    client = Mantle::Clients::LlamaClient.new(model_config)
+
+    # Simulate Ollama streaming lines where thinking exhausts token limit
+    stream_chunks = [
+      {"model" => "reasoning-model", "message" => {"role" => "assistant", "thinking" => "Let me think about this step 1..."}, "done" => false}.to_json,
+      {"model" => "reasoning-model", "message" => {"role" => "assistant", "thinking" => " and step 2..."}, "done" => false}.to_json,
+      {"model" => "reasoning-model", "message" => {"role" => "assistant", "content" => ""}, "done" => true, "done_reason" => "length", "prompt_eval_count" => 80, "eval_count" => 100}.to_json,
+    ]
+
+    server = HTTP::Server.new do |context|
+      context.response.content_type = "application/x-ndjson"
+      stream_chunks.each do |chunk|
+        context.response.puts chunk
+      end
+    end
+    address = server.bind_tcp 43006
+
+    spawn { server.listen }
+
+    test_messages = [Mantle::Message.new("user", "Complex reasoning task")]
+    streamed_content = Array(String).new
+    response = client.execute(test_messages) do |chunk|
+      streamed_content << chunk
+    end
+
+    streamed_content.should be_empty
+    response.content.should be_nil
+    response.thinking.should eq("Let me think about this step 1... and step 2...")
+    response.done_reason.should eq("length")
+    response.prompt_eval_count.should eq(80)
+    response.eval_count.should eq(100)
+    response.truncated?.should be_true
+    response.thinking_only?.should be_true
+    response.truncated_in_thinking?.should be_true
+
+    server.close
+  end
 end

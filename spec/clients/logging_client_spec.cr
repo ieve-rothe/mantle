@@ -14,7 +14,14 @@ class DummyLoggingTestClient < Mantle::Clients::Client
     end
     on_chunk.call("Hello ")
     on_chunk.call("World")
-    Mantle::Clients::Response.new(content: "Hello World", tool_calls: nil, thinking: "Thinking hard...")
+    Mantle::Clients::Response.new(
+      content: "Hello World",
+      tool_calls: nil,
+      thinking: "Thinking hard...",
+      done_reason: "stop",
+      prompt_eval_count: 10,
+      eval_count: 2
+    )
   end
 end
 
@@ -54,6 +61,9 @@ describe Mantle::Clients::LoggingClient do
     json["error_message"].raw.should be_nil
     json["raw_output"]["content"].as_s.should eq("Hello World")
     json["raw_output"]["thinking"].as_s.should eq("Thinking hard...")
+    json["raw_output"]["done_reason"].as_s.should eq("stop")
+    json["raw_output"]["prompt_eval_count"].as_i.should eq(10)
+    json["raw_output"]["eval_count"].as_i.should eq(2)
     (json["latency_ms"].as_i >= 0).should be_true
   end
 

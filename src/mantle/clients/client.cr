@@ -7,6 +7,7 @@ require "http/client"
 require "json"
 require "random/secure"
 require "../tools/tools"
+require "../support/app_logger"
 
 module Mantle::Clients
   # Represents the configuration options for an LLM client.
@@ -93,6 +94,18 @@ module Mantle::Clients
     @[JSON::Field(emit_null: false)]
     property tool_calls : Array(ToolCall)?
 
+    # Represents the reason inference finished (e.g. "stop", "length").
+    @[JSON::Field(emit_null: false)]
+    property done_reason : String?
+
+    # Represents the number of tokens evaluated in the prompt (if provided).
+    @[JSON::Field(emit_null: false)]
+    property prompt_eval_count : Int32?
+
+    # Represents the number of tokens generated in the evaluation (if provided).
+    @[JSON::Field(emit_null: false)]
+    property eval_count : Int32?
+
     # Represents the raw request payload sent to the LLM.
     @[JSON::Field(ignore: true)]
     property raw_request : String?
@@ -101,8 +114,30 @@ module Mantle::Clients
     @[JSON::Field(ignore: true)]
     property raw_response : String?
 
-    # Creates an LLM response containing *content*, *tool_calls*, and optional *thinking*.
-    def initialize(@content : String?, @tool_calls : Array(ToolCall)?, @thinking : String? = nil)
+    # Creates an LLM response containing *content*, *tool_calls*, optional *thinking*, and completion metadata.
+    def initialize(
+      @content : String?,
+      @tool_calls : Array(ToolCall)?,
+      @thinking : String? = nil,
+      @done_reason : String? = nil,
+      @prompt_eval_count : Int32? = nil,
+      @eval_count : Int32? = nil
+    )
+    end
+
+    # Returns true if generation was stopped because it hit the maximum token limit.
+    def truncated? : Bool
+      @done_reason == "length"
+    end
+
+    # Returns true if the response only contains thinking tokens with no final content or tool calls.
+    def thinking_only? : Bool
+      @content.nil? && (@tool_calls.nil? || @tool_calls.not_nil!.empty?) && !@thinking.nil?
+    end
+
+    # Returns true if the model exhausted its token limit or finished during the thinking phase without emitting content or tool calls.
+    def truncated_in_thinking? : Bool
+      thinking_only? && (truncated? || @content.nil?)
     end
   end
 
@@ -210,6 +245,9 @@ module Mantle::Clients
       full_content = String::Builder.new
       full_thinking = String::Builder.new
       tool_calls_json = nil
+      done_reason : String? = nil
+      prompt_eval_count : Int32? = nil
+      eval_count : Int32? = nil
       raw_response_builder = String::Builder.new
       status_code = 0
       error_body = ""
@@ -223,23 +261,41 @@ module Mantle::Clients
               raw_response_builder.puts(line)
 
               parsed = JSON.parse(line)
-              msg = parsed["message"]
+              msg = parsed["message"]?
 
-              if chunk = msg["content"]?.try(&.as_s?)
-                unless chunk.empty?
-                  on_chunk.call(chunk)
-                  full_content << chunk
+              if msg
+                if chunk = msg["content"]?.try(&.as_s?)
+                  unless chunk.empty?
+                    on_chunk.call(chunk)
+                    full_content << chunk
+                  end
+                end
+
+                if chunk = msg["thinking"]?.try(&.as_s?)
+                  unless chunk.empty?
+                    full_thinking << chunk
+                  end
+                end
+
+                if tc = msg["tool_calls"]?
+                  tool_calls_json = tc
                 end
               end
 
-              if chunk = msg["thinking"]?.try(&.as_s?)
-                unless chunk.empty?
-                  full_thinking << chunk
-                end
+              if dr = parsed["done_reason"]?.try(&.as_s?)
+                done_reason = dr
               end
 
-              if tc = msg["tool_calls"]?
-                tool_calls_json = tc
+              if pec = parsed["prompt_eval_count"]?.try(&.as_i?)
+                prompt_eval_count = pec
+              elsif pec_i64 = parsed["prompt_eval_count"]?.try(&.as_i64?)
+                prompt_eval_count = pec_i64.to_i32
+              end
+
+              if ec = parsed["eval_count"]?.try(&.as_i?)
+                eval_count = ec
+              elsif ec_i64 = parsed["eval_count"]?.try(&.as_i64?)
+                eval_count = ec_i64.to_i32
               end
             end
           end
@@ -254,10 +310,25 @@ module Mantle::Clients
         final_content = full_content.empty? ? nil : full_content.to_s
         final_thinking = full_thinking.empty? ? nil : full_thinking.to_s
 
-        return Response.new(content: final_content, tool_calls: tool_calls, thinking: final_thinking).tap do |r|
+        resp = Response.new(
+          content: final_content,
+          tool_calls: tool_calls,
+          thinking: final_thinking,
+          done_reason: done_reason,
+          prompt_eval_count: prompt_eval_count,
+          eval_count: eval_count
+        ).tap do |r|
           r.raw_request = body
           r.raw_response = raw_response_builder.to_s
         end
+
+        if resp.truncated_in_thinking?
+          Mantle::Support::Log.warn {
+            "LLM generation was truncated during the thinking phase (hit max_tokens limit #{@max_tokens} before generating any content or tool calls). Consider increasing max_tokens or disabling thinking."
+          }
+        end
+
+        return resp
       else
         raise Exception.new("Error #{status_code}: #{error_body}")
       end
@@ -268,21 +339,40 @@ module Mantle::Clients
 
       if response.status.success?
         response_data = JSON.parse(response.body)
-        message = response_data["message"]
+        message = response_data["message"]?
 
-        content = message["content"]?.try(&.as_s?)
+        content = message ? message["content"]?.try(&.as_s?) : nil
         if content && !content.empty?
           on_chunk.call(content)
         end
 
-        thinking = message["thinking"]?.try(&.as_s?)
-        tool_calls_json = message["tool_calls"]?
+        thinking = message ? message["thinking"]?.try(&.as_s?) : nil
+        tool_calls_json = message ? message["tool_calls"]? : nil
         tool_calls = parse_tool_calls(tool_calls_json)
 
-        return Response.new(content: content, tool_calls: tool_calls, thinking: thinking).tap do |r|
+        done_reason = response_data["done_reason"]?.try(&.as_s?)
+        prompt_eval_count = response_data["prompt_eval_count"]?.try(&.as_i?) || response_data["prompt_eval_count"]?.try(&.as_i64?).try(&.to_i32)
+        eval_count = response_data["eval_count"]?.try(&.as_i?) || response_data["eval_count"]?.try(&.as_i64?).try(&.to_i32)
+
+        resp = Response.new(
+          content: (content && !content.empty?) ? content : nil,
+          tool_calls: tool_calls,
+          thinking: thinking,
+          done_reason: done_reason,
+          prompt_eval_count: prompt_eval_count,
+          eval_count: eval_count
+        ).tap do |r|
           r.raw_request = body
           r.raw_response = response.body
         end
+
+        if resp.truncated_in_thinking?
+          Mantle::Support::Log.warn {
+            "LLM generation was truncated during the thinking phase (hit max_tokens limit #{@max_tokens} before generating any content or tool calls). Consider increasing max_tokens or disabling thinking."
+          }
+        end
+
+        return resp
       else
         raise Exception.new("Error #{response.status_code}: #{response.body}")
       end
