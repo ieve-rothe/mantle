@@ -6,7 +6,6 @@ This file tracks the status and priority of all tickets for the `mantle` framewo
 
 | Ticket ID | Title | Theme | Status | Priority | Last Updated |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [TKT-005](file:///home/cam/repos/adjutant/mantle/notes/pm/TKT-005-ollama-client-and-logging-refactor.md) | Rename OllamaClient, Normalize Thinking, and Streamline LoggingClient Concurrency | Architecture / Clients | Open | High | 2026-09-08 |
 
 ## Closed Tickets
 
@@ -16,3 +15,4 @@ This file tracks the status and priority of all tickets for the `mantle` framewo
 | [TKT-002](file:///home/cam/repos/adjutant/mantle/notes/pm/closed/TKT-002-markdown-formatter-migration-and-refactor.md) | MarkdownFormatter Migration & Refactor | Presentation / UI | Closed | High | 2026-09-08 |
 | [TKT-003](file:///home/cam/repos/adjutant/mantle/notes/pm/closed/TKT-003-replace-global-on-status-update.md) | Replace Global Mantle.on_status_update Singleton | Architecture / State | Closed | High | 2026-09-08 |
 | [TKT-004](file:///home/cam/repos/adjutant/mantle/notes/pm/closed/TKT-004-normalize-model-thinking-tags.md) | Normalize Model Thinking Tags (<think>) | Architecture / Formatting | Closed | High | 2026-09-08 |
+| [TKT-005](file:///home/cam/repos/adjutant/mantle/notes/pm/closed/TKT-005-ollama-client-and-logging-refactor.md) | Rename OllamaClient, Normalize Thinking, and Streamline LoggingClient Concurrency | Architecture / Clients | Closed | High | 2026-09-08 |
