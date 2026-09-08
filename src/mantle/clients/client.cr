@@ -7,6 +7,7 @@ require "http/client"
 require "json"
 require "random/secure"
 require "../tools/tools"
+require "../support/text"
 
 module Mantle::Clients
   # Represents the configuration options for an LLM client.
@@ -122,6 +123,11 @@ module Mantle::Clients
       @prompt_eval_count : Int32? = nil,
       @eval_count : Int32? = nil
     )
+      if (raw = @content) && raw.includes?("<think>")
+        clean, extracted = Mantle::Support::Text.extract_thinking(raw)
+        @content = clean.empty? ? nil : clean
+        @thinking ||= extracted
+      end
     end
 
     # Returns true if generation was stopped because it hit the maximum token limit.
@@ -306,8 +312,17 @@ module Mantle::Clients
       if status_code >= 200 && status_code < 300
         tool_calls = parse_tool_calls(tool_calls_json)
 
-        final_content = full_content.empty? ? nil : full_content.to_s
-        final_thinking = full_thinking.empty? ? nil : full_thinking.to_s
+        raw_content = full_content.empty? ? nil : full_content.to_s
+        api_thinking = full_thinking.empty? ? nil : full_thinking.to_s
+
+        clean_content, extracted_thinking = if raw_content
+                                               Mantle::Support::Text.extract_thinking(raw_content)
+                                             else
+                                               {nil, nil}
+                                             end
+
+        final_thinking = (api_thinking && !api_thinking.empty?) ? api_thinking : extracted_thinking
+        final_content = (clean_content && !clean_content.empty?) ? clean_content : nil
 
         resp = Response.new(
           content: final_content,
@@ -340,12 +355,22 @@ module Mantle::Clients
         response_data = JSON.parse(response.body)
         message = response_data["message"]?
 
-        content = message ? message["content"]?.try(&.as_s?) : nil
-        if content && !content.empty?
-          on_chunk.call(content)
+        raw_content = message ? message["content"]?.try(&.as_s?) : nil
+        api_thinking = message ? message["thinking"]?.try(&.as_s?) : nil
+
+        clean_content, extracted_thinking = if raw_content && !raw_content.empty?
+                                               Mantle::Support::Text.extract_thinking(raw_content)
+                                             else
+                                               {nil, nil}
+                                             end
+
+        final_content = (clean_content && !clean_content.empty?) ? clean_content : nil
+        final_thinking = (api_thinking && !api_thinking.empty?) ? api_thinking : extracted_thinking
+
+        if final_content && !final_content.empty?
+          on_chunk.call(final_content)
         end
 
-        thinking = message ? message["thinking"]?.try(&.as_s?) : nil
         tool_calls_json = message ? message["tool_calls"]? : nil
         tool_calls = parse_tool_calls(tool_calls_json)
 
@@ -354,9 +379,9 @@ module Mantle::Clients
         eval_count = response_data["eval_count"]?.try(&.as_i?) || response_data["eval_count"]?.try(&.as_i64?).try(&.to_i32)
 
         resp = Response.new(
-          content: (content && !content.empty?) ? content : nil,
+          content: final_content,
           tool_calls: tool_calls,
-          thinking: thinking,
+          thinking: final_thinking,
           done_reason: done_reason,
           prompt_eval_count: prompt_eval_count,
           eval_count: eval_count

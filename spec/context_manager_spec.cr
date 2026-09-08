@@ -589,7 +589,7 @@ end
         bot_message.not_nil!.content.not_nil!.should_not contain("First point")
       end
 
-      it "handles malformed tags gracefully (unmatched opening tag)" do
+      it "handles truncated tags gracefully (unmatched opening tag)" do
         # Arrange
         context_store = TrackingContextStore.new("System")
         memory_store = TrackingMemoryStore.new
@@ -604,11 +604,11 @@ end
         # Act - unmatched opening tag
         manager.handle_bot_message("<think>Incomplete thought... The answer is 42.")
 
-        # Assert - should handle gracefully, keeping the original message
+        # Assert - unmatched opening tag is recognized as truncated thinking and stripped
         view = context_store.current_view
         bot_message = view.find { |msg| msg.role == "assistant" }
         bot_message.should_not be_nil
-        bot_message.not_nil!.content.not_nil!.should contain("The answer is 42.")
+        bot_message.not_nil!.content.not_nil!.should eq("")
       end
 
       it "preserves message when no thinking tags are present" do

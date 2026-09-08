@@ -90,5 +90,14 @@ describe Mantle::Clients::Response do
       deserialized.prompt_eval_count.should eq(120)
       deserialized.eval_count.should eq(45)
     end
+
+    it "automatically extracts <think> tags from content upon initialization" do
+      response = Mantle::Clients::Response.new(
+        content: "<think>Internal thoughts</think>User visible content",
+        tool_calls: nil
+      )
+      response.content.should eq("User visible content")
+      response.thinking.should eq("Internal thoughts")
+    end
   end
 end

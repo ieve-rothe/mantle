@@ -517,4 +517,65 @@ describe Mantle::Clients::Client do
 
     server.close
   end
+
+  it "normalizes embedded <think> tags in standard mode when model outputs thinking in content" do
+    model_config = Mantle::Clients::ModelConfig.new(
+      "thinking-model", false, 0.6, 0.7, 700, "http://localhost:43007/"
+    )
+    client = Mantle::Clients::LlamaClient.new(model_config)
+
+    api_response = {
+      "model": "thinking-model",
+      "message": {
+        "role": "assistant",
+        "content": "<think>Analyzing user request...</think>Here is the final answer.",
+      },
+      "done": true,
+    }.to_json
+
+    server = HTTP::Server.new do |context|
+      context.response.content_type = "application/json"
+      context.response.print api_response
+    end
+    address = server.bind_tcp 43007
+    spawn { server.listen }
+
+    test_messages = [Mantle::Message.new("user", "Hello")]
+    chunks = [] of String
+    response = client.execute(test_messages) { |c| chunks << c }
+
+    response.content.should eq("Here is the final answer.")
+    response.thinking.should eq("Analyzing user request...")
+    chunks.should eq(["Here is the final answer."])
+
+    server.close
+  end
+
+  it "normalizes embedded <think> tags in streaming mode when model outputs thinking in content stream" do
+    model_config = Mantle::Clients::ModelConfig.new(
+      "thinking-model", true, 0.6, 0.7, 700, "http://localhost:43008/"
+    )
+    client = Mantle::Clients::LlamaClient.new(model_config)
+
+    stream_chunks = [
+      {"model" => "thinking-model", "message" => {"role" => "assistant", "content" => "<think>Reasoning line 1\n"}, "done" => false}.to_json,
+      {"model" => "thinking-model", "message" => {"role" => "assistant", "content" => "Reasoning line 2</think>Result"}, "done" => false}.to_json,
+      {"model" => "thinking-model", "message" => {"role" => "assistant", "content" => ""}, "done" => true, "done_reason" => "stop"}.to_json,
+    ]
+
+    server = HTTP::Server.new do |context|
+      context.response.content_type = "application/x-ndjson"
+      stream_chunks.each { |chunk| context.response.puts chunk }
+    end
+    address = server.bind_tcp 43008
+    spawn { server.listen }
+
+    test_messages = [Mantle::Message.new("user", "Reasoning request")]
+    response = client.execute(test_messages)
+
+    response.content.should eq("Result")
+    response.thinking.should eq("Reasoning line 1\nReasoning line 2")
+
+    server.close
+  end
 end
