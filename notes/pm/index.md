@@ -6,6 +6,7 @@ This file tracks the status and priority of all tickets for the `mantle` framewo
 
 | Ticket ID | Title | Theme | Status | Priority | Last Updated |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| [TKT-007](file:///home/cam/repos/adjutant/mantle/notes/pm/open/TKT-007-session-step-pipeline.md) | Session Turn Pipeline, Ephemeral Injections, and Graph-Isolated Step Execution | Architecture / Session | Open | High | 2026-09-08 |
 
 ## Closed Tickets
 
