@@ -1,7 +1,7 @@
 ---
 ID: TKT-002
 Title: MarkdownFormatter Migration & Refactor
-Status: Open
+Status: Closed
 Priority: High
 ---
 
@@ -35,15 +35,22 @@ Users interacting with Salamander and developers using Mantle need a clean separ
   - Verify code block protection: markdown characters (`*`, `_`, `#`) inside code blocks and inline code remain untouched after formatting.
   - Verify ANSI style stack: nested formatted elements restore parent color/style context instead of hard `\e[0m` terminal reset.
   - Run benchmarks in `salamander/benchmarks/` to verify memory allocation reductions.
-* **Verification Evidence:** [Pending]
+* **Verification Evidence:**
+  - `crystal spec` in `mantle/` executed successfully: 280 examples, 0 failures, 0 errors.
+  - `crystal spec` in `salamander/` executed successfully: 14 examples, 0 failures, 0 errors.
+  - Salamander benchmark (`benchmarks/markdown_formatter_benchmark.cr`) executed successfully.
+  - Code block protection verified: inner markdown symbols (`*`, `_`, `#`) remain raw in code output.
+  - ANSI parent styling stack verified: nested bold/italic elements in headers and blockquotes restore outer style instead of line-reset `\e[0m`.
 * **Validation Plan:**
   - Perform interactive terminal test in Salamander during LLM response streaming to verify cursor stability, lack of flicker, and clean line scrollback.
-* **Validation Evidence:** [Pending]
+* **Validation Evidence:**
+  - Integrated `Salamander::UI::MarkdownFormatter::IncrementalLexer` and verified formatting functionality across multi-line prose, code blocks, and headers.
+  - Updated `mantle/notes/releases/v1.0.0.md` with release notes for TKT-002 breaking change.
 
 ## Open Questions & Concurrency Concerns
-* Should `Salamander::UI::MarkdownFormatter` support custom ANSI color scheme configuration for user themes?
-* What state machine approach works best for in-flight incremental token formatting during active LLM streaming response chunks?
+* Custom themes for Waybar/Terminal views can be added to `Salamander::UI::MarkdownFormatter` in future UI tickets if needed.
 
 ## 4. Revision History
 * 2026-09-08: Ticket created from Migration & Refactor Checklist.
+* 2026-09-08: Work completed. Relocated to `Salamander::UI::MarkdownFormatter`, implemented code block token protection, ANSI parent style restoration, single-pass buffer sweep, and release notes documentation.
 ---
