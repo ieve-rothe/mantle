@@ -16,5 +16,18 @@ module Mantle
 
     # An executed tool failed or raised a terminal error during evaluation.
     ToolExecutionFailure
+
+    # Underlying LLM client or upstream provider rejected request due to rate limiting.
+    RateLimited
+
+    # Returns true if this error represents a transient failure eligible for retry.
+    def retryable? : Bool
+      client_failure? || rate_limited?
+    end
+
+    # Returns true if this error represents a terminal/unrecoverable failure.
+    def terminal? : Bool
+      !retryable?
+    end
   end
 end

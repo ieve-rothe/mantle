@@ -70,8 +70,8 @@ step = Mantle::Step.new(
 )
 
 # 4. Run the Step
-context_manager.handle_user_message("Pick a random number between 1 and 100, then tell me if it is even or odd.")
-result = step.run(context_manager.current_view)
+context_manager << "Pick a random number between 1 and 100, then tell me if it is even or odd."
+result = step.run(context_manager.project_view)
 
 # If result.value is not nil, it is assigned to `reply` and the block executes.
 # If it is nil, it falls through to the else block.

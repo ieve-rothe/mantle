@@ -30,8 +30,8 @@ client = Mantle::Clients::OllamaClient.new(config)
 # 3. Create a payload
 # The client expects an array of messages representing the conversation history.
 messages = [
-  {"role" => "system", "content" => "You are a helpful assistant. Reply in exactly one sentence."},
-  {"role" => "user", "content" => "Why is the sky blue?"},
+  Mantle::Message.new("system", "You are a helpful assistant. Reply in exactly one sentence."),
+  Mantle::Message.new("user", "Why is the sky blue?"),
 ]
 
 puts "Sending request to the model..."

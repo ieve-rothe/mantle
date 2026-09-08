@@ -10,6 +10,7 @@ require "./mantle/tools/*"
 require "./mantle/storage/*"
 require "./mantle/steps/*"
 require "./mantle/subagents/*"
+require "./mantle/session"
 
 # Represents the core module of the Mantle LLM agent library.
 module Mantle

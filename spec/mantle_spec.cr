@@ -41,16 +41,16 @@ describe Mantle::Step do
     step = Mantle::Step.new(client)
 
     # Turn 1
-    context_manager.handle_user_message("Turn 1")
-    res1 = step.run(context_manager.current_view)
+    context_manager.add_user_message("Turn 1")
+    res1 = step.run(context_manager.project_view)
     res1.ok?.should be_true
-    context_manager.handle_bot_message(res1.unwrap)
+    context_manager.add_assistant_message(res1.unwrap)
 
     # Turn 2
-    context_manager.handle_user_message("Turn 2")
-    res2 = step.run(context_manager.current_view)
+    context_manager.add_user_message("Turn 2")
+    res2 = step.run(context_manager.project_view)
     res2.ok?.should be_true
-    context_manager.handle_bot_message(res2.unwrap)
+    context_manager.add_assistant_message(res2.unwrap)
 
     view = store.current_view
     messages_content = view.map { |m| m.content }

@@ -13,10 +13,9 @@ require "../src/mantle.cr"
 # 1. Setup Primitives
 CONTEXT_FILE = "examples/test_context.json"
 MEMORY_FILE  = "examples/test_memory.json"
-LOG_FILE     = "examples/test_log.txt"
 
 # Clean up previous test files
-[CONTEXT_FILE, MEMORY_FILE, LOG_FILE].each do |file|
+[CONTEXT_FILE, MEMORY_FILE].each do |file|
   File.delete(file) if File.exists?(file)
 end
 
@@ -63,9 +62,6 @@ bot_name = "Botname"
 # Use OllamaClient to communicate with the model configured above.
 client = Mantle::Clients::OllamaClient.new(model_config)
 
-# A Logger persists plain-text or rich output logs for humans to read
-logger = Mantle::Support::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
-
 # ContextStore handles tracking the active "sliding window" of messages
 context_store = Mantle::Storage::JSONContextStore.new(
   system_prompt: "Respond to the test.",
@@ -107,7 +103,7 @@ puts "--- Starting Test Turn ---"
 
 input_text = "Hello! Are you running correctly?"
 context_manager.handle_user_message(input_text)
-result = step.run(context_manager.current_view)
+result = step.run(context_manager.project_view)
 
 puts "User: #{input_text}"
 if thinking = result.thinking
@@ -129,7 +125,7 @@ puts "--- Starting Multi-Test Turn ---"
 13.times do
   input_text = "Testing. Is it still working?"
   context_manager.handle_user_message(input_text)
-  turn_res = step.run(context_manager.current_view)
+  turn_res = step.run(context_manager.project_view)
   puts "User: #{input_text}"
   if thinking = turn_res.thinking
     puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"

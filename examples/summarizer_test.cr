@@ -89,7 +89,7 @@ simulated_session.each_with_index do |input_text, index|
   puts "\n[Turn #{index + 1}/#{simulated_session.size}]"
 
   context_manager.handle_user_message(input_text)
-  result = step.run(context_manager.current_view)
+  result = step.run(context_manager.project_view)
   puts "User: #{input_text}"
   if thinking = result.thinking
     puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
@@ -111,7 +111,7 @@ puts "\n--- The Recall Test ---"
 final_question = "I'm back. Just to check your memory—what was I planning to do this afternoon, and what do I need to do for the dog tomorrow?"
 
 context_manager.handle_user_message(final_question)
-final_res = step.run(context_manager.current_view)
+final_res = step.run(context_manager.project_view)
 puts "User: #{final_question}"
 if thinking = final_res.thinking
   puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"

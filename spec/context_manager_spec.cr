@@ -158,7 +158,7 @@ describe Mantle::Storage::ContextManager do
     end
   end
 
-  describe "#current_view" do
+  describe "#project_view" do
     it "returns message array with system prompt (including memory) and conversation messages" do
       # Arrange
       context_store = TrackingContextStore.new("System Prompt")
@@ -173,7 +173,7 @@ describe Mantle::Storage::ContextManager do
       context_store.add_message("Bot", "Hi there")
 
       # Act
-      view = manager.current_view
+      view = manager.project_view
 
       # Assert
       view.should be_a(Array(Mantle::Message))
@@ -772,75 +772,56 @@ describe "#strip_thinking_tags" do
   end
 end
 
-describe "#current_view with ephemeral_blocks" do
-  it "inserts ephemeral blocks as separate system messages after base system prompt" do
+describe "#project_view with Ephemeral Injections" do
+  it "places system, memory, pre_history, and tail injections in exact deterministic spatial order" do
     # Arrange
     context_store = TrackingContextStore.new("Base System Prompt")
-    memory_store = TrackingMemoryStore.new
-    manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
-
-    context_store.add_message("User", "Hello")
-
-    ephemeral_blocks = ["K-Line 1: Critical info", "Demon: Switch to dev mode"]
-
-    # Act
-    view = manager.current_view(ephemeral_blocks)
-
-    # Assert
-    view.size.should eq(4) # base system + 2 ephemeral + 1 user message
-
-    # Base system message comes first
-    view[0].role.should eq("system")
-    view[0].content.should eq("Base System Prompt")
-
-    # Ephemeral blocks follow as separate system messages
-    view[1].role.should eq("system")
-    view[1].content.should eq("K-Line 1: Critical info")
-
-    view[2].role.should eq("system")
-    view[2].content.should eq("Demon: Switch to dev mode")
-
-    # User message comes last
-    view[3].role.should eq("user")
-    view[3].content.should eq("Hello")
-  end
-
-  it "maintains correct order with memory and ephemeral blocks" do
-    # Arrange
-    context_store = TrackingContextStore.new("System Prompt")
     memory_store = TrackingMemoryStore.new
     manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
     # Add memory
     memory_store.layers << ["[Memory] Previous conversation\n"]
 
-    # Add messages
+    # Add conversation messages
     context_store.add_message("User", "Hello")
     context_store.add_message("Bot", "Hi")
 
-    ephemeral_blocks = ["Ephemeral instruction"]
+    system_injections = ["Identity: SuperAssistant"]
+    pre_history_injections = ["Frame: CodingSession"]
+    tail_injections = ["Respond with code block only"]
 
     # Act
-    view = manager.current_view(ephemeral_blocks)
+    view = manager.project_view(
+      system_injections: system_injections,
+      pre_history_injections: pre_history_injections,
+      tail_injections: tail_injections
+    )
 
-    # Assert - Order: base system → ephemeral → memory → context
+    # Assert - Order: base system → system injections → memory → pre-history → user → assistant → tail
+    view.size.should eq(7)
     view[0].role.should eq("system")
-    view[0].content.should eq("System Prompt")
+    view[0].content.should eq("Base System Prompt")
 
     view[1].role.should eq("system")
-    view[1].content.should eq("Ephemeral instruction")
+    view[1].content.should eq("Identity: SuperAssistant")
 
     view[2].role.should eq("system")
     view[2].content.should eq("[Memory] Previous conversation\n")
 
-    view[3].role.should eq("user")
-    view[3].content.should eq("Hello")
+    view[3].role.should eq("system")
+    view[3].content.should eq("Frame: CodingSession")
 
-    view[4].role.should eq("assistant")
-    view[4].content.should eq("Hi")
+    view[4].role.should eq("user")
+    view[4].content.should eq("Hello")
+
+    view[5].role.should eq("assistant")
+    view[5].content.should eq("Hi")
+
+    view[6].role.should eq("system")
+    view[6].content.should eq("Respond with code block only")
   end
 
-  it "does not persist ephemeral blocks in context store" do
+  it "does not persist ephemeral injections in context store" do
     # Arrange
     context_store = TrackingContextStore.new("System")
     memory_store = TrackingMemoryStore.new
@@ -848,11 +829,11 @@ describe "#current_view with ephemeral_blocks" do
 
     context_store.add_message("User", "Test message")
 
-    ephemeral_blocks = ["Ephemeral 1", "Ephemeral 2"]
+    system_injections = ["Ephemeral 1", "Ephemeral 2"]
 
     # Act
-    view_with_ephemeral = manager.current_view(ephemeral_blocks)
-    view_without_ephemeral = manager.current_view
+    view_with_ephemeral = manager.project_view(system_injections: system_injections)
+    view_without_ephemeral = manager.project_view
 
     # Assert - ephemeral blocks appear in first call
     view_with_ephemeral.size.should eq(4) # system + 2 ephemeral + 1 user
@@ -863,9 +844,12 @@ describe "#current_view with ephemeral_blocks" do
     view_without_ephemeral[0].content.should eq("System")
     view_without_ephemeral[1].role.should eq("user")
     view_without_ephemeral[1].content.should eq("Test message")
+
+    # Context store untouched
+    context_store.messages.size.should eq(1)
   end
 
-  it "handles empty ephemeral_blocks array gracefully" do
+  it "handles empty injections gracefully" do
     # Arrange
     context_store = TrackingContextStore.new("System")
     memory_store = TrackingMemoryStore.new
@@ -874,7 +858,7 @@ describe "#current_view with ephemeral_blocks" do
     context_store.add_message("User", "Hello")
 
     # Act
-    view = manager.current_view([] of String)
+    view = manager.project_view
 
     # Assert
     view.size.should eq(2) # system + 1 user
@@ -882,150 +866,29 @@ describe "#current_view with ephemeral_blocks" do
     view[1].role.should eq("user")
   end
 
-  it "applies ephemeral blocks only for single call without affecting context" do
+  it "applies ephemeral injections only for a single projection call without affecting context" do
     # Arrange
     context_store = TrackingContextStore.new("System")
     memory_store = TrackingMemoryStore.new
     manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
 
-    # Act - Call with ephemeral blocks
-    view1 = manager.current_view(["Ephemeral instruction"])
+    # Act - Call with injections
+    view1 = manager.project_view(tail_injections: ["Temporary tail note"])
 
     # Add a new message
     context_store.add_message("User", "New message")
 
-    # Call again without ephemeral blocks
-    view2 = manager.current_view
+    # Call again without injections
+    view2 = manager.project_view
 
-    # Assert - First call had ephemeral block
-    view1.any? { |msg| msg.content == "Ephemeral instruction" }.should be_true
+    # Assert - First call had injection
+    view1.any? { |msg| msg.content == "Temporary tail note" }.should be_true
 
-    # Second call does not have ephemeral block
-    view2.any? { |msg| msg.content == "Ephemeral instruction" }.should be_false
+    # Second call does not have injection
+    view2.any? { |msg| msg.content == "Temporary tail note" }.should be_false
 
     # Context store was not affected
-    context_store.messages.none? { |msg| msg.content == "Ephemeral instruction" }.should be_true
-  end
-end
-
-describe "#handle_user_message with invisible_append" do
-  it "applies invisible append as separate system message in current_view but not in context store" do
-    # Arrange
-    context_store = TrackingContextStore.new("System")
-    memory_store = TrackingMemoryStore.new
-    manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
-
-    # Act
-    manager.handle_user_message("Let's fix the bug.", invisible_append: "\n\n[System: Dev intent detected. Switch frames.]")
-    view = manager.current_view
-
-    # Assert - user message content is unmodified
-    user_message = view.find { |msg| msg.role == "user" }
-    user_message.should_not be_nil
-    user_message.not_nil!.content.should eq("Let's fix the bug.")
-
-    # And a separate system message is inserted immediately following the user message
-    user_idx = view.index(user_message).not_nil!
-    view[user_idx + 1].role.should eq("system")
-    view[user_idx + 1].content.should eq("[System: Dev intent detected. Switch frames.]")
-
-    # But not in context store
-    context_store.messages.last.content.should eq("Let's fix the bug.")
-  end
-
-  it "applies invisible append exactly once and clears it" do
-    # Arrange
-    context_store = TrackingContextStore.new("System")
-    memory_store = TrackingMemoryStore.new
-    manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
-
-    # Act
-    manager.handle_user_message("Test message", invisible_append: " [APPEND]")
-    view1 = manager.current_view
-    view2 = manager.current_view
-
-    # Assert - First call has the system message following user message
-    user_msg1 = view1.find { |msg| msg.role == "user" }
-    user_idx1 = view1.index(user_msg1).not_nil!
-    view1[user_idx1 + 1].role.should eq("system")
-    view1[user_idx1 + 1].content.should eq("[APPEND]")
-
-    # Second call does NOT have the system message following user message (it was cleared)
-    user_msg2 = view2.find { |msg| msg.role == "user" }
-    user_idx2 = view2.index(user_msg2).not_nil!
-    if user_idx2 + 1 < view2.size
-      view2[user_idx2 + 1].role.should_not eq("system")
-    end
-  end
-
-  it "inserts system message after the last user message when multiple user messages exist" do
-    # Arrange
-    context_store = TrackingContextStore.new("System")
-    memory_store = TrackingMemoryStore.new
-    manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
-
-    # Add several messages
-    manager.handle_user_message("First message")
-    manager.handle_bot_message("Response")
-    manager.handle_user_message("Second message", invisible_append: " [INVISIBLE]")
-
-    # Act
-    view = manager.current_view
-
-    # Assert - Last user message is followed by the system message
-    user_messages = view.select { |msg| msg.role == "user" }
-    user_messages.size.should eq(2)
-    user_messages[0].content.should eq("First message")
-    user_messages[1].content.should eq("Second message")
-
-    last_user_message = view.select { |msg| msg.role == "user" }.last
-    last_user_idx = view.index(last_user_message).not_nil!
-    view[last_user_idx + 1].role.should eq("system")
-    view[last_user_idx + 1].content.should eq("[INVISIBLE]")
-  end
-
-  it "handles nil invisible_append gracefully" do
-    # Arrange
-    context_store = TrackingContextStore.new("System")
-    memory_store = TrackingMemoryStore.new
-    manager = Mantle::Storage::ContextManager.new(context_store, memory_store, "User", "Bot")
-
-    # Act
-    manager.handle_user_message("Normal message", invisible_append: nil)
-    view = manager.current_view
-
-    # Assert
-    user_message = view.find { |msg| msg.role == "user" }
-    user_message.not_nil!.content.should eq("Normal message")
-  end
-
-  it "does not affect context store even after consolidation" do
-    # Arrange
-    context_store = TrackingContextStore.new("System")
-    memory_store = TrackingMemoryStore.new
-    manager = Mantle::Storage::ContextManager.new(
-      context_store: context_store,
-      memory_store: memory_store,
-      user_name: "User",
-      bot_name: "Bot",
-      token_target: 20,
-      token_hardmax: 40
-    )
-
-    # Act - Add message with invisible append, then trigger consolidation
-    manager.handle_user_message("Test", invisible_append: " [SYSTEM INSTRUCTION]")
-    view_before = manager.current_view # This applies and clears the append
-
-    # Add more messages to trigger consolidation
-    10.times { manager.handle_bot_message("Response  ") }
-
-    # Assert - The invisible append was never persisted to context
-    context_store.add_message_calls.any? { |label, msg| msg.includes?("[SYSTEM INSTRUCTION]") }.should be_false
-
-    # And it's not in memory either
-    memory_store.ingested_messages.each do |batch|
-      batch.any? { |msg| msg.includes?("[SYSTEM INSTRUCTION]") }.should be_false
-    end
+    context_store.messages.none? { |msg| msg.content == "Temporary tail note" }.should be_true
   end
 end
 
@@ -1073,13 +936,13 @@ describe "#flush_and_swap" do
     manager.memory_store.should eq(new_memory)
   end
 
-  it "reflects new stores in current_view" do
+  it "reflects new stores in project_view" do
     # Arrange
     old_context = TrackingContextStore.new("Old System")
     old_memory = TrackingMemoryStore.new
     manager = Mantle::Storage::ContextManager.new(old_context, old_memory, "User", "Bot")
 
-    manager.handle_user_message("Old message")
+    manager.add_user_message("Old message")
 
     new_context = TrackingContextStore.new("New System")
     new_memory = TrackingMemoryStore.new
@@ -1088,36 +951,12 @@ describe "#flush_and_swap" do
 
     # Act
     manager.flush_and_swap(new_context, new_memory)
-    view = manager.current_view
+    view = manager.project_view
 
     # Assert - View should reflect new stores
     view.any? { |msg| (msg.content || "").includes?("New message") }.should be_true
     view.any? { |msg| (msg.content || "").includes?("New memory layer") }.should be_true
     view.any? { |msg| (msg.content || "").includes?("Old message") }.should be_false
-  end
-
-  it "clears pending invisible append during swap" do
-    # Arrange
-    old_context = TrackingContextStore.new("Old System")
-    old_memory = TrackingMemoryStore.new
-    manager = Mantle::Storage::ContextManager.new(old_context, old_memory, "User", "Bot")
-
-    # Set up a pending invisible append
-    manager.handle_user_message("Test", invisible_append: " [PENDING]")
-
-    new_context = TrackingContextStore.new("New System")
-    new_memory = TrackingMemoryStore.new
-    new_context.add_message("User", "New message")
-
-    # Act
-    manager.flush_and_swap(new_context, new_memory)
-    view = manager.current_view
-
-    # Assert - Pending append should be cleared, new message should not have it
-    user_msg = view.find { |msg| (msg.content || "").includes?("New message") }
-    user_msg.should_not be_nil
-    user_msg.not_nil!.content.not_nil!.should eq("New message")
-    user_msg.not_nil!.content.not_nil!.should_not contain("[PENDING]")
   end
 end
 
@@ -1133,7 +972,7 @@ describe "#update_system_prompt" do
 
     # Assert
     context_store.system_prompt.should eq("New System")
-    manager.current_view[0].content.should eq("New System")
+    manager.project_view[0].content.should eq("New System")
   end
 end
 

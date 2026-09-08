@@ -49,21 +49,21 @@ describe "Integration: Memory Consolidation" do
 
       # Interaction 1: Context messages = 2
       context_manager.handle_user_message("User message 1")
-      res1 = step.run(context_manager.current_view)
+      res1 = step.run(context_manager.project_view)
       final_responses << res1.unwrap
       context_manager.handle_bot_message(res1.unwrap)
       context_manager.check_and_consolidate
 
       # Interaction 2: Context messages = 4 (at msg_hardmax)
       context_manager.handle_user_message("User message 2")
-      res2 = step.run(context_manager.current_view)
+      res2 = step.run(context_manager.project_view)
       final_responses << res2.unwrap
       context_manager.handle_bot_message(res2.unwrap)
       context_manager.check_and_consolidate
 
       # Interaction 3: Context messages = 6 (triggers consolidation back to token_target: 2)
       context_manager.handle_user_message("User message 3")
-      res3 = step.run(context_manager.current_view)
+      res3 = step.run(context_manager.project_view)
       final_responses << res3.unwrap
       context_manager.handle_bot_message(res3.unwrap)
       context_manager.check_and_consolidate

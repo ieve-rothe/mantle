@@ -41,6 +41,10 @@ module Mantle
     end
 
     # Executes the inference loop with token streaming via block.
+    #
+    # Graph-isolated execution: `messages` is treated as immutable input and never modified in-place.
+    # Tool execution loops append only to an isolated local working buffer (`working_messages = messages.dup`),
+    # preventing internal tool exchanges from polluting the caller's context or canonical graph.
     def run(
       messages : Array(Mantle::Messages::Message),
       &block : String -> Nil
@@ -70,8 +74,10 @@ module Mantle
           @client.execute(working_messages, tools_to_pass, &block)
         rescue ex
           @on_status.try &.call(:idle)
+          err_msg = (ex.message || "").downcase
+          error_kind = (err_msg.includes?("rate limit") || err_msg.includes?("429")) ? StepError::RateLimited : StepError::ClientFailure
           return StepResult(String, StepError).new(
-            error: StepError::ClientFailure,
+            error: error_kind,
             thinking: last_thinking,
             iterations: iteration,
             raw_response: last_response

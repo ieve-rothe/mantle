@@ -44,6 +44,33 @@ module Mantle::Storage
     )
     end
 
+    # Appends a canonical user message to the context store.
+    def add_user_message(content : String, turn_id : String? = nil)
+      add_message("User", content, turn_id: turn_id)
+    end
+
+    # Appends a canonical assistant message to the context store.
+    def add_assistant_message(content : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, tool_call_id : String? = nil, turn_id : String? = nil)
+      add_message("Assistant", content, tool_calls: tool_calls, tool_call_id: tool_call_id, turn_id: turn_id)
+    end
+
+    # Appends a user message from a string to the context store, returning self for chaining.
+    def <<(message : String) : self
+      add_user_message(message)
+      self
+    end
+
+    # Appends a typed Message to the context store, preserving role and metadata, returning self for chaining.
+    def <<(message : Mantle::Message) : self
+      add_message(
+        label: message.role,
+        message: message.content || "",
+        tool_calls: message.tool_calls,
+        tool_call_id: message.tool_call_id
+      )
+      self
+    end
+
     def prune_to_tokens(target_tokens : Int32) : Array(Mantle::Message)
       [] of Mantle::Message
     end

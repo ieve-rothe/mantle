@@ -209,7 +209,7 @@ module Mantle::Tools
       end
 
       # 3. Ephemeral context duplication
-      ephemeral_context = context_manager.current_view.dup
+      ephemeral_context = context_manager.project_view.dup
 
       # 4. Optional nudge callback
       if callback = recovery_config.on_recovery_nudge

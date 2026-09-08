@@ -34,9 +34,6 @@ module Mantle::Storage
     # Represents whether to strip `<think>...</think>` tags from bot responses before storing them.
     property strip_thinking_tags : Bool
 
-    # :nodoc:
-    @pending_invisible_append : String? = nil
-
     # Creates a context manager with the specified stores, names, and token thresholds.
     def initialize(@context_store : ContextStore,
                    @memory_store : JSONLayeredMemoryStore,
@@ -49,73 +46,78 @@ module Mantle::Storage
                    @on_status : Proc(Symbol, Nil)? = nil)
     end
 
-    # Assembles and returns the full conversation context as an array of messages.
+    # Assembles and returns the full conversation prompt window as an array of messages
+    # with deterministic spatial placement of Ephemeral Injections.
     #
-    # Incorporates the base system prompt, optional *ephemeral_blocks*, long-term memory view,
-    # chat history, and applies any pending invisible appends.
-    def current_view(ephemeral_blocks : Array(String) = [] of String) : Array(Mantle::Message)
+    # Spatial assembly order:
+    # 1. Base system prompt (from context store)
+    # 2. System injections (transient system-level constraints, identity nudges, environmental rules)
+    # 3. Long-term memory view (from memory store)
+    # 4. Pre-history injections (frame/topic context, session status)
+    # 5. Conversation history (canonical user/assistant/tool messages)
+    # 6. Tail injections (formatting nudges, dev mode triggers, immediate signals)
+    def project_view(
+      system_injections : Array(Mantle::Message) = [] of Mantle::Message,
+      pre_history_injections : Array(Mantle::Message) = [] of Mantle::Message,
+      tail_injections : Array(Mantle::Message) = [] of Mantle::Message,
+    ) : Array(Mantle::Message)
       messages = [] of Mantle::Message
 
-      # 1. Base system prompt (without memory yet)
+      # 1. Base system prompt
       base_system_content = @context_store.system_prompt
       unless base_system_content.empty?
         messages << Mantle::Message.new("system", base_system_content)
       end
 
-      # 2. Ephemeral blocks as separate system messages
-      ephemeral_blocks.each do |block|
-        messages << Mantle::Message.new("system", block)
-      end
+      # 2. System Injections
+      messages.concat(system_injections)
 
       # 3. Memory view as system message
       memory_view = @memory_store.current_view
-      if !memory_view.empty?
+      unless memory_view.empty?
         messages << Mantle::Message.new("system", memory_view)
       end
 
-      # 4. Get conversation messages from context_store (skip the system message it includes)
+      # 4. Pre-History Injections
+      messages.concat(pre_history_injections)
+
+      # 5. Conversation messages from context_store (excluding stored system messages)
       context_messages = @context_store.current_view
-      conversation_messages = context_messages.select { |msg| msg.role != "system" }
+      conversation_messages = context_messages.reject { |msg| msg.role == "system" }
       messages.concat(conversation_messages)
 
-      # 5. Apply pending invisible append to the last user message if present
-      if pending_append = @pending_invisible_append
-        # Find the index of the last user message
-        last_user_index = nil
-        messages.each_with_index do |msg, idx|
-          if msg.role == "user"
-            last_user_index = idx
-          end
-        end
+      # 6. Tail Injections
+      messages.concat(tail_injections)
 
-        if last_user_index
-          # Inject as a separate system message immediately following the user's message
-          messages.insert(last_user_index + 1, Mantle::Message.new("system", pending_append.strip))
-        end
-
-        # Clear the pending append after applying it
-        @pending_invisible_append = nil
-      end
-
-      return messages
+      messages
     end
 
-    # Handles a user message *msg*, optionally storing *invisible_append* to be applied in the next view.
-    def handle_user_message(msg : String, invisible_append : String? = nil)
-      # Always use "User" label for normalization, not custom user_name
-      # Only store the visible msg to context_store
-      @context_store.add_message("User", msg)
-
-      # Store the invisible append for next current_view call
-      @pending_invisible_append = invisible_append
+    # Convenience overload accepting string injections, wrapping each as a system role message.
+    def project_view(
+      system_injections : Array(String) = [] of String,
+      pre_history_injections : Array(String) = [] of String,
+      tail_injections : Array(String) = [] of String,
+    ) : Array(Mantle::Message)
+      project_view(
+        system_injections: system_injections.map { |s| Mantle::Message.new("system", s) },
+        pre_history_injections: pre_history_injections.map { |s| Mantle::Message.new("system", s) },
+        tail_injections: tail_injections.map { |s| Mantle::Message.new("system", s) },
+      )
     end
 
-    # Handles a bot response *msg*, optionally triggering context consolidation if *check_consolidation* is true.
-    def handle_bot_message(msg : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, check_consolidation : Bool = true)
-      # Strip thinking tags if enabled
-      processed_msg = @strip_thinking_tags ? Mantle::Support::Text.strip_thinking(msg) : msg
+    # Adds a canonical user message to the context store.
+    def add_user_message(content : String)
+      @context_store.add_message("User", content)
+    end
 
-      # Always use "Assistant" label for normalization, not custom bot_name
+    # Adds a canonical user message from a Message instance.
+    def add_user_message(message : Mantle::Message)
+      @context_store.add_message("User", message.content || "")
+    end
+
+    # Adds a canonical assistant message to the context store, checking consolidation thresholds.
+    def add_assistant_message(content : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, check_consolidation : Bool = true)
+      processed_msg = @strip_thinking_tags ? Mantle::Support::Text.strip_thinking(content) : content
       @context_store.add_message("Assistant", processed_msg, tool_calls)
 
       if @context_store.current_num_tokens >= @token_softmax
@@ -125,6 +127,41 @@ module Mantle::Storage
       if check_consolidation && @context_store.current_num_tokens >= @token_hardmax
         consolidate_memory
       end
+    end
+
+    # Adds a canonical assistant message from a Message instance.
+    def add_assistant_message(message : Mantle::Message, check_consolidation : Bool = true)
+      add_assistant_message(message.content || "", tool_calls: message.tool_calls, check_consolidation: check_consolidation)
+    end
+
+    # Handles a user message (delegates to add_user_message).
+    def handle_user_message(msg : String)
+      add_user_message(msg)
+    end
+
+    # Handles a bot response (delegates to add_assistant_message).
+    def handle_bot_message(msg : String, tool_calls : Array(Mantle::Clients::ToolCall)? = nil, check_consolidation : Bool = true)
+      add_assistant_message(msg, tool_calls: tool_calls, check_consolidation: check_consolidation)
+    end
+
+    # Appends a user message from a string to the context store, returning self for chaining.
+    def <<(message : String) : self
+      add_user_message(message)
+      self
+    end
+
+    # Appends a typed Message to the context store, preserving role and metadata, returning self for chaining.
+    def <<(message : Mantle::Message) : self
+      normalized = message.role.downcase
+      case normalized
+      when "user", "username"
+        add_user_message(message.content || "")
+      when "bot", "botname", "assistant"
+        add_assistant_message(message)
+      else
+        add_message(message.role, message.content || "", message.tool_calls, message.tool_call_id)
+      end
+      self
     end
 
     # Adds a message to the context with a specific *role*, *content*, and optional tool calls, optionally checking consolidation.
@@ -239,7 +276,6 @@ module Mantle::Storage
 
     # Removes the last bot response and user prompt from context_store for replay.
     def pop_last_turn_for_replay : String?
-      @pending_invisible_append = nil
       @context_store.pop_last_turn_for_replay
     end
 
@@ -291,9 +327,6 @@ module Mantle::Storage
       # 3. Reassign to new stores
       @context_store = new_context
       @memory_store = new_memory
-
-      # 4. Clear any pending invisible append from old context
-      @pending_invisible_append = nil
 
       # Token tracking is delegated to the stores, so no need to reset it manually
     end

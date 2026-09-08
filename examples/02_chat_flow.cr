@@ -2,17 +2,18 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
-# Level 2: Step & Context Pipeline
+# Level 2: Session Turn Pipeline & Context Management
 #
 # This example demonstrates Mantle's core decoupled abstractions:
 # - ContextStore: Tracks conversation messages.
 # - MemoryStore: Summarizes older messages when context fills up.
-# - ContextManager: Coordinates context view and consolidation.
-# - Step: Executes inference turns and returns strongly typed StepResult(T, E).
+# - ContextManager: Coordinates context projection with Ephemeral Injections.
+# - Step: Executes graph-isolated inference turns.
+# - Session: Orchestrates turn execution, idempotency, and audit receipts.
 
 require "../src/mantle"
 
-puts "--- Level 2: Step & Context Pipeline ---"
+puts "--- Level 2: Session Turn Pipeline ---"
 
 # 1. Setup the Client
 client = Mantle::Clients::OllamaClient.new(
@@ -49,21 +50,27 @@ context_manager = Mantle::Storage::ContextManager.new(
   token_hardmax: 800
 )
 
-# 4. Build the Step Pipeline
+# 4. Build the Step and Session Pipeline
 step = Mantle::Step.new(client: client)
+session = Mantle::Session.new(
+  context_manager: context_manager,
+  step: step,
+  log_file: "examples/02_receipts.jsonl",
+  model_name: "gpt-oss:20b"
+)
 
-# 5. Run the Step
-context_manager.handle_user_message("Hello! What can you do?")
-result = step.run(context_manager.current_view)
+# 5. Run the Turn through Session
+result = session.run_turn(
+  trigger: "Hello! What can you do?",
+  tail_injections: ["Answer in two sentences or fewer."]
+)
 
-# If result.value is not nil, it is assigned to `reply` and the block executes.
-# If it is nil, it falls through to the else block.
 if reply = result.value
-  context_manager.handle_bot_message(reply)
   puts "Assistant: #{reply}"
 else
   puts "Error during inference: #{result.error}"
 end
 
-puts "\nCheck examples/02_context.json for the persisted data!"
+puts "\nCheck examples/02_context.json for the persisted context graph!"
+puts "Check examples/02_receipts.jsonl for deterministic audit receipts!"
 puts "--- Finished ---"

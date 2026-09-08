@@ -338,5 +338,67 @@ describe Mantle::Step do
       result.err?.should be_true
       result.error.should eq(Mantle::StepError::MalformedOutput)
     end
+
+    it "treats caller message array as immutable and does not mutate it during tool loops" do
+      client = StepMockClient.new([
+        Mantle::Clients::Response.new(
+          content: nil,
+          tool_calls: [
+            Mantle::Clients::ToolCall.new(
+              id: "call_a",
+              type: "function",
+              function: Mantle::Clients::ToolCallFunction.new(name: "dummy_tool", arguments: %({}))
+            ),
+          ]
+        ),
+        Mantle::Clients::Response.new(content: "Done", tool_calls: nil),
+      ])
+
+      tool = Mantle::Tools::Tool.new(
+        function: Mantle::Tools::FunctionDefinition.new(
+          name: "dummy_tool",
+          description: "desc",
+          parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition)
+        )
+      ) { |_| "ok" }
+
+      step = Mantle::Step.new(client, [tool])
+      caller_messages = [Mantle::Message.new("user", "Run tool")]
+      result = step.run(caller_messages)
+
+      result.ok?.should be_true
+      # Caller's input array must remain completely untouched!
+      caller_messages.size.should eq(1)
+      caller_messages.first.content.should eq("Run tool")
+    end
+
+    it "correctly classifies StepError into retryable? and terminal?" do
+      Mantle::StepError::ClientFailure.retryable?.should be_true
+      Mantle::StepError::ClientFailure.terminal?.should be_false
+
+      Mantle::StepError::RateLimited.retryable?.should be_true
+      Mantle::StepError::RateLimited.terminal?.should be_false
+
+      Mantle::StepError::MalformedOutput.retryable?.should be_false
+      Mantle::StepError::MalformedOutput.terminal?.should be_true
+
+      Mantle::StepError::MaxIterationsReached.retryable?.should be_false
+      Mantle::StepError::MaxIterationsReached.terminal?.should be_true
+
+      Mantle::StepError::ToolExecutionFailure.retryable?.should be_false
+      Mantle::StepError::ToolExecutionFailure.terminal?.should be_true
+    end
+
+    it "identifies RateLimited errors when client raises 429 or rate limit message" do
+      client = StepMockClient.new([] of Mantle::Clients::Response)
+      client.should_raise = Exception.new("429 Too Many Requests: rate limit exceeded")
+
+      step = Mantle::Step.new(client)
+      result = step.run([Mantle::Message.new("user", "Hello")])
+
+      result.err?.should be_true
+      result.error.should eq(Mantle::StepError::RateLimited)
+      result.error.not_nil!.retryable?.should be_true
+    end
   end
 end

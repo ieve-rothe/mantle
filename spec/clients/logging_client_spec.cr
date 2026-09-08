@@ -213,4 +213,33 @@ describe Mantle::Clients::LoggingClient do
     File.exists?(log_file).should be_true
     File.read_lines(log_file).size.should eq(50)
   end
+
+  it "captures spatial ephemeral_injections and LTM state in the JSONL receipt" do
+    log_file = File.join(temp_dir, "test_injections.jsonl")
+    dummy = DummyLoggingTestClient.new
+    client = Mantle::Clients::LoggingClient.new(dummy, log_file)
+
+    messages = [Mantle::Message.new("user", "Hello")]
+    injections = Mantle::Clients::EphemeralInjections.new(
+      system: [Mantle::Message.new("system", "SYS_FLAG")],
+      pre_history: [Mantle::Message.new("system", "PRE_HIST_FLAG")],
+      tail: [Mantle::Message.new("system", "TAIL_FLAG")],
+      memory_view: "[Memory Layer 0] Historical facts"
+    )
+
+    client.execute(messages, ephemeral_injections: injections)
+    client.flush
+
+    File.exists?(log_file).should be_true
+    lines = File.read_lines(log_file)
+    lines.size.should eq(1)
+
+    json = JSON.parse(lines.first)
+    json["ephemeral_injections"]?.should_not be_nil
+    inj = json["ephemeral_injections"]
+    inj["system"][0]["content"].as_s.should eq("SYS_FLAG")
+    inj["pre_history"][0]["content"].as_s.should eq("PRE_HIST_FLAG")
+    inj["tail"][0]["content"].as_s.should eq("TAIL_FLAG")
+    inj["memory_view"].as_s.should eq("[Memory Layer 0] Historical facts")
+  end
 end

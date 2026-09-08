@@ -72,7 +72,7 @@ step = Mantle::Step.new(
 
 puts "Executing Turn 1..."
 context_manager.handle_user_message("What time is it right now?")
-result = step.run(context_manager.current_view)
+result = step.run(context_manager.project_view)
 
 # If result.value is not nil, it is assigned to `reply` and the block executes.
 # If it is nil, it falls through to the else block.
