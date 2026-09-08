@@ -73,8 +73,9 @@ step = Mantle::Step.new(
 context_manager.handle_user_message("Pick a random number between 1 and 100, then tell me if it is even or odd.")
 result = step.run(context_manager.current_view)
 
-if result.ok?
-  reply = result.unwrap
+# If result.value is not nil, it is assigned to `reply` and the block executes.
+# If it is nil, it falls through to the else block.
+if reply = result.value
   context_manager.handle_bot_message(reply)
   puts "\nFinal Answer: #{reply}"
   puts "Iterations taken: #{result.iterations}"

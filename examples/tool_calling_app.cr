@@ -74,8 +74,9 @@ puts "Executing Turn 1..."
 context_manager.handle_user_message("What time is it right now?")
 result = step.run(context_manager.current_view)
 
-if result.ok?
-  reply = result.unwrap
+# If result.value is not nil, it is assigned to `reply` and the block executes.
+# If it is nil, it falls through to the else block.
+if reply = result.value
   context_manager.handle_bot_message(reply)
   puts "Bot: #{reply}"
   puts "Iterations: #{result.iterations}"

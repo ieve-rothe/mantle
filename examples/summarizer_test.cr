@@ -94,8 +94,7 @@ simulated_session.each_with_index do |input_text, index|
   if thinking = result.thinking
     puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
   end
-  if result.ok?
-    reply = result.unwrap
+  if reply = result.value
     context_manager.handle_bot_message(reply)
     puts "Bot: #{reply}"
   end
@@ -117,8 +116,7 @@ puts "User: #{final_question}"
 if thinking = final_res.thinking
   puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
 end
-if final_res.ok?
-  final_reply = final_res.unwrap
+if final_reply = final_res.value
   context_manager.handle_bot_message(final_reply)
   puts "Bot: #{final_reply}"
 end

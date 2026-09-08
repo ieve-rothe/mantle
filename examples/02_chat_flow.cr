@@ -56,8 +56,9 @@ step = Mantle::Step.new(client: client)
 context_manager.handle_user_message("Hello! What can you do?")
 result = step.run(context_manager.current_view)
 
-if result.ok?
-  reply = result.unwrap
+# If result.value is not nil, it is assigned to `reply` and the block executes.
+# If it is nil, it falls through to the else block.
+if reply = result.value
   context_manager.handle_bot_message(reply)
   puts "Assistant: #{reply}"
 else

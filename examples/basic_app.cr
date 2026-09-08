@@ -113,8 +113,7 @@ puts "User: #{input_text}"
 if thinking = result.thinking
   puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
 end
-if result.ok?
-  reply = result.unwrap
+if reply = result.value
   context_manager.handle_bot_message(reply)
   puts "Bot: #{reply}"
 else
@@ -135,8 +134,7 @@ puts "--- Starting Multi-Test Turn ---"
   if thinking = turn_res.thinking
     puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
   end
-  if turn_res.ok?
-    turn_reply = turn_res.unwrap
+  if turn_reply = turn_res.value
     context_manager.handle_bot_message(turn_reply)
     puts "Bot: #{turn_reply}"
   end
