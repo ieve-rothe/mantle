@@ -10,14 +10,9 @@ require "time"
 require "uuid"
 
 module Mantle::Clients
-  # Background asynchronous writer that receives JSONL log receipts over a buffered Channel
-  # and writes them to disk using a single shared Mutex across all client specializations.
   module ReceiptWriter
-    # Shared Mutex ensuring file writes are thread/fiber safe across all client specializations
-    class_getter file_mutex : Mutex = Mutex.new
-
-    # Record defining a receipt write task or a synchronization flush task
-    record Task,
+    
+    record Task, # (receipt write task, or a sync task)
       log_file : String,
       entry_json : String,
       size_threshold : Int64,
@@ -26,91 +21,66 @@ module Mantle::Clients
     # Buffered channel for asynchronous receipt logging
     class_getter channel : Channel(Task) = Channel(Task).new(1024)
 
-    # Worker state
-    @@worker_started : Bool = false
-    @@worker_mutex : Mutex = Mutex.new
-
-    # Track warned files across log destinations
+    @@worker_started = Atomic(Bool).new(false)
     @@warned_files = Set(String).new
-    @@warned_mutex = Mutex.new
 
-    # Ensures the background writer fiber is running
-    def self.ensure_worker_running
-      return if @@worker_started
-      @@worker_mutex.synchronize do
-        return if @@worker_started
-        @@worker_started = true
-        spawn(name: "mantle-receipt-logger") do
-          loop do
-            task = channel.receive
-            process_task(task)
-          end
-        end
-      end
-    end
-
-    # Enqueues a receipt for asynchronous writing and yields briefly to allow the worker fiber to run
     def self.enqueue(task : Task)
       ensure_worker_running
       channel.send(task)
-      Fiber.yield
     end
 
-    # Blocks execution until all tasks currently queued in the channel have been processed and written to disk.
     def self.flush
       ensure_worker_running
       sync_ch = Channel(Nil).new
-      channel.send(Task.new(log_file: "", entry_json: "", size_threshold: 0_i64, sync_channel: sync_ch))
-      sync_ch.receive
+      # Add a dummy task onto the channel
+      channel.send(Task.new("", "", 0_i64, sync_channel: sync_ch))
+      sync_ch.receive # Blocks until worker clears queue and returns our sync_ch
     end
 
-    private def self.process_task(task : Task)
-      unless task.entry_json.empty?
-        file_mutex.synchronize do
-          begin
-            dir = File.dirname(task.log_file)
-            Dir.mkdir_p(dir) unless Dir.exists?(dir)
+    private def self.ensure_worker_running
+      return if @@worker_started.swap(true)
 
-            File.open(task.log_file, "a") do |f|
-              f.puts(task.entry_json)
-              f.flush
-            end
+      spawn(name: "mantle-receipt-logger") do
+        loop do
+          task = channel.receive
 
-            check_file_size_warning(task.log_file, task.size_threshold)
-          rescue write_ex
-            Mantle::Log.error { "LoggingClient failed to write JSONL receipt to #{task.log_file}: #{write_ex.message}" }
+          if !task.entry_json.empty?
+            write_receipt(task)
           end
-        end
-      end
 
-      if sync = task.sync_channel
-        sync.send(nil)
+          task.sync_channel.try &.send(nil)
+        end
       end
     end
 
-    private def self.check_file_size_warning(log_file : String, threshold : Int64)
-      if File.exists?(log_file)
-        size = File.size(log_file)
-        if size > threshold
-          should_warn = false
-          @@warned_mutex.synchronize do
-            unless @@warned_files.includes?(log_file)
-              @@warned_files << log_file
-              should_warn = true
-            end
-          end
-          if should_warn
-            size_mb = (size.to_f / 1_048_576.0).round(2)
-            Mantle::Log.warn { "Warning: JSONL log file '#{log_file}' size (#{size_mb} MB) exceeds threshold. Please configure logrotate." }
-          end
-        else
-          @@warned_mutex.synchronize do
-            @@warned_files.delete(log_file)
-          end
+    private def self.write_receipt(task : Task)
+      dir = File.dirname(task.log_file)
+      Dir.mkdir_p(dir) unless Dir.exists?(dir)
+
+      File.open(task.log_file, "a") do |f|
+        f.puts(task.entry_json)
+        f.flush
+      end
+
+      check_size(task.log_file, task.size_threshold)
+    rescue ex
+      Mantle::Log.error { "Failed writing receipt to #{task.log_file}: #{ex.message}" }
+    end
+
+    private def self.check_size(log_file : String, threshold : Int64)
+      return unless File.exists?(log_file)
+      size = File.size(log_file)
+
+      if size > threshold
+        if @@warned_files.add?(log_file) # Returns true only if it wasn't already in the set
+          size_mb = (size.to_f / 1_048_576.0).round(2)
+          Mantle::Log.warn { "JSONL log '#{log_file}' (#{size_mb} MB) exceeds threshold. Configure logrotate." }
         end
+      else
+        @@warned_files.delete(log_file)
       end
     rescue
-      # Ignore size check error
+      # Ignore stat errors
     end
   end
 

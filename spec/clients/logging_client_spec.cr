@@ -55,6 +55,7 @@ describe Mantle::Clients::LoggingClient do
       resp = client.execute(messages)
       resp.content.should eq("Hello World")
     end
+    client.flush
 
     File.exists?(log_file).should be_true
     lines = File.read_lines(log_file)
@@ -88,6 +89,7 @@ describe Mantle::Clients::LoggingClient do
         client.execute(messages)
       end
     end
+    client.flush
 
     File.exists?(log_file).should be_true
     lines = File.read_lines(log_file)
@@ -125,6 +127,7 @@ describe Mantle::Clients::LoggingClient do
 
     messages = [Mantle::Message.new("user", "Trigger warning")]
     client.execute(messages)
+    client.flush
 
     (File.size(log_file) > 10).should be_true
   end
@@ -148,6 +151,7 @@ describe Mantle::Clients::LoggingClient do
     end
 
     channel.receive
+    client.flush
 
     lines = File.read_lines(log_file)
     json = JSON.parse(lines.first)
