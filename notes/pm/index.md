@@ -6,7 +6,6 @@ This file tracks the status and priority of all tickets for the `mantle` framewo
 
 | Ticket ID | Title | Theme | Status | Priority | Last Updated |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [TKT-006](file:///home/cam/repos/adjutant/mantle/notes/pm/open/TKT-006-refactor-flow-to-step.md) | Refactor Flow into Step, Introduce StepResult(T, E), and Remove Legacy Flow Hierarchy | Architecture / Steps | Open | High | 2026-09-08 |
 
 ## Closed Tickets
 
@@ -17,3 +16,4 @@ This file tracks the status and priority of all tickets for the `mantle` framewo
 | [TKT-003](file:///home/cam/repos/adjutant/mantle/notes/pm/closed/TKT-003-replace-global-on-status-update.md) | Replace Global Mantle.on_status_update Singleton | Architecture / State | Closed | High | 2026-09-08 |
 | [TKT-004](file:///home/cam/repos/adjutant/mantle/notes/pm/closed/TKT-004-normalize-model-thinking-tags.md) | Normalize Model Thinking Tags (<think>) | Architecture / Formatting | Closed | High | 2026-09-08 |
 | [TKT-005](file:///home/cam/repos/adjutant/mantle/notes/pm/closed/TKT-005-ollama-client-and-logging-refactor.md) | Rename OllamaClient, Normalize Thinking, and Streamline LoggingClient Concurrency | Architecture / Clients | Closed | High | 2026-09-08 |
+| [TKT-006](file:///home/cam/repos/adjutant/mantle/notes/pm/closed/TKT-006-refactor-flow-to-step.md) | Refactor Flow into Step, Introduce StepResult(T, E), and Remove Legacy Flow Hierarchy | Architecture / Steps | Closed | High | 2026-09-08 |

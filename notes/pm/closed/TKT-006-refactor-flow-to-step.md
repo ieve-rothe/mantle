@@ -1,7 +1,7 @@
 ---
 ID: TKT-006
 Title: Refactor Flow into Step, Introduce StepResult(T, E), and Remove Legacy Flow Hierarchy
-Status: Open
+Status: Closed
 Priority: High
 ---
 
@@ -38,15 +38,27 @@ Developers building autonomous agent systems with Mantle need a composable, deco
   - Verify `StepResult` unit specs (ok?, err?, safe unwrap vs raising unwrap, metadata tracking).
   - Verify `Step` unit specs (text response, token streaming &block, multi-step tool loops, max_iterations limit, on_status emissions).
 * **Verification Evidence:**
-  - (To be recorded upon completion).
+  - `crystal spec spec/mantle/steps/*` executed successfully: 17 examples, 0 failures, 0 errors, 0 pending.
+  - Full test suite `crystal spec` executed successfully: 296 examples, 0 failures, 0 errors, 0 pending.
+  - `crystal tool format` cleanly formatted all files.
 * **Validation Plan:**
   - Verify complete elimination of `Flow` hierarchy and clean top-level namespacing `Mantle::Step`.
-  - Verify all documentation in `notes/releases/v1.0.0.md`.
+  - Verify all documentation and examples in `notes/releases/v1.0.0.md`, `README.md`, and `examples/`.
 * **Validation Evidence:**
-  - (To be recorded upon completion).
+  - Legacy `src/mantle/flows/` deleted; top-level `Mantle::Step`, `Mantle::StepResult(T, E)`, and `Mantle::StepError` verified.
+  - All examples updated to use idiomatic `if reply = result.value` binding with `.unwrap` reserved for test assertions.
+  - Release notes in `notes/releases/v1.0.0.md` updated with Section 7.
 
 ## Open Questions & Concurrency Concerns
 * None. Unparameterized top-level types and pure functional pipeline ensure safe concurrent execution without shared mutable state.
 
-## 4. Revision History
+## 4. Outcome & Integration
+* **Status**: CLOSED
+* **Merged Commits**:
+  - `a360f31` refactor(core): replace legacy Flow hierarchy with Mantle::Step and StepResult (TKT-006)
+  - `f7a3a13` docs(examples): adopt if reply = result.value pattern instead of unwrap
+* **Summary**: Worktree `.worktrees/mantle-tkt-006-refactor-flow-to-step` successfully fast-forward merged to `main`, pruned, and closed.
+
+## 5. Revision History
 * 2026-09-08: Ticket created for refactoring Flow into Mantle::Step and StepResult(T, E).
+* 2026-09-08: Implementation completed in worktree, all 296 specs verified passing, branch merged to `main`, worktree pruned, ticket closed.
