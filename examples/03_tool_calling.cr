@@ -2,18 +2,17 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
-# Level 3: Tool Calling
+# Level 3: Tool Calling with Step
 #
-# This example builds on Level 2 by introducing ToolEnabledChatFlow.
-# This flow type handles complex model interactions where the model can request
-# to run tools (like reading files, checking the weather, etc.) before giving
-# a final text response.
+# This example demonstrates Step executing tools in a bounded loop.
+# When the model requests tool calls, Step runs the tools and feeds
+# results back into the inference loop until a final text response is produced.
 
 require "../src/mantle"
 
 puts "--- Level 3: Tool Calling ---"
 
-# 1. Setup Client, Context, and Memory (same as Level 2)
+# 1. Setup Client and Context
 client = Mantle::Clients::OllamaClient.new(
   Mantle::Clients::ModelConfig.new(
     model_name: "gpt-oss:20b",
@@ -42,82 +41,45 @@ context_manager = Mantle::Storage::ContextManager.new(
   token_hardmax: 1200
 )
 
-logger = Mantle::Support::FileLogger.new("examples/03_chat.log", "User", "Assistant")
-
-# 2. Build the Tool Enabled Flow
-# ToolEnabledChatFlow has built-in logic to parse tool requests from the model,
-# execute them, and feed the results back into the model until a text response is ready.
-flow = Mantle::Flows::ToolEnabledChatFlow.new(
-  context_manager: context_manager,
-  client: client,
-  logger: logger
-)
-
-# 3. Configure Built-in Tools
-# Mantle provides a set of secure built-in tools (like ReadFile, ListDirectory).
-# You must configure security boundaries to prevent the AI from accessing sensitive files.
-builtin_config = Mantle::Tools::BuiltinToolConfig.new(
-  working_directory: Dir.current,
-  allowed_paths: [Dir.current],                                           # Only allow reading within this repo
-  autonomous_zone_paths: [File.join(Dir.current, "examples", "sandbox")], # Allow writing only in the sandbox folder
-  file_backup_count: 3
-)
-
-# Specify which built-in tools we want to give the model access to
-builtins = [
-  Mantle::Tools::BuiltinTool::ReadFile,
-  Mantle::Tools::BuiltinTool::ListDirectory,
-]
-
-# 4. Define a Custom Tool
-# You can define your own tools! A Tool needs a FunctionDefinition (schema).
-def create_random_number_tool
-  Mantle::Tools::Tool.new(
-    function: Mantle::Tools::FunctionDefinition.new(
-      name: "get_random_number",
-      description: "Gets a random number between a min and max value.",
-      parameters: Mantle::Tools::ParametersSchema.new(
-        properties: {
-          "min" => Mantle::Tools::PropertyDefinition.new(type: "integer", description: "The minimum value"),
-          "max" => Mantle::Tools::PropertyDefinition.new(type: "integer", description: "The maximum value"),
-        },
-        required: ["min", "max"]
-      )
+# 2. Define Tools with executable blocks
+random_tool = Mantle::Tools::Tool.new(
+  function: Mantle::Tools::FunctionDefinition.new(
+    name: "get_random_number",
+    description: "Gets a random number between a min and max value.",
+    parameters: Mantle::Tools::ParametersSchema.new(
+      properties: {
+        "min" => Mantle::Tools::PropertyDefinition.new(type: "integer", description: "The minimum value"),
+        "max" => Mantle::Tools::PropertyDefinition.new(type: "integer", description: "The maximum value"),
+      },
+      required: ["min", "max"]
     )
   )
+) do |args|
+  min = args["min"]?.try(&.as_i?) || 1
+  max = args["max"]?.try(&.as_i?) || 100
+  random_num = rand(min..max)
+  %({"success": true, "number": #{random_num}})
 end
 
-# You also need a handler method to execute the logic when the model calls your custom tool.
-def custom_tool_handler(name : String, args : Hash(String, JSON::Any)) : String
-  case name
-  when "get_random_number"
-    min = args["min"]?.try(&.as_i?) || 1
-    max = args["max"]?.try(&.as_i?) || 100
-    random_num = rand(min..max)
-    %({"success": true, "number": #{random_num}})
-  else
-    %({"error": "Unknown custom tool"})
-  end
-end
-
-custom_tools = [create_random_number_tool]
-
-# 5. Run the Flow with Tools
-puts "User: Pick a random number between 1 and 10, then read the README.md file and tell me what the project is called."
-
-flow.run(
-  msg: "Pick a random number between 1 and 10, then read the README.md file and tell me what the project is called.",
-  builtins: builtins,
-  builtin_config: builtin_config,
-  custom_tools: custom_tools,
-  tool_callback: ->custom_tool_handler(String, Hash(String, JSON::Any)),
-  on_response: ->(resp : Mantle::Clients::Response) {
-    # If the model emits reasoning blocks, we can see them.
-    if thinking = resp.thinking
-      puts "\n🤔 Thinking:\n#{thinking}"
-    end
-    puts "\nAssistant: #{resp.content}"
-  }
+# 3. Build the Step
+step = Mantle::Step.new(
+  client: client,
+  tools: [random_tool],
+  max_iterations: 10,
+  on_status: ->(flag : Symbol) { puts "Status update: #{flag}" }
 )
 
-puts "\n--- Finished ---"
+# 4. Run the Step
+context_manager.handle_user_message("Pick a random number between 1 and 100, then tell me if it is even or odd.")
+result = step.run(context_manager.current_view)
+
+if result.ok?
+  reply = result.unwrap
+  context_manager.handle_bot_message(reply)
+  puts "\nFinal Answer: #{reply}"
+  puts "Iterations taken: #{result.iterations}"
+else
+  puts "Step failed with error: #{result.error}"
+end
+
+puts "--- Finished ---"

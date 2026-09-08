@@ -1,99 +1,33 @@
 # examples/tool_calling_app.cr
-# Copyright (C) 2025 Cam Carroll
+# Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
-
-# Tool Calling Example Application
-# Demonstrates Mantle's tool calling capabilities with both built-in and custom tools.
-# It also uses JSON-backed context and memory stores with low limits to demonstrate
-# how `ToolEnabledChatFlow` handles context length limitations.
 
 require "../src/mantle"
 
-# 1. Define custom tools
-# A custom tool is defined by creating a `Mantle::Tools::Tool` object with a `FunctionDefinition`.
-# This defines the schema that the LLM uses to understand what the tool does and what
-# arguments to pass.
-def create_time_tool
-  Mantle::Tools::Tool.new(
-    function: Mantle::Tools::FunctionDefinition.new(
-      name: "get_current_time",
-      description: "Get the current time in a specific timezone",
-      parameters: Mantle::Tools::ParametersSchema.new(
-        properties: {
-          "timezone" => Mantle::Tools::PropertyDefinition.new(
-            type: "string",
-            description: "Timezone (e.g., 'UTC', 'America/New_York')"
-          ),
-        },
-        required: ["timezone"]
-      )
-    )
-  )
-end
+puts "--- Tool Calling App with Step ---"
 
-# The custom tool handler executes the actual code for custom tools.
-# It receives the name of the tool called by the model, and a Hash of arguments.
-def custom_tool_handler(name : String, args : Hash(String, JSON::Any)) : String
-  case name
-  when "get_current_time"
-    timezone = args["timezone"]?.try(&.as_s) || "UTC"
-
-    # Simple timezone handling (in production, use proper timezone library)
-    time = case timezone
-           when "UTC"
-             Time.utc.to_s("%H:%M:%S")
-           when "America/New_York"
-             (Time.utc - 5.hours).to_s("%H:%M:%S") + " EST"
-           else
-             Time.utc.to_s("%H:%M:%S") + " UTC"
-           end
-
-    %({"success":true,"time":"#{time}","timezone":"#{timezone}"})
-  else
-    %({"error":"Unknown custom tool: #{name}"})
-  end
-end
-
-# Clean up any previous test files
 context_file = "/tmp/tool_example_context.json"
 memory_file = "/tmp/tool_example_memory.json"
-log_file = "/tmp/tool_example.log"
-
 File.delete(context_file) if File.exists?(context_file)
 File.delete(memory_file) if File.exists?(memory_file)
-File.delete(log_file) if File.exists?(log_file)
 
-# Main application
-puts "=" * 70
-puts "Mantle Tool Calling + Memory Consolidation Example"
-puts "=" * 70
-puts "This example demonstrates:"
-puts "  - Tool calling with both built-in and custom tools"
-puts "  - JSON-backed context persistence"
-puts "  - Memory consolidation when context limit is reached"
-puts "=" * 70
-puts
-
-# 2. Setup Mantle components
-model_config = Mantle::Clients::ModelConfig.new(
-  "gemma4:e2b",                     # model_name
-  false,                            # stream
-  0.7,                              # temperature
-  0.9,                              # top_p
-  500,                              # max_tokens
-  "http://localhost:11434/api/chat" # Ollama API URL
+client = Mantle::Clients::OllamaClient.new(
+  Mantle::Clients::ModelConfig.new(
+    model_name: "gpt-oss:20b",
+    stream: false,
+    temperature: 0.7,
+    top_p: 0.85,
+    max_tokens: 1000,
+    api_url: "http://localhost:11434/api/chat"
+  )
 )
 
-client = Mantle::Clients::OllamaClient.new(model_config)
-
-# Use JSON-backed context store for persistence
 context_store = Mantle::Storage::JSONContextStore.new(
   "You are a helpful assistant with access to tools. Use tools when appropriate to answer user questions.",
   context_file
 )
 
-# Memory store with proper squishifier that uses the model
-summarizer_prompt = "You are an internal memory consolidation system for an AI assistant. Review the following conversation history and tool interactions. Synthesize them into a concise 2-3 sentence summary. Focus on key facts, tool results, and actionable information. Ignore casual conversation. Write from the assistant's perspective."
+summarizer_prompt = "You are an internal memory consolidation system for an AI assistant. Review the following conversation history and tool interactions. Synthesize them into a concise 2-3 sentence summary."
 squishifier = Mantle::Support::Squishifiers.build_basic_summarizer(client, summarizer_prompt)
 
 memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(
@@ -103,163 +37,51 @@ memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(
   squishifier: squishifier
 )
 
-# Context manager with LOW token_hardmax to trigger consolidation quickly
 context_manager = Mantle::Storage::ContextManager.new(
   context_store,
   memory_store,
   "User",
   "Assistant",
-  token_target: 4, # Keep 4 tokens/messages target after consolidation
-  token_hardmax: 8 # Trigger consolidation at 8 tokens/messages (low limit for testing)
+  token_target: 4,
+  token_hardmax: 8
 )
 
-logger = Mantle::Support::FileLogger.new(log_file, "User", "Assistant", include_thinking: true)
-
-# Create a ToolEnabledChatFlow.
-# This flow handles not just user messages, but parses tool call requests from the model,
-# executes the relevant tools, adds the results to the context, and re-prompts the model
-# in a loop until the model provides a final textual response.
-flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
-
-# Configure built-in tool access.
-# Built-in tools have security constraints like `allowed_paths` for reading
-# and `autonomous_zone_paths` for writing.
-builtin_config = Mantle::Tools::BuiltinToolConfig.new(
-  working_directory: Dir.current,
-  allowed_paths: [Dir.current, "/tmp"],
-  notify_icon: File.expand_path("../assets/icon.png", __DIR__),
-  autonomous_zone_paths: [File.join(Dir.current, "examples", "sandbox")],
-  file_backup_count: 3
-)
-
-# Define which tools are available
-builtins = [
-  Mantle::Tools::BuiltinTool::ReadFile,
-  Mantle::Tools::BuiltinTool::ListDirectory,
-  Mantle::Tools::BuiltinTool::NotifySend,
-  Mantle::Tools::BuiltinTool::WriteFile,
-]
-
-custom_tools = [
-  create_time_tool,
-]
-
-# Callback for displaying responses
-display_response = ->(response : Mantle::Clients::Response) {
-  if thinking = response.thinking
-    puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
-  end
-  puts "Assistant: #{response.content}"
-  puts
-  puts "[Context messages: #{context_store.current_num_messages}/#{context_manager.token_hardmax}]"
-  puts
-}
-
-# 3. Start the flow
-# We simulate a long conversation to see how the system handles tools and context limits.
-puts "Starting conversation with multiple interactions..."
-puts "=" * 70
-puts
-
-puts "[Turn 1] Basic greeting"
-puts "-" * 70
-flow.run(
-  "Hello! I need help exploring this project.",
-  on_response: display_response
-)
-
-puts "[Turn 2] Using list_directory tool"
-puts "-" * 70
-flow.run(
-  "Can you list the files in the current directory?",
-  builtins: builtins,
-  builtin_config: builtin_config,
-  on_response: display_response
-)
-
-puts "[Turn 3] Using get_current_time tool"
-puts "-" * 70
-flow.run(
-  "What time is it in UTC?",
-  custom_tools: custom_tools,
-  tool_callback: ->custom_tool_handler(String, Hash(String, JSON::Any)),
-  on_response: display_response
-)
-
-puts "[Turn 4] Asking about the project"
-puts "-" * 70
-flow.run(
-  "What kind of project is this based on the files you saw?",
-  on_response: display_response
-)
-
-puts "[Turn 5] Using read_file tool"
-puts "-" * 70
-if File.exists?(File.join(Dir.current, "README.md"))
-  flow.run(
-    "Can you read the README.md file and tell me what this project does?",
-    builtins: builtins,
-    builtin_config: builtin_config,
-    on_response: display_response
+time_tool = Mantle::Tools::Tool.new(
+  function: Mantle::Tools::FunctionDefinition.new(
+    name: "get_current_time",
+    description: "Get the current time in UTC",
+    parameters: Mantle::Tools::ParametersSchema.new(
+      properties: {
+        "timezone" => Mantle::Tools::PropertyDefinition.new(
+          type: "string",
+          description: "Timezone (e.g. UTC)"
+        ),
+      }
+    )
   )
-else
-  flow.run(
-    "Tell me more about the Mantle framework.",
-    on_response: display_response
-  )
+) do |args|
+  Time.utc.to_s("%H:%M:%S UTC")
 end
 
-puts "[Turn 6] Follow-up question"
-puts "-" * 70
-flow.run(
-  "That's interesting! What are the main components of this framework?",
-  on_response: display_response
+step = Mantle::Step.new(
+  client: client,
+  tools: [time_tool],
+  max_iterations: 10,
+  on_status: ->(flag : Symbol) { puts "Status: #{flag}" }
 )
 
-puts "[Turn 7] Combining multiple tools"
-puts "-" * 70
-flow.run(
-  "Check the time again and also list any .cr files in the examples directory.",
-  builtins: builtins,
-  custom_tools: custom_tools,
-  builtin_config: builtin_config,
-  tool_callback: ->custom_tool_handler(String, Hash(String, JSON::Any)),
-  on_response: display_response
-)
+puts "Executing Turn 1..."
+context_manager.handle_user_message("What time is it right now?")
+result = step.run(context_manager.current_view)
 
-puts "[Turn 8] Final question about consolidation"
-puts "-" * 70
-flow.run(
-  "Can you summarize what we've discussed so far?",
-  on_response: display_response
-)
+if result.ok?
+  reply = result.unwrap
+  context_manager.handle_bot_message(reply)
+  puts "Bot: #{reply}"
+  puts "Iterations: #{result.iterations}"
+else
+  puts "Step error: #{result.error}"
+end
 
-puts "[Turn 9] Notify Send Example"
-puts "-" * 70
-flow.run(
-  "Send me a desktop notification telling me the summary is complete.",
-  builtins: builtins,
-  builtin_config: builtin_config,
-  on_response: display_response
-)
-
-puts "[Turn 10] Write File Example"
-puts "-" * 70
-flow.run(
-  "Please write a small text file saying 'Hello from Mantle tools!' in the examples/sandbox folder.",
-  builtins: builtins,
-  builtin_config: builtin_config,
-  on_response: display_response
-)
-
-puts "=" * 70
-puts "Conversation complete!"
-puts
-puts "Files created:"
-puts "  - Context: #{context_file}"
-puts "  - Memory: #{memory_file}"
-puts "  - Logs: #{log_file}"
-puts
-puts "Note: Memory consolidation should have been triggered during this conversation"
-puts "      due to the low msg_hardmax (8 messages) setting."
-puts "=" * 70
+context_manager.check_and_consolidate
+puts "Done!"

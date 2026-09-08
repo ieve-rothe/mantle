@@ -32,7 +32,6 @@ user_name = "Username"
 bot_name = "Botname"
 
 client = Mantle::Clients::OllamaClient.new(model_config)
-logger = Mantle::Support::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
 
 # Define the system prompt for the context window
 context_store = Mantle::Storage::JSONContextStore.new(
@@ -66,12 +65,8 @@ context_manager = Mantle::Storage::ContextManager.new(
   strip_thinking_tags: true # Strip <think></think> blocks from model responses
 )
 
-# 3. Build the Flow
-flow = Mantle::Flows::ChatFlow.new(
-  context_manager: context_manager,
-  client: client,
-  logger: logger
-)
+# 3. Build the Step Pipeline
+step = Mantle::Step.new(client: client)
 
 puts "--- Starting Realistic Memory Integration Test ---"
 
@@ -93,40 +88,37 @@ simulated_session = [
 simulated_session.each_with_index do |input_text, index|
   puts "\n[Turn #{index + 1}/#{simulated_session.size}]"
 
-  flow.run(
-    msg: input_text,
-    on_response: ->(resp : Mantle::Clients::Response) {
-      puts "User: #{input_text}"
-      if thinking = resp.thinking
-        puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
-      end
-      puts "Bot: #{resp.content}"
-    }
-  )
+  context_manager.handle_user_message(input_text)
+  result = step.run(context_manager.current_view)
+  puts "User: #{input_text}"
+  if thinking = result.thinking
+    puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+  end
+  if result.ok?
+    reply = result.unwrap
+    context_manager.handle_bot_message(reply)
+    puts "Bot: #{reply}"
+  end
 
   # Optional: Sleep for a second so you can actually read the output
-  # as it streams, making it feel more like a real chat log.
   sleep(1.second)
 end
 
 puts "\n--- Forcing/Waiting for Consolidation ---"
-# If your threshold is higher than 9 messages, you might need to add a few
-# more dummy strings to the array, or manually trigger your consolidation
-# method here if Mantle exposes it.
-
 puts "\n--- Final Context State (Layer 1 Check) ---"
 puts context_store.current_view
 
 puts "\n--- The Recall Test ---"
 final_question = "I'm back. Just to check your memory—what was I planning to do this afternoon, and what do I need to do for the dog tomorrow?"
 
-flow.run(
-  msg: final_question,
-  on_response: ->(resp : Mantle::Clients::Response) {
-    puts "User: #{final_question}"
-    if thinking = resp.thinking
-      puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
-    end
-    puts "Bot: #{resp.content}"
-  }
-)
+context_manager.handle_user_message(final_question)
+final_res = step.run(context_manager.current_view)
+puts "User: #{final_question}"
+if thinking = final_res.thinking
+  puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+end
+if final_res.ok?
+  final_reply = final_res.unwrap
+  context_manager.handle_bot_message(final_reply)
+  puts "Bot: #{final_reply}"
+end

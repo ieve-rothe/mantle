@@ -107,8 +107,37 @@ module Mantle::Tools
     # Represents the `FunctionDefinition` defining the tool function.
     property function : FunctionDefinition
 
-    # Creates a tool wrapper around the specified *function*.
-    def initialize(@function : FunctionDefinition)
+    # Optional execution handler callback for evaluating tool calls.
+    @[JSON::Field(ignore: true)]
+    property handler : Proc(Hash(String, JSON::Any), String)?
+
+    # Creates a tool wrapper around the specified *function* with optional *handler* and *type*.
+    def initialize(@function : FunctionDefinition, @handler : Proc(Hash(String, JSON::Any), String)? = nil, @type : String = "function")
+    end
+
+    # Creates a tool wrapper around the specified *function* with a block execution handler.
+    def initialize(@function : FunctionDefinition, &block : Hash(String, JSON::Any) -> String)
+      @type = "function"
+      @handler = block
+    end
+
+    # Executes the tool using its registered handler.
+    def execute(arguments : Hash(String, JSON::Any)) : String
+      if h = @handler
+        h.call(arguments)
+      else
+        {error: "No execution handler registered for tool '#{function.name}'"}.to_json
+      end
+    end
+
+    # Executes the tool using serialized JSON arguments string.
+    def execute(arguments_json : String) : String
+      parsed = begin
+        JSON.parse(arguments_json).as_h
+      rescue ex
+        return {error: "Invalid tool call arguments JSON: #{ex.message}"}.to_json
+      end
+      execute(parsed)
     end
   end
 end

@@ -1,71 +1,62 @@
 # spec/mantle_spec.cr
 require "./spec_helper"
 
-describe Mantle::Flows::ChatFlow do
-  it "updates the context store with both the user input and the assistant response" do
-    # Arrange
-    store = DummyContextStore.new("Sys Prompt")
-    context_manager = DummyContextManager.new(store)
+describe Mantle::Step do
+  it "executes inference and returns a StepResult with the model response" do
     client = DummyClient.new
-    flow = Mantle::Flows::ChatFlow.new(context_manager, client)
+    step = Mantle::Step.new(client)
 
-    # Act
-    flow.run("Hello", ->(msg : Mantle::Clients::Response) { })
+    messages = [
+      Mantle::Message.new("system", "Sys Prompt"),
+      Mantle::Message.new("user", "Hello"),
+    ]
 
-    # Assert
-    view = store.current_view
-    view.should be_a(Array(Mantle::Message))
+    result = step.run(messages)
 
-    # Check system message
-    system_msg = view.find { |m| m.role == "system" }
-    system_msg.should_not be_nil
-    system_msg.not_nil!.content.should eq("Sys Prompt")
-
-    # Check user message
-    user_msg = view.find { |m| m.role == "user" && m.content == "Hello" }
-    user_msg.should_not be_nil
-
-    # Check assistant response
-    assistant_msg = view.find { |m| m.role == "assistant" && m.content == "Simulated response" }
-    assistant_msg.should_not be_nil
+    result.ok?.should be_true
+    result.err?.should be_false
+    result.value.should eq("Simulated response")
+    result.unwrap.should eq("Simulated response")
+    result.iterations.should eq(1)
   end
 
-  it "executes the on_response callback with the model's response" do
-    # Arrange
-    store = DummyContextStore.new("Sys Prompt")
-    context_manager = DummyContextManager.new(store)
+  it "streams chunks to block during execution" do
     client = DummyClient.new
-    flow = Mantle::Flows::ChatFlow.new(context_manager, client)
-    captured_message = ""
-    callback = ->(msg : Mantle::Clients::Response) { captured_message = msg.content.not_nil! }
+    step = Mantle::Step.new(client)
 
-    # Act
-    flow.run("What is 2+2?", callback)
+    messages = [Mantle::Message.new("user", "What is 2+2?")]
+    chunks = [] of String
+    result = step.run(messages) do |chunk|
+      chunks << chunk
+    end
 
-    # Assert
-    captured_message.should eq("Simulated response")
+    result.ok?.should be_true
+    chunks.should eq(["Simulated response"])
   end
 
-  it "maintains state across multiple runs (conversational memory)" do
-    # Arrange
+  it "integrates with ContextManager for conversational turns" do
     store = DummyContextStore.new("Sys Prompt")
     context_manager = DummyContextManager.new(store)
     client = DummyClient.new
-    flow = Mantle::Flows::ChatFlow.new(context_manager, client)
+    step = Mantle::Step.new(client)
 
-    # Act
-    flow.run("Turn 1", ->(msg : Mantle::Clients::Response) { })
-    flow.run("Turn 2", ->(msg : Mantle::Clients::Response) { })
+    # Turn 1
+    context_manager.handle_user_message("Turn 1")
+    res1 = step.run(context_manager.current_view)
+    res1.ok?.should be_true
+    context_manager.handle_bot_message(res1.unwrap)
 
-    # Assert
+    # Turn 2
+    context_manager.handle_user_message("Turn 2")
+    res2 = step.run(context_manager.current_view)
+    res2.ok?.should be_true
+    context_manager.handle_bot_message(res2.unwrap)
+
     view = store.current_view
     messages_content = view.map { |m| m.content }
 
-    # Both turns should be in the view
     messages_content.should contain("Turn 1")
     messages_content.should contain("Turn 2")
-
-    # Turn 1 should appear before Turn 2
     turn1_index = view.index { |m| m.content == "Turn 1" }
     turn2_index = view.index { |m| m.content == "Turn 2" }
     turn1_index.should_not be_nil

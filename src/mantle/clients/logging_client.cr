@@ -11,7 +11,6 @@ require "uuid"
 
 module Mantle::Clients
   module ReceiptWriter
-    
     record Task, # (receipt write task, or a sync task)
       log_file : String,
       entry_json : String,
@@ -100,7 +99,7 @@ module Mantle::Clients
     def initialize(
       @client : T,
       @log_file : String,
-      @size_warning_threshold_bytes : Int64 = 52_428_800_i64
+      @size_warning_threshold_bytes : Int64 = 52_428_800_i64,
     )
     end
 
@@ -181,16 +180,16 @@ module Mantle::Clients
       response : Response?,
       latency_ms : Int32,
       status : String,
-      error_message : String?
+      error_message : String?,
     )
       entry = {
-        "id"            => UUID.random.to_s,
-        "sequence_id"   => sequence_id,
-        "timestamp"     => timestamp,
-        "model"         => model,
-        "input_hash"     => input_hash,
-        "prompt"        => prompt,
-        "raw_output"    => {
+        "id"          => UUID.random.to_s,
+        "sequence_id" => sequence_id,
+        "timestamp"   => timestamp,
+        "model"       => model,
+        "input_hash"  => input_hash,
+        "prompt"      => prompt,
+        "raw_output"  => {
           "content"           => response ? response.content : nil,
           "thinking"          => response ? response.thinking : nil,
           "tool_calls"        => response ? response.tool_calls : nil,

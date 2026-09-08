@@ -78,35 +78,22 @@ describe "Integration: Tool Loops" do
         end
       }
 
-      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
+      step = Mantle::Step.new(client, custom_tools, tool_callback: tool_callback)
 
-      final_response = nil
-      flow.run(
-        "Please run your tools.",
-        custom_tools: custom_tools,
-        tool_callback: tool_callback,
-        on_response: ->(r : Mantle::Clients::Response) { final_response = r.content.not_nil! }
-      )
+      messages = [
+        Mantle::Message.new("system", "System prompt"),
+        Mantle::Message.new("user", "Please run your tools."),
+      ]
+
+      result = step.run(messages)
 
       # 1. Verify final text response is returned
-      final_response.should eq("Final result based on tools")
+      result.ok?.should be_true
+      result.unwrap.should eq("Final result based on tools")
 
       # 2. Verify exact number of API calls made to the "LLM"
       client.call_count.should eq(3)
-
-      # 3. Verify context history is populated with both user messages, tool calls, and tool results
-      view = context_store.current_view
-
-      # Current Mantle implementation may format context history in different ways:
-      # It appears that the tool call and tool result can be merged or stored differently
-      # Let's verify the view has exactly 5 messages (System, User, Tool A, Tool B, Assistant Final)
-      view.size.should be >= 5
-
-      # Verify the specific tool sequences are in the context history
-      tool_results_in_history = view.select { |m| m.role == "tool" }
-      tool_results_in_history.size.should eq(2)
-      tool_results_in_history[0].content.not_nil!.should contain("intermediate")
-      tool_results_in_history[1].content.not_nil!.should contain("final_data")
+      result.iterations.should eq(3)
     ensure
       File.delete(context_file) if File.exists?(context_file)
     end

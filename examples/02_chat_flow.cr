@@ -2,17 +2,17 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
-# Level 2: Chat Flow
+# Level 2: Step & Context Pipeline
 #
-# This example builds on the basic client by introducing Mantle's core abstractions:
-# - ContextStore: To track the sliding window of conversation.
-# - MemoryStore: To summarize older messages when the context window fills up.
-# - ContextManager: To coordinate moving messages between the two stores.
-# - ChatFlow: A pre-built loop that handles passing user messages, calling the model, and updating context.
+# This example demonstrates Mantle's core decoupled abstractions:
+# - ContextStore: Tracks conversation messages.
+# - MemoryStore: Summarizes older messages when context fills up.
+# - ContextManager: Coordinates context view and consolidation.
+# - Step: Executes inference turns and returns strongly typed StepResult(T, E).
 
 require "../src/mantle"
 
-puts "--- Level 2: Chat Flow ---"
+puts "--- Level 2: Step & Context Pipeline ---"
 
 # 1. Setup the Client
 client = Mantle::Clients::OllamaClient.new(
@@ -26,27 +26,20 @@ client = Mantle::Clients::OllamaClient.new(
   )
 )
 
-# 2. Setup the Context Store
-# We use JSONContextStore to automatically save our conversation to a file.
+# 2. Setup Context and Memory Stores
 context_store = Mantle::Storage::JSONContextStore.new(
   system_prompt: "You are a helpful assistant.",
   context_file: "examples/02_context.json"
 )
 
-# 3. Setup the Memory Store
-# We use JSONLayeredMemoryStore to save long-term summaries to a file.
 memory_store = Mantle::Storage::JSONLayeredMemoryStore.new(
   memory_file: "examples/02_memory.json",
   layer_token_capacity: 100,
   layer_token_target: 50,
-  # We use a built-in squishifier that uses our client to summarize old messages.
   squishifier: Mantle::Support::Squishifiers.build_basic_summarizer(client)
 )
 
-# 4. Setup the Context Manager
-# The ContextManager ties the ContextStore and MemoryStore together.
-# - token_hardmax: When the context reaches this many tokens, it triggers consolidation.
-# - token_target: After consolidation, this many recent tokens are kept in context.
+# 3. Setup Context Manager
 context_manager = Mantle::Storage::ContextManager.new(
   context_store: context_store,
   memory_store: memory_store,
@@ -56,26 +49,20 @@ context_manager = Mantle::Storage::ContextManager.new(
   token_hardmax: 800
 )
 
-# 5. Setup Logging
-# FileLogger writes formatted chat logs to a file.
-logger = Mantle::Support::FileLogger.new("examples/02_chat.log", "User", "Assistant")
+# 4. Build the Step Pipeline
+step = Mantle::Step.new(client: client)
 
-# 6. Build the Flow
-# ChatFlow orchestrates the whole process.
-flow = Mantle::Flows::ChatFlow.new(
-  context_manager: context_manager,
-  client: client,
-  logger: logger
-)
+# 5. Run the Step
+context_manager.handle_user_message("Hello! What can you do?")
+result = step.run(context_manager.current_view)
 
-# 7. Run the Flow
-# Instead of managing raw message arrays manually, we just call #run.
-flow.run(
-  msg: "Hello! What can you do?",
-  on_response: ->(resp : Mantle::Clients::Response) {
-    puts "Assistant: #{resp.content}"
-  }
-)
+if result.ok?
+  reply = result.unwrap
+  context_manager.handle_bot_message(reply)
+  puts "Assistant: #{reply}"
+else
+  puts "Error during inference: #{result.error}"
+end
 
-puts "\nCheck examples/02_context.json and examples/02_chat.log for the persisted data!"
+puts "\nCheck examples/02_context.json for the persisted data!"
 puts "--- Finished ---"

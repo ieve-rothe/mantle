@@ -6,7 +6,7 @@
 
 require "../src/mantle.cr"
 
-# Basic example showing implementation of a ChatFlow using a JSONContextStore,
+# Basic example showing implementation of Mantle::Step using a JSONContextStore,
 # LayeredMemoryStore coordinated with a ContextManager. This example runs
 # a simple LLM loop to demonstrate that messages get persisted to memory.
 
@@ -96,73 +96,50 @@ context_manager = Mantle::Storage::ContextManager.new(
   strip_thinking_tags: true # Strip <think></think> blocks from model responses
 )
 
-# 4. Build the Flow
-# The ChatFlow is a wrapper around the entire chat loop. You supply the components
-# and it orchestrates everything in its #run method.
-flow = Mantle::Flows::ChatFlow.new(
-  context_manager: context_manager,
+# 4. Build the Step Pipeline
+step = Mantle::Step.new(
   client: client,
-  logger: logger
+  on_status: ->(flag : Symbol) { puts "Step status: #{flag}" }
 )
 
 # 5. Execute a single turn
 puts "--- Starting Test Turn ---"
 
-# Register callback for tracking events
-Mantle.on_status_update = ->(flag : Symbol) do
-  message = case flag
-            when :new_context_file
-              "NOTICE: A fresh context file was created."
-            when :new_memory_file
-              "NOTICE: A fresh memory file was created."
-            when :memory_consolidation
-              "UI UPDATE: Memory consolidation is currently running in the background..."
-            else
-              nil
-            end
-
-  if message
-    # In a real app this would probably send to a bus, we'll just print it asynchronously
-    spawn do
-      puts message
-    end
-  end
-end
-
 input_text = "Hello! Are you running correctly?"
+context_manager.handle_user_message(input_text)
+result = step.run(context_manager.current_view)
 
-flow.run(
-  msg: input_text,
-  on_response: ->(resp : Mantle::Clients::Response) {
-    puts "User: #{input_text}"
-    if thinking = resp.thinking
-      puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
-    end
-    puts "Bot: #{resp.content}"
-  }
-)
+puts "User: #{input_text}"
+if thinking = result.thinking
+  puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+end
+if result.ok?
+  reply = result.unwrap
+  context_manager.handle_bot_message(reply)
+  puts "Bot: #{reply}"
+else
+  puts "Error: #{result.error}"
+end
 
 # 6. Verify the Context was updated
 puts "\n--- Final Context State ---"
 puts context_store.current_view
 
 # 7. Run multiple turns to cause memory to update
-# Here we rapidly loop to cause the `msg_hardmax` to be reached.
-# This pushes old messages out of context and triggers the MemoryStore
-# to squish/summarize them.
 puts "--- Starting Multi-Test Turn ---"
 13.times do
   input_text = "Testing. Is it still working?"
-  flow.run(
-    msg: input_text,
-    on_response: ->(resp : Mantle::Clients::Response) {
-      puts "User: #{input_text}"
-      if thinking = resp.thinking
-        puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
-      end
-      puts "Bot: #{resp.content}"
-    }
-  )
+  context_manager.handle_user_message(input_text)
+  turn_res = step.run(context_manager.current_view)
+  puts "User: #{input_text}"
+  if thinking = turn_res.thinking
+    puts "\e[2m🤔 [Thinking]\n#{thinking}\n[Response]\e[0m"
+  end
+  if turn_res.ok?
+    turn_reply = turn_res.unwrap
+    context_manager.handle_bot_message(turn_reply)
+    puts "Bot: #{turn_reply}"
+  end
 end
 
 # 7. Display Stats

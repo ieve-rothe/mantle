@@ -42,19 +42,31 @@ describe "Integration: Memory Consolidation" do
         Mantle::Clients::Response.new(content: "Response 3", tool_calls: nil),
       ])
 
-      flow = Mantle::Flows::ChatFlow.new(context_manager, client)
+      step = Mantle::Step.new(client)
 
       # 4. Run the simulation
       final_responses = [] of String
 
       # Interaction 1: Context messages = 2
-      flow.run("User message 1", on_response: ->(r : Mantle::Clients::Response) { final_responses << r.content.not_nil! })
+      context_manager.handle_user_message("User message 1")
+      res1 = step.run(context_manager.current_view)
+      final_responses << res1.unwrap
+      context_manager.handle_bot_message(res1.unwrap)
+      context_manager.check_and_consolidate
 
       # Interaction 2: Context messages = 4 (at msg_hardmax)
-      flow.run("User message 2", on_response: ->(r : Mantle::Clients::Response) { final_responses << r.content.not_nil! })
+      context_manager.handle_user_message("User message 2")
+      res2 = step.run(context_manager.current_view)
+      final_responses << res2.unwrap
+      context_manager.handle_bot_message(res2.unwrap)
+      context_manager.check_and_consolidate
 
       # Interaction 3: Context messages = 6 (triggers consolidation back to token_target: 2)
-      flow.run("User message 3", on_response: ->(r : Mantle::Clients::Response) { final_responses << r.content.not_nil! })
+      context_manager.handle_user_message("User message 3")
+      res3 = step.run(context_manager.current_view)
+      final_responses << res3.unwrap
+      context_manager.handle_bot_message(res3.unwrap)
+      context_manager.check_and_consolidate
 
       # 5. Assertions
       final_responses.should eq(["Response 1", "Response 2", "Response 3"])

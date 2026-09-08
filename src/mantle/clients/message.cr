@@ -18,4 +18,8 @@ module Mantle
     def initialize(@role : String, @content : String? = nil, @tool_calls : Array(Mantle::Clients::ToolCall)? = nil, @tool_call_id : String? = nil)
     end
   end
+
+  module Messages
+    alias Message = Mantle::Message
+  end
 end
