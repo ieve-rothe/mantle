@@ -6,6 +6,7 @@ This file tracks the status and priority of all tickets for the `mantle` framewo
 
 | Ticket ID | Title | Theme | Status | Priority | Last Updated |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| [TKT-006](file:///home/cam/repos/adjutant/mantle/notes/pm/open/TKT-006-refactor-flow-to-step.md) | Refactor Flow into Step, Introduce StepResult(T, E), and Remove Legacy Flow Hierarchy | Architecture / Steps | Open | High | 2026-09-08 |
 
 ## Closed Tickets
 
