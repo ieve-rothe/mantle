@@ -2,15 +2,14 @@
 # Copyright (C) 2026 Cam Carroll
 # Licensed under the AGPL-3.0. See LICENSE for details.
 #
-# Coordinates context routing from flow to ContextStore and MemoryStore
-
-require "../support/status"
-
 module Mantle::Storage
   # Coordinates context routing and consolidation between `ContextStore` and `JSONLayeredMemoryStore`.
   #
   # Responsible for assembling views, tracking token limits, and sliding older context into long-term layered memory.
   class ContextManager
+    # Represents the status update callback handler for context management events.
+    property on_status : Proc(Symbol, Nil)?
+
     # Represents the active `ContextStore` instance.
     property context_store : ContextStore
 
@@ -46,7 +45,8 @@ module Mantle::Storage
                    @token_target : Int32 = 2000,
                    @token_softmax : Int32 = 3000,
                    @token_hardmax : Int32 = 4000,
-                   @strip_thinking_tags : Bool = false)
+                   @strip_thinking_tags : Bool = false,
+                   @on_status : Proc(Symbol, Nil)? = nil)
     end
 
     # Assembles and returns the full conversation context as an array of messages.
@@ -119,7 +119,7 @@ module Mantle::Storage
       @context_store.add_message("Assistant", processed_msg, tool_calls)
 
       if @context_store.current_num_tokens >= @token_softmax
-        Mantle.emit_status(:context_softmax_exceeded)
+        @on_status.try &.call(:context_softmax_exceeded)
       end
 
       if check_consolidation && @context_store.current_num_tokens >= @token_hardmax
@@ -132,7 +132,7 @@ module Mantle::Storage
       @context_store.add_message(role, content, tool_calls, tool_call_id)
 
       if @context_store.current_num_tokens >= @token_softmax
-        Mantle.emit_status(:context_softmax_exceeded)
+        @on_status.try &.call(:context_softmax_exceeded)
       end
 
       if check_consolidation && @context_store.current_num_tokens >= @token_hardmax
@@ -156,7 +156,7 @@ module Mantle::Storage
 
     # Performs the consolidation process by pruning context and ingesting pruned messages into the memory store.
     def consolidate_memory
-      Mantle.emit_status(:memory_consolidation)
+      @on_status.try &.call(:memory_consolidation)
 
       Mantle::Log.info { "Context hit tokens #{@context_store.current_num_tokens} (threshold: #{@token_hardmax}). Consolidating Context -> Memory. Target context tokens: #{@token_target}." }
 
@@ -181,7 +181,7 @@ module Mantle::Storage
     # Consolidates all conversation messages in the context store into long-term memory
     # and clears the context store (0 tokens of conversation history left).
     def consolidate_all_to_memory(is_frame_switch : Bool = false)
-      Mantle.emit_status(:memory_consolidation)
+      @on_status.try &.call(:memory_consolidation)
 
       num_messages = @context_store.current_num_messages
       num_tokens = @context_store.current_num_tokens

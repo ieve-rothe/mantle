@@ -24,14 +24,23 @@ module Mantle::Flows
     # Represents the `Client` executing LLM requests.
     property client : Mantle::Clients::Client
 
+    # Represents the status update callback handler for flow status events.
+    property on_status : Proc(Symbol, Nil)?
+
     # Represents custom errors for flow operations.
     class InputError < Exception; end
 
-    # Creates a flow instance with *context_manager* and *client*.
+    # Creates a flow instance with *context_manager*, *client*, and optional *on_status* callback handler.
     def initialize(
       @context_manager : Mantle::Storage::ContextManager,
       @client : Mantle::Clients::Client,
+      @on_status : Proc(Symbol, Nil)? = nil,
     )
+    end
+
+    # Emits a status update *flag* to the registered instance callback handler if present.
+    protected def emit_status(flag : Symbol)
+      @on_status.try &.call(flag)
     end
 
     # Assembles context, sends it to the client, and executes *on_response* with the result.
@@ -59,7 +68,7 @@ module Mantle::Flows
 
         @context_manager.handle_bot_message(response_text)
         updated_context = @context_manager.current_view(ephemeral_blocks)
-        Mantle.emit_status(:idle)
+        emit_status(:idle)
 
         on_response.call(response)
       end
@@ -79,13 +88,14 @@ module Mantle::Flows
     # :nodoc:
     @depth : Int32
 
-    # Creates a tool-enabled chat flow with *context_manager*, *client*, and optional *depth*.
+    # Creates a tool-enabled chat flow with *context_manager*, *client*, optional *depth*, and optional *on_status* callback handler.
     def initialize(
       context_manager : Mantle::Storage::ContextManager,
       client : Mantle::Clients::Client,
       @depth : Int32 = 0,
+      on_status : Proc(Symbol, Nil)? = nil,
     )
-      super(context_manager, client)
+      super(context_manager, client, on_status)
     end
 
     # Runs the tool-enabled chat flow, processing LLM requests and executing tool calls in a loop until a final text response is produced.
@@ -232,7 +242,7 @@ module Mantle::Flows
       @context_manager.check_and_consolidate
 
       updated_context = @context_manager.current_view(ephemeral_blocks)
-      Mantle.emit_status(:idle)
+      emit_status(:idle)
 
       on_response.try(&.call(response))
     end
@@ -262,7 +272,7 @@ module Mantle::Flows
       @context_manager.check_and_consolidate
 
       updated_context = @context_manager.current_view(ephemeral_blocks)
-      Mantle.emit_status(:idle)
+      emit_status(:idle)
 
       synthetic_response = Mantle::Clients::Response.new(content: response_text, tool_calls: nil)
       on_response.try(&.call(synthetic_response))
@@ -284,7 +294,7 @@ module Mantle::Flows
       @context_manager.check_and_consolidate
 
       updated_context = @context_manager.current_view(ephemeral_blocks)
-      Mantle.emit_status(:idle)
+      emit_status(:idle)
 
       synthetic_response = Mantle::Clients::Response.new(content: success_msg, tool_calls: nil)
       on_response.try(&.call(synthetic_response))
@@ -299,7 +309,7 @@ module Mantle::Flows
       context_view : Array(Mantle::Message),
       failed_calls : Array({String, JSON::Any}),
     ) : Array(Mantle::Message)
-      Mantle.emit_status(:tool_loop)
+      emit_status(:tool_loop)
 
       # Add assistant message to context if there's content OR tool calls (defer consolidation)
       has_content = response.content && !response.content.not_nil!.empty?
@@ -337,7 +347,7 @@ module Mantle::Flows
 
       # Check consolidation now that the turn is complete
       @context_manager.check_and_consolidate
-      Mantle.emit_status(:idle)
+      emit_status(:idle)
 
       on_response.try(&.call(response))
     end

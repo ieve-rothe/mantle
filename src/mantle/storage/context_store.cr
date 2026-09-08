@@ -4,7 +4,6 @@
 
 require "json"
 require "digest/sha256"
-require "../support/status"
 require "./context_node"
 
 module Mantle::Storage
@@ -527,11 +526,9 @@ module Mantle::Storage
       rescue e : File::NotFoundError
         save_context_to_json
         Mantle::Log.warn { "Context file was not found - creating a new one." }
-        Mantle.emit_status(:new_context_file)
       rescue e : Exception
         Mantle::Log.warn { "Context file #{@context_file} could not be parsed as graph data (#{e.message}) - re-initializing." }
         clear
-        Mantle.emit_status(:new_context_file)
       end
     end
 

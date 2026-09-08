@@ -5,7 +5,6 @@
 # Manages memory for the agent.
 
 require "json"
-require "../support/status"
 
 module Mantle::Storage
   # Maybe write a base class once we have an implementation for Layered and then are going to add another type of memorystore
@@ -136,7 +135,6 @@ module Mantle::Storage
           end
 
           if current_layer_index != -1
-            Mantle.emit_status(:memory_consolidation)
             Mantle::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_token_capacity} tokens). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_token_target} tokens." }
           end
 
