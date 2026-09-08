@@ -25,6 +25,14 @@ class DummyLoggingTestClient < Mantle::Clients::Client
   end
 end
 
+class DummySecondaryClient < Mantle::Clients::Client
+  property model_name : String = "secondary-model"
+
+  def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
+    Mantle::Clients::Response.new(content: "Secondary response", tool_calls: nil)
+  end
+end
+
 describe Mantle::Clients::LoggingClient do
   temp_dir = File.join(Dir.tempdir, "logging_client_spec_#{Random.rand(100000)}")
 
@@ -144,5 +152,61 @@ describe Mantle::Clients::LoggingClient do
     lines = File.read_lines(log_file)
     json = JSON.parse(lines.first)
     json["sequence_id"].as_s.should eq("parent-seq")
+  end
+
+  it "shares unparameterized mutex and supports concurrent writes across different client specializations" do
+    log_file = File.join(temp_dir, "test_concurrent_specializations.jsonl")
+    client1 = Mantle::Clients::LoggingClient.new(DummyLoggingTestClient.new, log_file)
+    client2 = Mantle::Clients::LoggingClient.new(DummySecondaryClient.new, log_file)
+
+    messages1 = [Mantle::Message.new("user", "From client 1")]
+    messages2 = [Mantle::Message.new("user", "From client 2")]
+
+    done = Channel(Nil).new(2)
+
+    spawn do
+      10.times do |i|
+        Mantle::LogContext.with_sequence_id("client1-#{i}") do
+          client1.execute(messages1)
+        end
+      end
+      done.send(nil)
+    end
+
+    spawn do
+      10.times do |i|
+        Mantle::LogContext.with_sequence_id("client2-#{i}") do
+          client2.execute(messages2)
+        end
+      end
+      done.send(nil)
+    end
+
+    2.times { done.receive }
+
+    Mantle::Clients::ReceiptWriter.flush
+
+    File.exists?(log_file).should be_true
+    lines = File.read_lines(log_file)
+    lines.size.should eq(20)
+
+    models = lines.map { |l| JSON.parse(l)["model"].as_s }
+    models.count("dummy-model").should eq(10)
+    models.count("secondary-model").should eq(10)
+  end
+
+  it "guarantees ReceiptWriter.flush blocks until all queued writes have landed on disk" do
+    log_file = File.join(temp_dir, "test_flush_blocking.jsonl")
+    client = Mantle::Clients::LoggingClient.new(DummyLoggingTestClient.new, log_file)
+
+    50.times do |i|
+      client.execute([Mantle::Message.new("user", "Batch #{i}")])
+    end
+
+    # Explicit flush blocks until channel is empty and all 50 entries are flushed
+    Mantle::Clients::ReceiptWriter.flush
+
+    File.exists?(log_file).should be_true
+    File.read_lines(log_file).size.should eq(50)
   end
 end

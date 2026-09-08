@@ -10,12 +10,113 @@ require "time"
 require "uuid"
 
 module Mantle::Clients
+  # Background asynchronous writer that receives JSONL log receipts over a buffered Channel
+  # and writes them to disk using a single shared Mutex across all client specializations.
+  module ReceiptWriter
+    # Shared Mutex ensuring file writes are thread/fiber safe across all client specializations
+    class_getter file_mutex : Mutex = Mutex.new
+
+    # Record defining a receipt write task or a synchronization flush task
+    record Task,
+      log_file : String,
+      entry_json : String,
+      size_threshold : Int64,
+      sync_channel : Channel(Nil)? = nil
+
+    # Buffered channel for asynchronous receipt logging
+    class_getter channel : Channel(Task) = Channel(Task).new(1024)
+
+    # Worker state
+    @@worker_started : Bool = false
+    @@worker_mutex : Mutex = Mutex.new
+
+    # Track warned files across log destinations
+    @@warned_files = Set(String).new
+    @@warned_mutex = Mutex.new
+
+    # Ensures the background writer fiber is running
+    def self.ensure_worker_running
+      return if @@worker_started
+      @@worker_mutex.synchronize do
+        return if @@worker_started
+        @@worker_started = true
+        spawn(name: "mantle-receipt-logger") do
+          loop do
+            task = channel.receive
+            process_task(task)
+          end
+        end
+      end
+    end
+
+    # Enqueues a receipt for asynchronous writing and yields briefly to allow the worker fiber to run
+    def self.enqueue(task : Task)
+      ensure_worker_running
+      channel.send(task)
+      Fiber.yield
+    end
+
+    # Blocks execution until all tasks currently queued in the channel have been processed and written to disk.
+    def self.flush
+      ensure_worker_running
+      sync_ch = Channel(Nil).new
+      channel.send(Task.new(log_file: "", entry_json: "", size_threshold: 0_i64, sync_channel: sync_ch))
+      sync_ch.receive
+    end
+
+    private def self.process_task(task : Task)
+      unless task.entry_json.empty?
+        file_mutex.synchronize do
+          begin
+            dir = File.dirname(task.log_file)
+            Dir.mkdir_p(dir) unless Dir.exists?(dir)
+
+            File.open(task.log_file, "a") do |f|
+              f.puts(task.entry_json)
+              f.flush
+            end
+
+            check_file_size_warning(task.log_file, task.size_threshold)
+          rescue write_ex
+            Mantle::Log.error { "LoggingClient failed to write JSONL receipt to #{task.log_file}: #{write_ex.message}" }
+          end
+        end
+      end
+
+      if sync = task.sync_channel
+        sync.send(nil)
+      end
+    end
+
+    private def self.check_file_size_warning(log_file : String, threshold : Int64)
+      if File.exists?(log_file)
+        size = File.size(log_file)
+        if size > threshold
+          should_warn = false
+          @@warned_mutex.synchronize do
+            unless @@warned_files.includes?(log_file)
+              @@warned_files << log_file
+              should_warn = true
+            end
+          end
+          if should_warn
+            size_mb = (size.to_f / 1_048_576.0).round(2)
+            Mantle::Log.warn { "Warning: JSONL log file '#{log_file}' size (#{size_mb} MB) exceeds threshold. Please configure logrotate." }
+          end
+        else
+          @@warned_mutex.synchronize do
+            @@warned_files.delete(log_file)
+          end
+        end
+      end
+    rescue
+      # Ignore size check error
+    end
+  end
+
   # Decorator client that wraps an underlying client of type *T* to automatically log
   # every LLM call transaction as a structured JSONL receipt.
   class LoggingClient(T) < Client
-    # Class-level mutex to ensure thread-safe/fiber-safe appending to log files
-    @@file_mutex = Mutex.new
-
     # Represents the wrapped underlying client.
     property client : T
 
@@ -24,9 +125,6 @@ module Mantle::Clients
 
     # Threshold size in bytes (default 50MB) before triggering a logrotate warning.
     property size_warning_threshold_bytes : Int64
-
-    # Flag tracking whether warning has been emitted for current file size state
-    @warned_file_size : Bool = false
 
     # Creates a new `LoggingClient` decorating *client* and writing receipts to *log_file*.
     def initialize(
@@ -91,6 +189,16 @@ module Mantle::Clients
       @client.temperature = value
     end
 
+    # Flushes all pending receipt log writes to disk.
+    def flush
+      ReceiptWriter.flush
+    end
+
+    # Flushes all pending receipt log writes to disk across all client specializations.
+    def self.flush
+      ReceiptWriter.flush
+    end
+
     # Delegate all unhandled methods (such as `max_tokens`, `api_url`, etc.) to `@client`.
     forward_missing_to @client
 
@@ -125,38 +233,13 @@ module Mantle::Clients
         "error_message" => error_message,
       }
 
-      @@file_mutex.synchronize do
-        begin
-          dir = File.dirname(@log_file)
-          Dir.mkdir_p(dir) unless Dir.exists?(dir)
-
-          File.open(@log_file, "a") do |f|
-            entry.to_json(f)
-            f.puts
-          end
-
-          check_file_size_warning
-        rescue write_ex
-          Mantle::Log.error { "LoggingClient failed to write JSONL receipt to #{@log_file}: #{write_ex.message}" }
-        end
-      end
-    end
-
-    private def check_file_size_warning
-      if File.exists?(@log_file)
-        size = File.size(@log_file)
-        if size > @size_warning_threshold_bytes
-          unless @warned_file_size
-            @warned_file_size = true
-            size_mb = (size.to_f / 1_048_576.0).round(2)
-            Mantle::Log.warn { "Warning: JSONL log file '#{@log_file}' size (#{size_mb} MB) exceeds threshold. Please configure logrotate." }
-          end
-        else
-          @warned_file_size = false
-        end
-      end
-    rescue
-      # Ignore size check error
+      ReceiptWriter.enqueue(
+        ReceiptWriter::Task.new(
+          log_file: @log_file,
+          entry_json: entry.to_json,
+          size_threshold: @size_warning_threshold_bytes
+        )
+      )
     end
   end
 end

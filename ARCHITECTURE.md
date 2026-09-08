@@ -36,7 +36,7 @@ Mantle is a Crystal framework for abstracting LLM interactions into composable F
 
 **Key Classes**:
 - `Client`: Abstract base class defining the contract for LLM API interactions
-- `LlamaClient`: Concrete implementation for Ollama-compatible APIs
+- `OllamaClient`: Concrete implementation for Ollama APIs
 - `ModelConfig`: Record type for configuration (model name, streaming, temperature, top_p, max_tokens, api_url)
 - `Response`: Return type containing optional `content` (text) and `tool_calls` (array)
 - `ToolCall`: Represents a tool invocation from the LLM
@@ -140,7 +140,7 @@ end
 **Per-Call LLM Logging**: Use `Mantle::Clients::LoggingClient` to wrap any client and automatically write structured JSONL receipts for every LLM interaction:
 
 ```crystal
-base_client = Mantle::Clients::LlamaClient.new(model_config)
+base_client = Mantle::Clients::OllamaClient.new(model_config)
 client = Mantle::Clients::LoggingClient.new(base_client, "logs/llm_receipts.jsonl")
 ```
 

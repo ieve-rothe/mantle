@@ -31,7 +31,7 @@ model_config = Mantle::Clients::ModelConfig.new(
 user_name = "Username"
 bot_name = "Botname"
 
-client = Mantle::Clients::LlamaClient.new(model_config)
+client = Mantle::Clients::OllamaClient.new(model_config)
 logger = Mantle::Support::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)
 
 # Define the system prompt for the context window

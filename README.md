@@ -32,7 +32,7 @@ Mantle is a framework to abstract details of communication to LLMs away, to help
 
 1. The Most Basic Client
 > See [example: basic client](examples/01_basic_client.cr)
-- **Client**: Handles sending message and getting a response from an LLM provider (currently only supporting Ollama via `Mantle::LlamaClient`), with configuration set by a `Mantle::ModelConfig` object.
+- **Client**: Handles sending message and getting a response from an LLM provider (currently only supporting Ollama via `Mantle::Clients::OllamaClient`), with configuration set by a `Mantle::Clients::ModelConfig` object.
 
 2. Chat Flow with Context and Memory Management
 > See [example: chat flow](examples/02_chat_flow.cr)

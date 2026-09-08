@@ -15,7 +15,7 @@ require "../src/mantle"
 puts "--- Level 2: Chat Flow ---"
 
 # 1. Setup the Client
-client = Mantle::Clients::LlamaClient.new(
+client = Mantle::Clients::OllamaClient.new(
   Mantle::Clients::ModelConfig.new(
     model_name: "gpt-oss:20b",
     stream: false,

@@ -60,8 +60,8 @@ model_config = Mantle::Clients::ModelConfig.new(
 user_name = "Username"
 bot_name = "Botname"
 
-# Use LlamaClient to communicate with the model configured above.
-client = Mantle::Clients::LlamaClient.new(model_config)
+# Use OllamaClient to communicate with the model configured above.
+client = Mantle::Clients::OllamaClient.new(model_config)
 
 # A Logger persists plain-text or rich output logs for humans to read
 logger = Mantle::Support::FileLogger.new(LOG_FILE, user_name, bot_name, include_thinking: true)

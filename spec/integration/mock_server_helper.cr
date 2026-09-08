@@ -1,9 +1,15 @@
 require "socket"
 require "time"
 
-MOCK_PORT    = 11435
-FIXTURE_PATH = File.expand_path("../../../empaws/.empaws_local/llm_calls.jsonl", __DIR__)
-MOCK_BIN     = File.expand_path("../../../llm_mock/bin/llm_mock", __DIR__)
+MOCK_PORT = 11435
+
+WORKSPACE_ROOT = [
+  File.expand_path("../../../", __DIR__),
+  File.expand_path("../../../../", __DIR__),
+].find { |path| File.exists?(File.join(path, "llm_mock")) } || File.expand_path("../../../", __DIR__)
+
+FIXTURE_PATH = File.join(WORKSPACE_ROOT, "empaws/.empaws_local/llm_calls.jsonl")
+MOCK_BIN     = File.join(WORKSPACE_ROOT, "llm_mock/bin/llm_mock")
 
 module LlmMockHelper
   @@process : Process? = nil

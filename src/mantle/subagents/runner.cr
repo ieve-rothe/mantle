@@ -175,20 +175,20 @@ module Mantle::Subagents
     end
 
     private def get_max_tokens(client : Mantle::Clients::Client) : Int32?
-      if client.is_a?(Mantle::Clients::LlamaClient)
-        client.as(Mantle::Clients::LlamaClient).max_tokens
-      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::LlamaClient))
-        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::LlamaClient)).client.max_tokens
+      if client.is_a?(Mantle::Clients::OllamaClient)
+        client.as(Mantle::Clients::OllamaClient).max_tokens
+      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient))
+        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient)).client.max_tokens
       else
         nil
       end
     end
 
     private def set_max_tokens(client : Mantle::Clients::Client, value : Int32)
-      if client.is_a?(Mantle::Clients::LlamaClient)
-        client.as(Mantle::Clients::LlamaClient).max_tokens = value
-      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::LlamaClient))
-        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::LlamaClient)).client.max_tokens = value
+      if client.is_a?(Mantle::Clients::OllamaClient)
+        client.as(Mantle::Clients::OllamaClient).max_tokens = value
+      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient))
+        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient)).client.max_tokens = value
       end
     end
 

@@ -6,7 +6,7 @@
 #
 # This example demonstrates the absolute minimum required to talk to an LLM
 # using Mantle. We don't use any Flows, Context Managers, or Memory stores here,
-# we just use the LlamaClient to send a prompt and get a response.
+# we just use the OllamaClient to send a prompt and get a response.
 
 require "../src/mantle"
 
@@ -25,7 +25,7 @@ config = Mantle::Clients::ModelConfig.new(
 )
 
 # 2. Initialize the Client
-client = Mantle::Clients::LlamaClient.new(config)
+client = Mantle::Clients::OllamaClient.new(config)
 
 # 3. Create a payload
 # The client expects an array of messages representing the conversation history.

@@ -14,7 +14,7 @@ require "../src/mantle"
 puts "--- Level 3: Tool Calling ---"
 
 # 1. Setup Client, Context, and Memory (same as Level 2)
-client = Mantle::Clients::LlamaClient.new(
+client = Mantle::Clients::OllamaClient.new(
   Mantle::Clients::ModelConfig.new(
     model_name: "gpt-oss:20b",
     stream: false,

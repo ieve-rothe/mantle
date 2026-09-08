@@ -84,7 +84,7 @@ model_config = Mantle::Clients::ModelConfig.new(
   "http://localhost:11434/api/chat" # Ollama API URL
 )
 
-client = Mantle::Clients::LlamaClient.new(model_config)
+client = Mantle::Clients::OllamaClient.new(model_config)
 
 # Use JSON-backed context store for persistence
 context_store = Mantle::Storage::JSONContextStore.new(

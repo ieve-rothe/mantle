@@ -167,7 +167,7 @@ Crystal is statically typed and performs type checking during compilation. Type 
 context_store = Mantle::EphemeralSlidingContextStore.new(system_prompt, 50)
 memory_store = Mantle::JSONLayeredMemoryStore.new(...)
 context_manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
-client = Mantle::LlamaClient.new(model_config)
+client = Mantle::Clients::OllamaClient.new(model_config)
 
 # Create flow
 flow = Mantle::ChatFlow.new(context_manager, client)
@@ -218,7 +218,7 @@ Quick reference for finding code:
 ```
 src/mantle/
 ├── flow.cr              # Flow, ChatFlow, ToolEnabledChatFlow
-├── client.cr            # Client, LlamaClient, Response types
+├── client.cr            # Client, OllamaClient, Response types
 ├── tools.cr             # Tool definition structs
 ├── builtin_tools.cr     # Built-in tools (ReadFile, ListDirectory)
 ├── tool_executor.cr     # Routes tool calls to handlers

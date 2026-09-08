@@ -15,7 +15,7 @@ describe "Integration: LLM Mock Replay Server" do
       max_tokens: 700,
       api_url: "http://127.0.0.1:#{MOCK_PORT}/api/chat"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     # Load prompt from line 1 of llm_calls.jsonl
     line = File.read_lines(FIXTURE_PATH)[0]
@@ -40,7 +40,7 @@ describe "Integration: LLM Mock Replay Server" do
       max_tokens: 700,
       api_url: "http://127.0.0.1:#{MOCK_PORT}/api/chat"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     # Load prompt from line 2 of llm_calls.jsonl (write_file tool call)
     line = File.read_lines(FIXTURE_PATH)[1]
@@ -67,7 +67,7 @@ describe "Integration: LLM Mock Replay Server" do
       max_tokens: 700,
       api_url: "http://127.0.0.1:#{MOCK_PORT}/api/chat"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     # Load prompt from line 3 of llm_calls.jsonl
     line = File.read_lines(FIXTURE_PATH)[2]
@@ -91,7 +91,7 @@ describe "Integration: LLM Mock Replay Server" do
       max_tokens: 700,
       api_url: "http://127.0.0.1:#{MOCK_PORT}/api/chat"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     unknown_messages = [
       Mantle::Message.new("system", "System prompt"),
@@ -112,7 +112,7 @@ describe "Integration: LLM Mock Replay Server" do
       max_tokens: 700,
       api_url: "http://127.0.0.1:#{MOCK_PORT}/api/chat"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     line = File.read_lines(FIXTURE_PATH)[0]
     parsed = JSON.parse(line)

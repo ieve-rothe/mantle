@@ -165,7 +165,7 @@ describe Mantle::Clients::Client do
       700,                      # max_tokens
       "http://localhost:43000/" # api_url
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     # Mock response from /chat endpoint
     api_response = {
@@ -241,7 +241,7 @@ describe Mantle::Clients::Client do
     model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43001/"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     # Define a test tool
     test_tool = Mantle::Tools::Tool.new(
@@ -303,7 +303,7 @@ describe Mantle::Clients::Client do
     model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43002/"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     # Mock response with tool_calls
     api_response = {
@@ -354,7 +354,7 @@ describe Mantle::Clients::Client do
     model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43003/"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     # Mock response with both
     api_response = {
@@ -402,7 +402,7 @@ describe Mantle::Clients::Client do
     model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43004/", keep_alive: "5m"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     api_response = {
       "model": "test-model",
@@ -442,7 +442,7 @@ describe Mantle::Clients::Client do
     model_config = Mantle::Clients::ModelConfig.new(
       "test-model", false, 0.6, 0.7, 700, "http://localhost:43005/"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     api_response = {
       "model": "test-model",
@@ -480,7 +480,7 @@ describe Mantle::Clients::Client do
     model_config = Mantle::Clients::ModelConfig.new(
       "reasoning-model", true, 0.6, 0.7, 100, "http://localhost:43006/"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     # Simulate Ollama streaming lines where thinking exhausts token limit
     stream_chunks = [
@@ -522,7 +522,7 @@ describe Mantle::Clients::Client do
     model_config = Mantle::Clients::ModelConfig.new(
       "thinking-model", false, 0.6, 0.7, 700, "http://localhost:43007/"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     api_response = {
       "model": "thinking-model",
@@ -555,7 +555,7 @@ describe Mantle::Clients::Client do
     model_config = Mantle::Clients::ModelConfig.new(
       "thinking-model", true, 0.6, 0.7, 700, "http://localhost:43008/"
     )
-    client = Mantle::Clients::LlamaClient.new(model_config)
+    client = Mantle::Clients::OllamaClient.new(model_config)
 
     stream_chunks = [
       {"model" => "thinking-model", "message" => {"role" => "assistant", "content" => "<think>Reasoning line 1\n"}, "done" => false}.to_json,
