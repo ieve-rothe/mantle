@@ -331,7 +331,6 @@ src/mantle/
 │   └── logging_client.cr    # JSONL receipt logger wrapping any Client
 └── support/
     ├── log_context.cr       # Fiber-safe sequence ID for tracing LLM calls
-    ├── markdown_formatter.cr # Light terminal markdown to ANSI formatter
     ├── squishifiers.cr      # Helper functions for building summarization procs
     ├── status.cr            # Status emission system
     └── text.cr              # Text truncation and sanitization utilities
