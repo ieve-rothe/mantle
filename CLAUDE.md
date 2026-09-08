@@ -49,9 +49,9 @@ Crystal is statically typed and performs type checking during compilation. Type 
 ### Design Patterns
 
 **Abstract Classes for Contracts**
-- Use abstract base classes to define interfaces (e.g., `Client`, `Logger`)
+- Use abstract base classes to define interfaces (e.g., `Client`)
 - Enables testing with dummy implementations
-- Example: `DummyClient`, `DummyLogger` in specs
+- Example: `DummyClient` in specs
 
 **Record Types for Configuration**
 - Use Crystal's `record` macro for immutable configuration objects
@@ -59,7 +59,7 @@ Crystal is statically typed and performs type checking during compilation. Type 
 - Keeps configuration simple and type-safe
 
 **Composition Over Inheritance**
-- Flow composes `context_manager`, `client`, and `logger` rather than inheriting
+- Flow composes `context_manager` and `client` rather than inheriting
 - Components can be swapped independently
 - Easier to test in isolation
 
@@ -83,7 +83,7 @@ Crystal is statically typed and performs type checking during compilation. Type 
 - Example: `/tmp/test_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}.txt`
 
 **Dummy Implementations**
-- Create dummy classes for testing (`DummyContextStore`, `DummyLogger`, `DummyClient`)
+- Create dummy classes for testing (`DummyContextStore`, `DummyClient`)
 - Implement abstract methods as no-ops or simple returns
 - Isolates components for focused unit testing
 
@@ -103,7 +103,7 @@ Crystal is statically typed and performs type checking during compilation. Type 
 - Enables testing and alternative implementations
 
 ### Flow Interface
-- Base `Flow` class coordinates context, client, and logger
+- Base `Flow` class coordinates context and client
 - `ChatFlow` for basic interactions (extracts text from Response)
 - `ToolEnabledChatFlow` for tool calling (handles loop automatically)
 - Use `on_response` callback pattern for streaming or custom handling
@@ -113,10 +113,11 @@ Crystal is statically typed and performs type checking during compilation. Type 
 - Message format: `{"role" => "user|assistant|system", "content" => "..."}`
 - Handle message formatting internally (don't expose raw storage format)
 
-### Logger Interface
-- Abstract `Logger` class for pluggable implementations
-- `log_message(label, message, context)` is the primary method
-- Use `DummyLogger` pattern for tests (no-ops)
+### Application Logging
+- Mantle defines `Mantle::Log = ::Log.for("mantle")` in the main module
+- Consumer apps configure routing via `::Log.setup { |c| c.bind("mantle", :debug, backend) }`
+- For per-call LLM logging, wrap clients with `Mantle::Clients::LoggingClient` for structured JSONL receipts
+- See `ARCHITECTURE.md` for full setup examples
 
 ### Tool Interfaces
 - Tool definitions use `JSON::Serializable` for API compatibility
@@ -167,10 +168,9 @@ context_store = Mantle::EphemeralSlidingContextStore.new(system_prompt, 50)
 memory_store = Mantle::JSONLayeredMemoryStore.new(...)
 context_manager = Mantle::ContextManager.new(context_store, memory_store, "User", "Bot")
 client = Mantle::LlamaClient.new(model_config)
-logger = Mantle::FileLogger.new("/tmp/log.txt", "User", "Bot")
 
 # Create flow
-flow = Mantle::ChatFlow.new(context_manager, client, logger)
+flow = Mantle::ChatFlow.new(context_manager, client)
 
 # Run
 flow.run("Hello!", ->(response : String) { puts response })
@@ -179,7 +179,7 @@ flow.run("Hello!", ->(response : String) { puts response })
 ### Using Tool Calling
 ```crystal
 # Use ToolEnabledChatFlow instead
-flow = Mantle::ToolEnabledChatFlow.new(context_manager, client, logger)
+flow = Mantle::ToolEnabledChatFlow.new(context_manager, client)
 
 # With built-in tools
 flow.run(
@@ -204,10 +204,9 @@ flow.run(
 context_store = DummyContextStore.new
 context_manager = DummyContextManager.new(context_store)
 client = DummyClient.new  # Returns Response.new(content: "Simulated", tool_calls: nil)
-logger = DummyLogger.new
 
 # Test flow in isolation
-flow = Mantle::ChatFlow.new(context_manager, client, logger)
+flow = Mantle::ChatFlow.new(context_manager, client)
 ```
 
 ---
@@ -226,7 +225,6 @@ src/mantle/
 ├── tool_formatter.cr    # Converts tool calls to natural language
 ├── context_store.cr     # Short-term conversation context
 ├── context_manager.cr   # Combines context + memory
-├── logger.cr            # Logging abstractions
 └── memory_store.cr      # Long-term memory with consolidation
 
 spec/

@@ -42,9 +42,7 @@ describe "Integration: Memory Consolidation" do
         Mantle::Clients::Response.new(content: "Response 3", tool_calls: nil)
       ])
 
-      logger = DummyLogger.new
-
-      flow = Mantle::Flows::ChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ChatFlow.new(context_manager, client)
 
       # 4. Run the simulation
       final_responses = [] of String

@@ -137,7 +137,7 @@ module Mantle::Clients
 
           check_file_size_warning
         rescue write_ex
-          Mantle::Support::Log.error { "LoggingClient failed to write JSONL receipt to #{@log_file}: #{write_ex.message}" }
+          Mantle::Log.error { "LoggingClient failed to write JSONL receipt to #{@log_file}: #{write_ex.message}" }
         end
       end
     end
@@ -149,7 +149,7 @@ module Mantle::Clients
           unless @warned_file_size
             @warned_file_size = true
             size_mb = (size.to_f / 1_048_576.0).round(2)
-            Mantle::Support::Log.warn { "Warning: JSONL log file '#{@log_file}' size (#{size_mb} MB) exceeds threshold. Please configure logrotate." }
+            Mantle::Log.warn { "Warning: JSONL log file '#{@log_file}' size (#{size_mb} MB) exceeds threshold. Please configure logrotate." }
           end
         else
           @warned_file_size = false

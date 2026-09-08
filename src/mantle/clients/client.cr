@@ -7,7 +7,6 @@ require "http/client"
 require "json"
 require "random/secure"
 require "../tools/tools"
-require "../support/app_logger"
 
 module Mantle::Clients
   # Represents the configuration options for an LLM client.
@@ -323,7 +322,7 @@ module Mantle::Clients
         end
 
         if resp.truncated_in_thinking?
-          Mantle::Support::Log.warn {
+          Mantle::Log.warn {
             "LLM generation was truncated during the thinking phase (hit max_tokens limit #{@max_tokens} before generating any content or tool calls). Consider increasing max_tokens or disabling thinking."
           }
         end
@@ -367,7 +366,7 @@ module Mantle::Clients
         end
 
         if resp.truncated_in_thinking?
-          Mantle::Support::Log.warn {
+          Mantle::Log.warn {
             "LLM generation was truncated during the thinking phase (hit max_tokens limit #{@max_tokens} before generating any content or tool calls). Consider increasing max_tokens or disabling thinking."
           }
         end

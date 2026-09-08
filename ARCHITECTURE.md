@@ -24,9 +24,9 @@ Mantle is a Crystal framework for abstracting LLM interactions into composable F
 **Responsibilities**:
 - Represents self-contained blocks of work (planning, reflection, tool execution, etc.)
 - Each flow has a `run(msg : String, on_response : Proc(Mantle::Clients::Response, Nil))` method that assembles context, sends to client, and handles response
-- Coordinates between: context store (manages conversation), client (API communication), and logger (output tracking)
+- Coordinates between: context store (manages conversation) and client (API communication)
 
-**Design**: Uses composition over inheritance - Flow composes context_manager, client, and logger rather than inheriting functionality
+**Design**: Uses composition over inheritance - Flow composes context_manager and client rather than inheriting functionality
 
 ---
 
@@ -122,16 +122,29 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Mantl
 
 ---
 
-### Logger (`src/mantle/support/logger.cr`)
+### Application Logging
 
-**Purpose**: Pluggable logging for tracking conversations
+Mantle uses Crystal's built-in `::Log` framework with source `"mantle"`. The `Mantle::Log` constant is defined in the main `mantle.cr` entry point. Consumer applications are responsible for configuring log routing:
 
-**Key Classes**:
-- `Logger`: Abstract base class
-- `FileLogger`: Writes formatted timestamped entries to file with ASCII dividers
-- `DetailedLogger`: Extends FileLogger to write context, user messages, and bot messages to separate files
+```crystal
+::Log.setup do |c|
+  # Route mantle library logs to a file
+  backend = ::Log::IOBackend.new(io: File.new("app.log", "a"))
+  c.bind("mantle", :debug, backend)
 
-**Design**: Abstract class pattern enables testing with DummyLogger (no-op implementation)
+  # Or route to STDOUT for development
+  c.bind("mantle", :info, ::Log::IOBackend.new)
+end
+```
+
+**Per-Call LLM Logging**: Use `Mantle::Clients::LoggingClient` to wrap any client and automatically write structured JSONL receipts for every LLM interaction:
+
+```crystal
+base_client = Mantle::Clients::LlamaClient.new(model_config)
+client = Mantle::Clients::LoggingClient.new(base_client, "logs/llm_receipts.jsonl")
+```
+
+Each receipt includes: timestamp, model, input hash, full prompt, raw output (content, thinking, tool_calls, token counts), latency, and status. Receipts within the same turn share a `sequence_id` via `Mantle::LogContext`.
 
 ---
 
@@ -245,7 +258,6 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Mantl
 **Constructor Parameters**:
 - `context_manager`: ContextManager instance
 - `client`: Client instance
-- `logger`: Logger instance
 - `depth`: Subagent nesting depth (default: 0)
 
 **Tool Call Loop**:
@@ -276,7 +288,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Mantl
 ## Design Patterns
 
 ### Abstract Classes for Contracts
-- `Client` and `Logger` use abstract base classes
+- `Client` uses abstract base classes
 - Enables testing with dummy implementations
 - Supports alternative implementations (e.g., different LLM providers)
 
@@ -286,7 +298,7 @@ abstract def execute(messages : Array(Hash(String, String)), tools : Array(Mantl
 - Positional arguments (not named)
 
 ### Composition Over Inheritance
-- Flow composes context_manager, client, and logger
+- Flow composes context_manager and client
 - Components can be swapped independently
 - Easier to test in isolation
 
@@ -314,27 +326,31 @@ src/mantle/
 │   ├── context_store.cr     # Context management with multiple strategies
 │   ├── context_manager.cr   # High-level interface combining context and memory
 │   └── memory_store.cr      # Hierarchical long-term memory with consolidation
+├── clients/
+│   ├── client.cr            # LLM client abstractions, Response types
+│   └── logging_client.cr    # JSONL receipt logger wrapping any Client
 └── support/
-    ├── app_logger.cr        # Provides the default log for the library
-    ├── logger.cr            # Logging abstractions and file-based implementations
+    ├── log_context.cr       # Fiber-safe sequence ID for tracing LLM calls
     ├── markdown_formatter.cr # Light terminal markdown to ANSI formatter
     ├── squishifiers.cr      # Helper functions for building summarization procs
-    └── status.cr            # Status emission system
+    ├── status.cr            # Status emission system
+    └── text.cr              # Text truncation and sanitization utilities
 
 spec/
 ├── context_store_spec.cr    # Comprehensive context store tests
 ├── client_spec.cr           # Client and Response type tests
+├── clients/
+│   └── logging_client_spec.cr # LoggingClient JSONL receipt tests
 ├── tools_spec.cr            # Tool definition struct tests
 ├── builtin_tools_spec.cr    # Built-in tool registry and executor tests
 ├── tool_formatter_spec.cr   # Tool formatting tests
 ├── tool_executor_spec.cr    # Tool execution coordinator tests
 ├── tool_flow_spec.cr        # ToolEnabledChatFlow tests
-└── mantle_spec.cr          # Main library tests
+└── mantle_spec.cr           # Main library tests
 
 examples/
-├── basic_app.cr         # Basic usage example
-├── logger_test.cr       # Logger demonstration
-└── tool_calling_app.cr  # Tool calling demonstration with built-in and custom tools
+├── basic_app.cr             # Basic usage example
+└── tool_calling_app.cr      # Tool calling demonstration with built-in and custom tools
 ```
 
 ---

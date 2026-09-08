@@ -7,8 +7,7 @@ describe Mantle::Flows::ChatFlow do
     store = DummyContextStore.new("Sys Prompt")
     context_manager = DummyContextManager.new(store)
     client = DummyClient.new
-    logger = DummyLogger.new
-    flow = Mantle::Flows::ChatFlow.new(context_manager, client, logger)
+    flow = Mantle::Flows::ChatFlow.new(context_manager, client)
 
     # Act
     flow.run("Hello", ->(msg : Mantle::Clients::Response) { })
@@ -36,8 +35,7 @@ describe Mantle::Flows::ChatFlow do
     store = DummyContextStore.new("Sys Prompt")
     context_manager = DummyContextManager.new(store)
     client = DummyClient.new
-    logger = DummyLogger.new
-    flow = Mantle::Flows::ChatFlow.new(context_manager, client, logger)
+    flow = Mantle::Flows::ChatFlow.new(context_manager, client)
     captured_message = ""
     callback = ->(msg : Mantle::Clients::Response) { captured_message = msg.content.not_nil! }
 
@@ -53,8 +51,7 @@ describe Mantle::Flows::ChatFlow do
     store = DummyContextStore.new("Sys Prompt")
     context_manager = DummyContextManager.new(store)
     client = DummyClient.new
-    logger = DummyLogger.new
-    flow = Mantle::Flows::ChatFlow.new(context_manager, client, logger)
+    flow = Mantle::Flows::ChatFlow.new(context_manager, client)
 
     # Act
     flow.run("Turn 1", ->(msg : Mantle::Clients::Response) { })

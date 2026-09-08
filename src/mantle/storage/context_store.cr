@@ -4,7 +4,6 @@
 
 require "json"
 require "digest/sha256"
-require "../support/app_logger"
 require "../support/status"
 require "./context_node"
 
@@ -512,7 +511,7 @@ module Mantle::Storage
         File.open(tmp_file, "w") { |f| data.to_json(f) }
         File.rename(tmp_file, @context_file)
       rescue e : Exception
-        Mantle::Support::Log.error { "Failed to save context to #{@context_file}: #{e.message}" }
+        Mantle::Log.error { "Failed to save context to #{@context_file}: #{e.message}" }
       end
     end
 
@@ -524,13 +523,13 @@ module Mantle::Storage
         @pruned_node_ids = data.pruned_node_ids
         rebuild_children_index
         @current_num_messages = current_view.size
-        Mantle::Support::Log.info { "Loaded context from #{@context_file}" }
+        Mantle::Log.info { "Loaded context from #{@context_file}" }
       rescue e : File::NotFoundError
         save_context_to_json
-        Mantle::Support::Log.warn { "Context file was not found - creating a new one." }
+        Mantle::Log.warn { "Context file was not found - creating a new one." }
         Mantle.emit_status(:new_context_file)
       rescue e : Exception
-        Mantle::Support::Log.warn { "Context file #{@context_file} could not be parsed as graph data (#{e.message}) - re-initializing." }
+        Mantle::Log.warn { "Context file #{@context_file} could not be parsed as graph data (#{e.message}) - re-initializing." }
         clear
         Mantle.emit_status(:new_context_file)
       end

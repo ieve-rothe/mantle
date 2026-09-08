@@ -8,7 +8,6 @@ describe "Integration: Tool Loops" do
     begin
       context_store = Mantle::Storage::JSONContextStore.new("System prompt", context_file)
       context_manager = DummyContextManager.new(context_store)
-      logger = DummyLogger.new
 
       client = ScriptedClient.new([
         # Response 1: LLM decides to call "tool_A"
@@ -79,7 +78,7 @@ describe "Integration: Tool Loops" do
         end
       }
 
-      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
 
       final_response = nil
       flow.run(

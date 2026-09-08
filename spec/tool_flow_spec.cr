@@ -27,14 +27,13 @@ describe "Mantle ToolEnabledChatFlow" do
     it "works like regular ChatFlow when no tools provided" do
       context_store = DummyContextStore.new
       context_manager = DummyContextManager.new(context_store)
-      logger = DummyLogger.new
 
       # Client returns simple text response
       client = ToolCallMockClient.new([
         Mantle::Clients::Response.new(content: "Hello!", tool_calls: nil)
       ])
 
-      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
 
       response_received = nil
       flow.run(
@@ -51,7 +50,6 @@ describe "Mantle ToolEnabledChatFlow" do
     it "detects tool call, executes it, and continues until text response" do
       context_store = DummyContextStore.new
       context_manager = DummyContextManager.new(context_store)
-      logger = DummyLogger.new
 
       # Simulate: LLM calls tool, then responds with text
       client = ToolCallMockClient.new([
@@ -93,7 +91,7 @@ describe "Mantle ToolEnabledChatFlow" do
         )
       ]
 
-      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
 
       final_response = nil
       flow.run(
@@ -110,7 +108,6 @@ describe "Mantle ToolEnabledChatFlow" do
     it "enforces max_iterations limit" do
       context_store = DummyContextStore.new
       context_manager = DummyContextManager.new(context_store)
-      logger = DummyLogger.new
 
       # Client always returns tool calls (infinite loop scenario)
       tool_call_response = Mantle::Clients::Response.new(
@@ -147,7 +144,7 @@ describe "Mantle ToolEnabledChatFlow" do
         )
       ]
 
-      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
 
       final_response = nil
       flow.run(
@@ -172,7 +169,6 @@ describe "Mantle ToolEnabledChatFlow" do
       begin
         context_store = DummyContextStore.new
         context_manager = DummyContextManager.new(context_store)
-        logger = DummyLogger.new
 
         client = ToolCallMockClient.new([
           Mantle::Clients::Response.new(
@@ -196,7 +192,7 @@ describe "Mantle ToolEnabledChatFlow" do
           allowed_paths: ["/tmp"]
         )
 
-        flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+        flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
 
         final_response = nil
         flow.run(
@@ -229,7 +225,6 @@ describe "Mantle ToolEnabledChatFlow" do
       begin
         context_store = DummyContextStore.new
         context_manager = DummyContextManager.new(context_store)
-        logger = DummyLogger.new
 
         client = ToolCallMockClient.new([
           # Call built-in tool
@@ -287,7 +282,7 @@ describe "Mantle ToolEnabledChatFlow" do
           allowed_paths: ["/tmp"]
         )
 
-        flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+        flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
 
         final_response = nil
         flow.run(
@@ -328,8 +323,7 @@ describe "Subagent depth kill-switch" do
       Mantle::Clients::Response.new(content: "The time is 3:00 PM", tool_calls: nil)
     ])
     
-    logger = DummyLogger.new
-    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 0)
+    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, depth: 0)
     
     # Act
     tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
@@ -363,8 +357,7 @@ describe "Subagent depth kill-switch" do
     # Client should receive NO tools in the execute call
     client = DummyClient.new
     
-    logger = DummyLogger.new
-    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 1)
+    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, depth: 1)
     
     # Act
     custom_tools = [Mantle::Tools::Tool.new(
@@ -392,8 +385,7 @@ describe "Subagent depth kill-switch" do
     context_manager = DummyContextManager.new(context_store)
     
     client = DummyClient.new
-    logger = DummyLogger.new
-    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger, depth: 2)
+    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, depth: 2)
     
     # Act
     custom_tools = [Mantle::Tools::Tool.new(
@@ -434,9 +426,8 @@ describe "Subagent depth kill-switch" do
       Mantle::Clients::Response.new(content: "Done", tool_calls: nil)
     ])
     
-    logger = DummyLogger.new
     # Don't pass depth parameter - should default to 0
-    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+    flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
     
     # Act
     custom_tools = [Mantle::Tools::Tool.new(
@@ -462,7 +453,6 @@ describe "Subagent depth kill-switch" do
     it "aborts and returns synthetic response when same tool fails with same args twice" do
       context_store = DummyContextStore.new
       context_manager = DummyContextManager.new(context_store)
-      logger = DummyLogger.new
 
       # Client repeatedly calls the same failed tool
       client = ToolCallMockClient.new([
@@ -515,7 +505,7 @@ describe "Subagent depth kill-switch" do
         )
       ]
 
-      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
 
       final_response = nil
       flow.run(
@@ -534,7 +524,6 @@ describe "Subagent depth kill-switch" do
     it "aborts immediately when a tool callback raises TerminalToolError" do
       context_store = DummyContextStore.new
       context_manager = DummyContextManager.new(context_store)
-      logger = DummyLogger.new
 
       client = ToolCallMockClient.new([
         Mantle::Clients::Response.new(
@@ -569,7 +558,7 @@ describe "Subagent depth kill-switch" do
         )
       ]
 
-      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, logger)
+      flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
 
       final_response = nil
       flow.run(

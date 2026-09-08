@@ -5,7 +5,6 @@
 # Manages memory for the agent.
 
 require "json"
-require "../support/app_logger"
 require "../support/status"
 
 module Mantle::Storage
@@ -98,7 +97,7 @@ module Mantle::Storage
     private def cascade(current_layer_index : Int32) : Nil
       # Prevent infinite recursion - reasonable max layer depth
       if current_layer_index > 50
-        Mantle::Support::Log.warn { "Maximum layer depth (50) reached" }
+        Mantle::Log.warn { "Maximum layer depth (50) reached" }
         return
       end
 
@@ -132,13 +131,13 @@ module Mantle::Storage
 
           # If target is still at capacity after consolidation, we can't add more
           if current_num_tokens(target_layer_index) >= @layer_token_capacity
-            Mantle::Support::Log.warn { "Layer #{target_layer_index} still at capacity after consolidation" }
+            Mantle::Log.warn { "Layer #{target_layer_index} still at capacity after consolidation" }
             return
           end
 
           if current_layer_index != -1
             Mantle.emit_status(:memory_consolidation)
-            Mantle::Support::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_token_capacity} tokens). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_token_target} tokens." }
+            Mantle::Log.info { "Memory Layer #{current_layer_index} hit capacity (#{@layer_token_capacity} tokens). Consolidating Layer #{current_layer_index} -> Layer #{target_layer_index}. Target size: #{@layer_token_target} tokens." }
           end
 
           if current_layer_index == -1
@@ -162,7 +161,7 @@ module Mantle::Storage
               remaining_tokens -= calculate_tokens(chunk, 0)
             end
           rescue ex
-            Mantle::Support::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
+            Mantle::Log.error { "Squishifier failed at layer #{current_layer_index}: #{ex.message}" }
             return
           end
         end

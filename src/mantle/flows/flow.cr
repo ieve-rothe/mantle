@@ -24,37 +24,19 @@ module Mantle::Flows
     # Represents the `Client` executing LLM requests.
     property client : Mantle::Clients::Client
 
-    # Represents the `Logger` logging conversation events.
-    property logger : Mantle::Support::Logger
-
     # Represents custom errors for flow operations.
     class InputError < Exception; end
 
-    # Creates a flow instance with *context_manager*, *client*, and *logger*.
+    # Creates a flow instance with *context_manager* and *client*.
     def initialize(
       @context_manager : Mantle::Storage::ContextManager,
       @client : Mantle::Clients::Client,
-      @logger : Mantle::Support::Logger,
     )
     end
 
     # Assembles context, sends it to the client, and executes *on_response* with the result.
     def run(msg : String, on_response : Proc(Mantle::Clients::Response, Nil), ephemeral_blocks : Array(String) = [] of String)
       raise NotImplementedError.new("Flow#run must be implemented by subclasses")
-    end
-
-    # :nodoc:
-    protected def format_messages_for_log(messages : Array(Mantle::Message)) : String
-      String.build do |io|
-        messages.join(io, "") do |msg, i|
-          role = msg.role.capitalize
-          content = msg.content || ""
-          if content.empty? && (tcs = msg.tool_calls)
-            content = "Called tools: " + tcs.map { |tc| tc.function.name }.join(", ")
-          end
-          i << "[" << role << "] " << content << "\n"
-        end
-      end
     end
   end
 
@@ -68,21 +50,15 @@ module Mantle::Flows
       Mantle::LogContext.with_sequence_id(seq_id) do
         @context_manager.handle_user_message(msg, invisible_append)
         context_view = @context_manager.current_view(ephemeral_blocks)
-        @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
         # Execute LLM request
         response = @client.execute(context_view)
-
-        if (req = response.raw_request) && (res = response.raw_response)
-          @logger.log_api_payloads(req, res)
-        end
 
         # Extract text content from Response (ignore tool_calls in base ChatFlow)
         response_text = response.content || ""
 
         @context_manager.handle_bot_message(response_text)
         updated_context = @context_manager.current_view(ephemeral_blocks)
-        @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
         Mantle.emit_status(:idle)
 
         on_response.call(response)
@@ -103,14 +79,13 @@ module Mantle::Flows
     # :nodoc:
     @depth : Int32
 
-    # Creates a tool-enabled chat flow with *context_manager*, *client*, *logger*, and optional *depth*.
+    # Creates a tool-enabled chat flow with *context_manager*, *client*, and optional *depth*.
     def initialize(
       context_manager : Mantle::Storage::ContextManager,
       client : Mantle::Clients::Client,
-      logger : Mantle::Support::Logger,
       @depth : Int32 = 0,
     )
-      super(context_manager, client, logger)
+      super(context_manager, client)
     end
 
     # Runs the tool-enabled chat flow, processing LLM requests and executing tool calls in a loop until a final text response is produced.
@@ -137,7 +112,6 @@ module Mantle::Flows
         # Add user message to context
         @context_manager.handle_user_message(msg, invisible_append)
         context_view = @context_manager.current_view(ephemeral_blocks)
-        @logger.log_message(:user, msg, format_messages_for_log(context_view))
 
         # Merge tool definitions
         all_tools = merge_tools(builtins, custom_tools)
@@ -224,10 +198,6 @@ module Mantle::Flows
                          @client.execute(final_context, nil)
                        end
 
-      if (req = final_response.raw_request) && (res = final_response.raw_response)
-        @logger.log_api_payloads(req, res)
-      end
-
       # Handle the text response
       response_text = final_response.content || "Error: Failed to generate final response after hitting tool iteration limit."
       @context_manager.handle_bot_message(response_text, check_consolidation: false)
@@ -236,7 +206,6 @@ module Mantle::Flows
       @context_manager.check_and_consolidate
 
       updated_context = @context_manager.current_view(ephemeral_blocks)
-      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), final_response.thinking)
 
       on_response.try(&.call(final_response))
     end
@@ -251,10 +220,6 @@ module Mantle::Flows
                    @client.execute(context_view, tools_to_pass)
                  end
 
-      if (req = response.raw_request) && (res = response.raw_response)
-        @logger.log_api_payloads(req, res)
-      end
-
       response
     end
 
@@ -267,7 +232,6 @@ module Mantle::Flows
       @context_manager.check_and_consolidate
 
       updated_context = @context_manager.current_view(ephemeral_blocks)
-      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context), response.thinking)
       Mantle.emit_status(:idle)
 
       on_response.try(&.call(response))
@@ -298,7 +262,6 @@ module Mantle::Flows
       @context_manager.check_and_consolidate
 
       updated_context = @context_manager.current_view(ephemeral_blocks)
-      @logger.log_message(:bot, response_text, format_messages_for_log(updated_context))
       Mantle.emit_status(:idle)
 
       synthetic_response = Mantle::Clients::Response.new(content: response_text, tool_calls: nil)
@@ -321,7 +284,6 @@ module Mantle::Flows
       @context_manager.check_and_consolidate
 
       updated_context = @context_manager.current_view(ephemeral_blocks)
-      @logger.log_message(:bot, success_msg, format_messages_for_log(updated_context))
       Mantle.emit_status(:idle)
 
       synthetic_response = Mantle::Clients::Response.new(content: success_msg, tool_calls: nil)
@@ -338,11 +300,6 @@ module Mantle::Flows
       failed_calls : Array({String, JSON::Any}),
     ) : Array(Mantle::Message)
       Mantle.emit_status(:tool_loop)
-      # Log detailed tool call information (natural language)
-      tool_calls.each do |call|
-        formatted_call = Mantle::Tools::ToolFormatter.format_tool_call(call)
-        @logger.log_message(:bot, formatted_call, format_messages_for_log(context_view), response.thinking)
-      end
 
       # Add assistant message to context if there's content OR tool calls (defer consolidation)
       has_content = response.content && !response.content.not_nil!.empty?
@@ -357,10 +314,6 @@ module Mantle::Flows
       # Add tool results to context with 'tool' role (defer consolidation)
       tool_results.each_with_index do |result, idx|
         @context_manager.add_message("tool", result.result, tool_call_id: result.tool_call_id, check_consolidation: false)
-
-        # Log detailed tool result (natural language)
-        formatted_result = Mantle::Tools::ToolFormatter.format_tool_result(result)
-        @logger.log_message(:bot, formatted_result, format_messages_for_log(@context_manager.current_view(ephemeral_blocks)))
 
         # Track failed calls
         if failed_result?(result.result)

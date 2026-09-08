@@ -59,27 +59,6 @@ class DummyClient < Mantle::Clients::Client
   end
 end
 
-class DummyLogger < Mantle::Support::Logger
-  property last_message : String? = nil
-
-  def initialize(user_name : String = "User", bot_name : String = "Assistant")
-    super(user_name, bot_name)
-  end
-
-  def log(label : String, message : String)
-    @last_message = "#{label} #{message}"
-  end
-
-  def log_message(role : Symbol, message : String, context : String, thinking : String? = nil)
-    name = role == :user ? @user_name : @bot_name
-    @last_message = "#{role} #{name} #{message}"
-  end
-
-  def log_api_payloads(request : String, response : String)
-    # No-op for tests
-  end
-end
-
 ####
 
 # Test helper: deterministic squishifier for predictable outputs

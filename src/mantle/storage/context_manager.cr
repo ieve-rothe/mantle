@@ -4,7 +4,6 @@
 #
 # Coordinates context routing from flow to ContextStore and MemoryStore
 
-require "../support/app_logger"
 require "../support/status"
 
 module Mantle::Storage
@@ -159,7 +158,7 @@ module Mantle::Storage
     def consolidate_memory
       Mantle.emit_status(:memory_consolidation)
 
-      Mantle::Support::Log.info { "Context hit tokens #{@context_store.current_num_tokens} (threshold: #{@token_hardmax}). Consolidating Context -> Memory. Target context tokens: #{@token_target}." }
+      Mantle::Log.info { "Context hit tokens #{@context_store.current_num_tokens} (threshold: #{@token_hardmax}). Consolidating Context -> Memory. Target context tokens: #{@token_target}." }
 
       pruned_messages = @context_store.prune_to_tokens(@token_target)
 
@@ -175,7 +174,7 @@ module Mantle::Storage
         end
         @memory_store.ingest(formatted_messages)
       else
-        Mantle::Support::Log.error { "Tried to ingest to memory store with an invalid pruned_messages array" }
+        Mantle::Log.error { "Tried to ingest to memory store with an invalid pruned_messages array" }
       end
     end
 
@@ -188,9 +187,9 @@ module Mantle::Storage
       num_tokens = @context_store.current_num_tokens
 
       if is_frame_switch
-        Mantle::Support::Log.info { "Frame switch triggered: Consolidating all #{num_messages} messages (#{num_tokens} tokens) of target topic context into memory cascade." }
+        Mantle::Log.info { "Frame switch triggered: Consolidating all #{num_messages} messages (#{num_tokens} tokens) of target topic context into memory cascade." }
       else
-        Mantle::Support::Log.info { "Consolidating all #{num_messages} messages (#{num_tokens} tokens) of context into memory cascade." }
+        Mantle::Log.info { "Consolidating all #{num_messages} messages (#{num_tokens} tokens) of context into memory cascade." }
       end
 
       # Prune everything down to 0 tokens of conversation history
