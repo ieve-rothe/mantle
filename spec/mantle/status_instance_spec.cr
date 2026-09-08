@@ -49,7 +49,7 @@ describe "Mantle Instance-Level Status Callbacks" do
       messages = [Mantle::Message.new("user", "Hello")]
       res = step.run(messages)
       res.ok?.should be_true
-      events.should eq([:awaiting_inference, :idle])
+      events.should eq([:thinking, :idle])
     end
   end
 end

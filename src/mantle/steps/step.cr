@@ -67,7 +67,7 @@ module Mantle
           )
         end
 
-        @on_status.try &.call(:awaiting_inference)
+        @on_status.try &.call(:thinking)
 
         tools_to_pass = @tools.empty? ? nil : @tools
         response = begin
@@ -92,7 +92,7 @@ module Mantle
         # Process tool calls if present
         if tool_calls = response.tool_calls
           if !tool_calls.empty?
-            @on_status.try &.call(:calling_tools)
+            @on_status.try &.call(:tool_loop)
 
             # Record assistant turn in working context
             working_messages << Mantle::Message.new(

@@ -238,9 +238,9 @@ describe Mantle::Step do
 
       result.ok?.should be_true
       status_events.should eq([
-        :awaiting_inference,
-        :calling_tools,
-        :awaiting_inference,
+        :thinking,
+        :tool_loop,
+        :thinking,
         :idle,
       ])
     end
