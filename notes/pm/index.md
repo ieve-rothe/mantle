@@ -6,6 +6,7 @@ This file tracks the status and priority of all tickets for the `mantle` framewo
 
 | Ticket ID | Title | Theme | Status | Priority | Last Updated |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| [TKT-005](file:///home/cam/repos/adjutant/mantle/notes/pm/TKT-005-ollama-client-and-logging-refactor.md) | Rename OllamaClient, Normalize Thinking, and Streamline LoggingClient Concurrency | Architecture / Clients | Open | High | 2026-09-08 |
 
 ## Closed Tickets
 
