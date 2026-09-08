@@ -14,9 +14,6 @@ require "./mantle/session"
 
 # Represents the core module of the Mantle LLM agent library.
 module Mantle
-  # Represents the current version of the Mantle library.
-  VERSION = "0.1.0"
-
   # Provides the default logger for the Mantle library.
   #
   # Consumer applications should configure this via Crystal's built-in Log setup:
