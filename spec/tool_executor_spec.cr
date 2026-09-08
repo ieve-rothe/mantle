@@ -203,7 +203,7 @@ describe "Mantle Tool Executor" do
       results = executor.execute_all(tool_calls)
 
       results.size.should eq(2)
-      results[0].result.should contain("Test content")      # Built-in
+      results[0].result.should contain("Test content")               # Built-in
       results[1].result.should contain("result from my_custom_tool") # Custom
     end
   end
@@ -267,7 +267,7 @@ describe "Mantle Tool Executor" do
   describe "callbacks" do
     it "triggers on_tool_call and on_tool_result for built-in tools" do
       config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-      
+
       calls = [] of {String, Hash(String, JSON::Any)}
       results = [] of {String, Hash(String, JSON::Any), String, String}
 
@@ -307,7 +307,7 @@ describe "Mantle Tool Executor" do
 
     it "triggers on_tool_call and on_tool_result with FAILED status for failed tools" do
       config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-      
+
       results = [] of {String, Hash(String, JSON::Any), String, String}
 
       executor = Mantle::Tools::ToolExecutor.new(

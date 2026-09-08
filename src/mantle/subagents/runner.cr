@@ -21,7 +21,7 @@ module Mantle::Subagents
       @profiles : Hash(String, Profile) = {} of String => Profile,
       @client : Mantle::Clients::Client? = nil,
       @max_depth : Int32 = 1,
-      @max_token_budget : Int32 = 100000
+      @max_token_budget : Int32 = 100000,
     )
     end
 
@@ -32,7 +32,7 @@ module Mantle::Subagents
       query : String,
       context : String = "",
       depth : Int32 = 1,
-      call_id : String? = nil
+      call_id : String? = nil,
     ) : String
       if depth > @max_depth
         raise "Subagent depth limit exceeded: #{depth} > #{@max_depth}"
@@ -131,14 +131,14 @@ module Mantle::Subagents
             client.temperature = profile.temperature
 
             messages = [Mantle::Message.new(role: "user", content: full_prompt)]
-            
+
             turns = 0
             while turns < max_turns
               response = client.execute(messages)
-              
+
               c = response.content || ""
               t = response.thinking || ""
-              
+
               output = if !c.strip.empty?
                          if !t.strip.empty?
                            "🤔 [Thinking Process]\n#{t.strip}\n\n[Response]\n#{c.strip}"
@@ -148,13 +148,13 @@ module Mantle::Subagents
                        else
                          t
                        end
-                       
+
               if !output.strip.empty?
                 formatted = format_subagent_response(profile, output)
                 on_message.call(formatted)
               end
 
-              # In a real multi-turn we would accept user input back, but for now 
+              # In a real multi-turn we would accept user input back, but for now
               # we just run the single completion, or we could set up a channel for input.
               # Assuming a basic multi-turn for demonstration, breaking after 1 turn if no tools
               # If there were tools, we would execute them and append to messages.

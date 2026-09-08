@@ -95,7 +95,7 @@ describe "Integration: LLM Mock Replay Server" do
 
     unknown_messages = [
       Mantle::Message.new("system", "System prompt"),
-      Mantle::Message.new("user", "This prompt definitely does not exist in fixtures #{Random.rand(100000)}")
+      Mantle::Message.new("user", "This prompt definitely does not exist in fixtures #{Random.rand(100000)}"),
     ]
 
     expect_raises(Exception, /404/) do

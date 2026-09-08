@@ -231,10 +231,10 @@ describe Mantle::Storage::JSONContextStore do
       existing_data = {
         "schema_version" => 1,
         "active_leaf_id" => "node_2",
-        "nodes" => {
+        "nodes"          => {
           "node_1" => node1,
-          "node_2" => node2
-        }
+          "node_2" => node2,
+        },
       }
       File.write(test_file, existing_data.to_json)
 

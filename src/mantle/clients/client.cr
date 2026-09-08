@@ -121,7 +121,7 @@ module Mantle::Clients
       @thinking : String? = nil,
       @done_reason : String? = nil,
       @prompt_eval_count : Int32? = nil,
-      @eval_count : Int32? = nil
+      @eval_count : Int32? = nil,
     )
       if (raw = @content) && raw.includes?("<think>")
         clean, extracted = Mantle::Support::Text.extract_thinking(raw)
@@ -364,13 +364,13 @@ module Mantle::Clients
       prompt_eval_count : Int32?,
       eval_count : Int32?,
       raw_request : String,
-      raw_response : String
+      raw_response : String,
     ) : Response
       clean_content, extracted_thinking = if raw_content && !raw_content.empty?
-        Mantle::Support::Text.extract_thinking(raw_content)
-      else
-        {nil, nil}
-      end
+                                            Mantle::Support::Text.extract_thinking(raw_content)
+                                          else
+                                            {nil, nil}
+                                          end
 
       final_content = (clean_content && !clean_content.empty?) ? clean_content : nil
       final_thinking = (api_thinking && !api_thinking.empty?) ? api_thinking : extracted_thinking

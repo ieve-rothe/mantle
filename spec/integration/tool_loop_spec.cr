@@ -21,7 +21,7 @@ describe "Integration: Tool Loops" do
                 name: "tool_A",
                 arguments: %({"input":"start"})
               )
-            )
+            ),
           ]
         ),
         # Response 2: LLM receives tool_A result, decides to call "tool_B"
@@ -35,11 +35,11 @@ describe "Integration: Tool Loops" do
                 name: "tool_B",
                 arguments: %({"input":"intermediate"})
               )
-            )
+            ),
           ]
         ),
         # Response 3: LLM has enough information, returns text response
-        Mantle::Clients::Response.new(content: "Final result based on tools", tool_calls: nil)
+        Mantle::Clients::Response.new(content: "Final result based on tools", tool_calls: nil),
       ])
 
       custom_tools = [
@@ -49,7 +49,7 @@ describe "Integration: Tool Loops" do
             description: "First tool",
             parameters: Mantle::Tools::ParametersSchema.new(
               properties: {
-                "input" => Mantle::Tools::PropertyDefinition.new("string", "Input data")
+                "input" => Mantle::Tools::PropertyDefinition.new("string", "Input data"),
               }
             )
           )
@@ -60,11 +60,11 @@ describe "Integration: Tool Loops" do
             description: "Second tool",
             parameters: Mantle::Tools::ParametersSchema.new(
               properties: {
-                "input" => Mantle::Tools::PropertyDefinition.new("string", "Input data")
+                "input" => Mantle::Tools::PropertyDefinition.new("string", "Input data"),
               }
             )
           )
-        )
+        ),
       ]
 
       tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
@@ -107,7 +107,6 @@ describe "Integration: Tool Loops" do
       tool_results_in_history.size.should eq(2)
       tool_results_in_history[0].content.not_nil!.should contain("intermediate")
       tool_results_in_history[1].content.not_nil!.should contain("final_data")
-
     ensure
       File.delete(context_file) if File.exists?(context_file)
     end

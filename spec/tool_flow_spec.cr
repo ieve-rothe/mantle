@@ -30,7 +30,7 @@ describe "Mantle ToolEnabledChatFlow" do
 
       # Client returns simple text response
       client = ToolCallMockClient.new([
-        Mantle::Clients::Response.new(content: "Hello!", tool_calls: nil)
+        Mantle::Clients::Response.new(content: "Hello!", tool_calls: nil),
       ])
 
       flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
@@ -64,14 +64,14 @@ describe "Mantle ToolEnabledChatFlow" do
                 name: "get_time",
                 arguments: "{}"
               )
-            )
+            ),
           ]
         ),
         # Second response: text (after tool result)
         Mantle::Clients::Response.new(
           content: "The time is 12:00",
           tool_calls: nil
-        )
+        ),
       ])
 
       # Custom tool callback
@@ -88,7 +88,7 @@ describe "Mantle ToolEnabledChatFlow" do
               properties: {} of String => Mantle::Tools::PropertyDefinition
             )
           )
-        )
+        ),
       ]
 
       flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
@@ -120,7 +120,7 @@ describe "Mantle ToolEnabledChatFlow" do
               name: "loop_tool",
               arguments: "{}"
             )
-          )
+          ),
         ]
       )
 
@@ -141,7 +141,7 @@ describe "Mantle ToolEnabledChatFlow" do
               properties: {} of String => Mantle::Tools::PropertyDefinition
             )
           )
-        )
+        ),
       ]
 
       flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
@@ -181,10 +181,10 @@ describe "Mantle ToolEnabledChatFlow" do
                   name: "read_file",
                   arguments: %({"file_path":"#{temp_file}"})
                 )
-              )
+              ),
             ]
           ),
-          Mantle::Clients::Response.new(content: "Got it!", tool_calls: nil)
+          Mantle::Clients::Response.new(content: "Got it!", tool_calls: nil),
         ])
 
         builtin_config = Mantle::Tools::BuiltinToolConfig.new(
@@ -238,7 +238,7 @@ describe "Mantle ToolEnabledChatFlow" do
                   name: "read_file",
                   arguments: %({"file_path":"#{temp_file}"})
                 )
-              )
+              ),
             ]
           ),
           # Call custom tool
@@ -252,11 +252,11 @@ describe "Mantle ToolEnabledChatFlow" do
                   name: "process_data",
                   arguments: %({"data":"Data"})
                 )
-              )
+              ),
             ]
           ),
           # Final response
-          Mantle::Clients::Response.new(content: "Processed!", tool_calls: nil)
+          Mantle::Clients::Response.new(content: "Processed!", tool_calls: nil),
         ])
 
         tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
@@ -270,11 +270,11 @@ describe "Mantle ToolEnabledChatFlow" do
               description: "Process data",
               parameters: Mantle::Tools::ParametersSchema.new(
                 properties: {
-                  "data" => Mantle::Tools::PropertyDefinition.new("string", "Data to process")
+                  "data" => Mantle::Tools::PropertyDefinition.new("string", "Data to process"),
                 }
               )
             )
-          )
+          ),
         ]
 
         builtin_config = Mantle::Tools::BuiltinToolConfig.new(
@@ -308,7 +308,7 @@ describe "Subagent depth kill-switch" do
     # Arrange
     context_store = DummyContextStore.new
     context_manager = DummyContextManager.new(context_store)
-    
+
     tool_call = Mantle::Clients::ToolCall.new(
       id: "call_1",
       type: "function",
@@ -317,19 +317,19 @@ describe "Subagent depth kill-switch" do
         arguments: "{}"
       )
     )
-    
+
     client = ToolCallMockClient.new([
       Mantle::Clients::Response.new(content: nil, tool_calls: [tool_call]),
-      Mantle::Clients::Response.new(content: "The time is 3:00 PM", tool_calls: nil)
+      Mantle::Clients::Response.new(content: "The time is 3:00 PM", tool_calls: nil),
     ])
-    
+
     flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, depth: 0)
-    
+
     # Act
     tool_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
       %({"content":"Current time: 3:00 PM"})
     }
-    
+
     custom_tools = [Mantle::Tools::Tool.new(
       function: Mantle::Tools::FunctionDefinition.new(
         name: "get_time",
@@ -337,28 +337,28 @@ describe "Subagent depth kill-switch" do
         parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition, required: [] of String)
       )
     )]
-    
+
     flow.run(
       "What time is it?",
       custom_tools: custom_tools,
       tool_callback: tool_callback,
-      on_response: ->(response : Mantle::Clients::Response) {}
+      on_response: ->(response : Mantle::Clients::Response) { }
     )
-    
+
     # Assert - Tool should have been executed
     context_store.messages.any? { |msg| msg.role == "tool" }.should be_true
   end
-  
+
   it "strips tools at depth 1 (MAX_SUBAGENT_DEPTH)" do
     # Arrange
     context_store = DummyContextStore.new
     context_manager = DummyContextManager.new(context_store)
-    
+
     # Client should receive NO tools in the execute call
     client = DummyClient.new
-    
+
     flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, depth: 1)
-    
+
     # Act
     custom_tools = [Mantle::Tools::Tool.new(
       function: Mantle::Tools::FunctionDefinition.new(
@@ -367,26 +367,26 @@ describe "Subagent depth kill-switch" do
         parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition, required: [] of String)
       )
     )]
-    
+
     flow.run(
       "What time is it?",
       custom_tools: custom_tools,
       tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { "" },
-      on_response: ->(response : Mantle::Clients::Response) {}
+      on_response: ->(response : Mantle::Clients::Response) { }
     )
-    
+
     # Assert - No tool calls should have been executed (tools were stripped)
     context_store.messages.none? { |msg| msg.role == "tool" }.should be_true
   end
-  
+
   it "strips tools at depth 2 (beyond MAX_SUBAGENT_DEPTH)" do
     # Arrange
     context_store = DummyContextStore.new
     context_manager = DummyContextManager.new(context_store)
-    
+
     client = DummyClient.new
     flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client, depth: 2)
-    
+
     # Act
     custom_tools = [Mantle::Tools::Tool.new(
       function: Mantle::Tools::FunctionDefinition.new(
@@ -395,23 +395,23 @@ describe "Subagent depth kill-switch" do
         parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition, required: [] of String)
       )
     )]
-    
+
     flow.run(
       "Spawn an agent",
       custom_tools: custom_tools,
       tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { "" },
-      on_response: ->(response : Mantle::Clients::Response) {}
+      on_response: ->(response : Mantle::Clients::Response) { }
     )
-    
+
     # Assert - No tool calls should have been executed
     context_store.messages.none? { |msg| msg.role == "tool" }.should be_true
   end
-  
+
   it "defaults to depth 0 when not specified" do
     # Arrange
     context_store = DummyContextStore.new
     context_manager = DummyContextManager.new(context_store)
-    
+
     tool_call = Mantle::Clients::ToolCall.new(
       id: "call_1",
       type: "function",
@@ -420,15 +420,15 @@ describe "Subagent depth kill-switch" do
         arguments: "{}"
       )
     )
-    
+
     client = ToolCallMockClient.new([
       Mantle::Clients::Response.new(content: nil, tool_calls: [tool_call]),
-      Mantle::Clients::Response.new(content: "Done", tool_calls: nil)
+      Mantle::Clients::Response.new(content: "Done", tool_calls: nil),
     ])
-    
+
     # Don't pass depth parameter - should default to 0
     flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
-    
+
     # Act
     custom_tools = [Mantle::Tools::Tool.new(
       function: Mantle::Tools::FunctionDefinition.new(
@@ -437,14 +437,14 @@ describe "Subagent depth kill-switch" do
         parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition, required: [] of String)
       )
     )]
-    
+
     flow.run(
       "Test",
       custom_tools: custom_tools,
       tool_callback: ->(name : String, args : Hash(String, JSON::Any)) : String { %({"success":true}) },
-      on_response: ->(response : Mantle::Clients::Response) {}
+      on_response: ->(response : Mantle::Clients::Response) { }
     )
-    
+
     # Assert - Tools should work at default depth 0
     context_store.messages.any? { |msg| msg.role == "tool" }.should be_true
   end
@@ -466,7 +466,7 @@ describe "Subagent depth kill-switch" do
                 name: "test_tool",
                 arguments: %({"arg1":"value"})
               )
-            )
+            ),
           ]
         ),
         Mantle::Clients::Response.new(
@@ -479,9 +479,9 @@ describe "Subagent depth kill-switch" do
                 name: "test_tool",
                 arguments: %({"arg1":"value"})
               )
-            )
+            ),
           ]
-        )
+        ),
       ])
 
       # Callback returns a failure message
@@ -498,11 +498,11 @@ describe "Subagent depth kill-switch" do
             description: "Test tool",
             parameters: Mantle::Tools::ParametersSchema.new(
               properties: {
-                "arg1" => Mantle::Tools::PropertyDefinition.new("string", "Arg description")
+                "arg1" => Mantle::Tools::PropertyDefinition.new("string", "Arg description"),
               }
             )
           )
-        )
+        ),
       ]
 
       flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)
@@ -536,9 +536,9 @@ describe "Subagent depth kill-switch" do
                 name: "test_tool",
                 arguments: "{}"
               )
-            )
+            ),
           ]
-        )
+        ),
       ])
 
       # Callback raises TerminalToolError
@@ -555,7 +555,7 @@ describe "Subagent depth kill-switch" do
               properties: {} of String => Mantle::Tools::PropertyDefinition
             )
           )
-        )
+        ),
       ]
 
       flow = Mantle::Flows::ToolEnabledChatFlow.new(context_manager, client)

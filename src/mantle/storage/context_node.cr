@@ -50,7 +50,7 @@ module Mantle::Storage
       @top_p : Float64? = nil,
       @top_k : Int32? = nil,
       @repeat_penalty : Float64? = nil,
-      @seed : Int32? = nil
+      @seed : Int32? = nil,
     )
     end
   end
@@ -86,7 +86,7 @@ module Mantle::Storage
       @id : String = UUID.random.to_s,
       @ts : Time = Time.utc,
       @assembled_context_sha : String? = nil,
-      @generation : GenerationParams? = nil
+      @generation : GenerationParams? = nil,
     )
     end
   end

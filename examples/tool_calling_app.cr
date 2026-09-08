@@ -23,7 +23,7 @@ def create_time_tool
           "timezone" => Mantle::Tools::PropertyDefinition.new(
             type: "string",
             description: "Timezone (e.g., 'UTC', 'America/New_York')"
-          )
+          ),
         },
         required: ["timezone"]
       )
@@ -76,7 +76,7 @@ puts
 
 # 2. Setup Mantle components
 model_config = Mantle::Clients::ModelConfig.new(
-  "gemma4:e2b",                    # model_name
+  "gemma4:e2b",                     # model_name
   false,                            # stream
   0.7,                              # temperature
   0.9,                              # top_p
@@ -109,8 +109,8 @@ context_manager = Mantle::Storage::ContextManager.new(
   memory_store,
   "User",
   "Assistant",
-  token_target: 4,    # Keep 4 tokens/messages target after consolidation
-  token_hardmax: 8    # Trigger consolidation at 8 tokens/messages (low limit for testing)
+  token_target: 4, # Keep 4 tokens/messages target after consolidation
+  token_hardmax: 8 # Trigger consolidation at 8 tokens/messages (low limit for testing)
 )
 
 logger = Mantle::Support::FileLogger.new(log_file, "User", "Assistant", include_thinking: true)
@@ -137,11 +137,11 @@ builtins = [
   Mantle::Tools::BuiltinTool::ReadFile,
   Mantle::Tools::BuiltinTool::ListDirectory,
   Mantle::Tools::BuiltinTool::NotifySend,
-  Mantle::Tools::BuiltinTool::WriteFile
+  Mantle::Tools::BuiltinTool::WriteFile,
 ]
 
 custom_tools = [
-  create_time_tool
+  create_time_tool,
 ]
 
 # Callback for displaying responses

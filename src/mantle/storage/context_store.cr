@@ -40,7 +40,7 @@ module Mantle::Storage
       token_count : Int32? = nil,
       turn_id : String? = nil,
       assembled_context : String? = nil,
-      generation : GenerationParams? = nil
+      generation : GenerationParams? = nil,
     )
     end
 
@@ -122,7 +122,7 @@ module Mantle::Storage
       token_count : Int32? = nil,
       turn_id : String? = nil,
       assembled_context : String? = nil,
-      generation : GenerationParams? = nil
+      generation : GenerationParams? = nil,
     )
       role = normalize_role(label)
       @messages << Mantle::Message.new(role, message, tool_calls, tool_call_id)
@@ -328,7 +328,7 @@ module Mantle::Storage
       token_count : Int32? = nil,
       turn_id : String? = nil,
       assembled_context : String? = nil,
-      generation : GenerationParams? = nil
+      generation : GenerationParams? = nil,
     )
       role = normalize_role(label)
       msg_obj = Mantle::Message.new(role, message, tool_calls, tool_call_id)
@@ -336,7 +336,7 @@ module Mantle::Storage
       tc = token_count || begin
         content_size = message.size
         tool_size = tool_calls.try(&.to_json.size) || 0
-        [ (content_size + tool_size) // 4, 1 ].max
+        [(content_size + tool_size) // 4, 1].max
       end
 
       sha = assembled_context ? write_assembled_context(assembled_context) : nil

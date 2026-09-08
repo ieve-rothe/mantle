@@ -28,4 +28,3 @@ module Mantle
   # ```
   Log = ::Log.for("mantle")
 end
-
