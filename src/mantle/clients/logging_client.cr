@@ -143,9 +143,11 @@ module Mantle::Clients
           "prompt_eval_count" => response ? response.prompt_eval_count : nil,
           "eval_count"        => response ? response.eval_count : nil,
         },
-        "latency_ms"    => latency_ms,
-        "status"        => status,
-        "error_message" => error_message,
+        "raw_request"          => parse_raw_json(response.try(&.raw_request)),
+        "raw_response"         => parse_raw_response(response.try(&.raw_response)),
+        "latency_ms"           => latency_ms,
+        "status"               => status,
+        "error_message"        => error_message,
       }
 
       ReceiptWriter.enqueue(
@@ -156,6 +158,29 @@ module Mantle::Clients
           ephemeral_injections: ephemeral_injections
         )
       )
+    end
+
+    private def parse_raw_json(str : String?) : JSON::Any?
+      return nil unless str
+      begin
+        JSON.parse(str)
+      rescue
+        JSON::Any.new(str)
+      end
+    end
+
+    private def parse_raw_response(str : String?) : JSON::Any?
+      return nil unless str
+      begin
+        JSON.parse(str)
+      rescue
+        begin
+          chunks = str.lines.reject(&.strip.empty?).map { |line| JSON.parse(line) }
+          chunks.empty? ? JSON::Any.new(str) : JSON::Any.new(chunks)
+        rescue
+          JSON::Any.new(str)
+        end
+      end
     end
   end
 end

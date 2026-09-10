@@ -33,6 +33,22 @@ class DummySecondaryClient < Mantle::Clients::Client
   end
 end
 
+class DummyWireClient < Mantle::Clients::Client
+  property model_name : String = "qwen-wire"
+  property raw_req : String = %({"model":"qwen-wire","messages":[{"role":"user","content":"test wire"}],"options":{"temperature":0.7}})
+  property raw_res : String = %({"model":"qwen-wire","message":{"role":"assistant","content":"wire response"},"done":true})
+
+  def execute(messages : Array(Mantle::Message), tools : Array(Mantle::Tools::Tool)? = nil, &on_chunk : String -> Nil) : Mantle::Clients::Response
+    Mantle::Clients::Response.new(
+      content: "wire response",
+      tool_calls: nil
+    ).tap do |r|
+      r.raw_request = @raw_req
+      r.raw_response = @raw_res
+    end
+  end
+end
+
 describe Mantle::Clients::LoggingClient do
   temp_dir = File.join(Dir.tempdir, "logging_client_spec_#{Random.rand(100000)}")
 
@@ -241,5 +257,51 @@ describe Mantle::Clients::LoggingClient do
     inj["pre_history"][0]["content"].as_s.should eq("PRE_HIST_FLAG")
     inj["tail"][0]["content"].as_s.should eq("TAIL_FLAG")
     inj["memory_view"].as_s.should eq("[Memory Layer 0] Historical facts")
+  end
+
+  it "serializes full raw_request and raw_response JSON payloads into JSONL receipt" do
+    log_file = File.join(temp_dir, "test_wire_payloads.jsonl")
+    dummy = DummyWireClient.new
+    client = Mantle::Clients::LoggingClient.new(dummy, log_file)
+
+    messages = [Mantle::Message.new("user", "test wire")]
+    client.execute(messages)
+    client.flush
+
+    File.exists?(log_file).should be_true
+    lines = File.read_lines(log_file)
+    lines.size.should eq(1)
+
+    json = JSON.parse(lines.first)
+    json["raw_request"]?.should_not be_nil
+    json["raw_request"]["model"].as_s.should eq("qwen-wire")
+    json["raw_request"]["options"]["temperature"].as_f.should eq(0.7)
+
+    json["raw_response"]?.should_not be_nil
+    json["raw_response"]["message"]["content"].as_s.should eq("wire response")
+    json["raw_response"]["done"].as_bool.should be_true
+  end
+
+  it "serializes streaming NDJSON raw_response chunks into an array of JSON objects" do
+    log_file = File.join(temp_dir, "test_wire_streaming.jsonl")
+    dummy = DummyWireClient.new
+    dummy.raw_res = %({"model":"qwen","message":{"content":"chunk1"},"done":false}\n{"model":"qwen","message":{"content":"chunk2"},"done":true}\n)
+    client = Mantle::Clients::LoggingClient.new(dummy, log_file)
+
+    messages = [Mantle::Message.new("user", "test stream wire")]
+    client.execute(messages)
+    client.flush
+
+    File.exists?(log_file).should be_true
+    lines = File.read_lines(log_file)
+    lines.size.should eq(1)
+
+    json = JSON.parse(lines.first)
+    json["raw_response"]?.should_not be_nil
+    chunks = json["raw_response"].as_a
+    chunks.size.should eq(2)
+    chunks[0]["message"]["content"].as_s.should eq("chunk1")
+    chunks[1]["message"]["content"].as_s.should eq("chunk2")
+    chunks[1]["done"].as_bool.should be_true
   end
 end
