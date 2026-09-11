@@ -28,6 +28,7 @@ module Mantle
 
     # Underlying adapter response metadata.
     property raw_response : Mantle::Clients::Response?
+    property error_message : String?
 
     def initialize(
       @value : T? = nil,
@@ -35,6 +36,7 @@ module Mantle
       @thinking : String? = nil,
       @iterations : Int32 = 0,
       @raw_response : Mantle::Clients::Response? = nil,
+      @error_message : String? = nil,
     )
     end
 

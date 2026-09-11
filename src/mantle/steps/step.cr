@@ -100,7 +100,8 @@ module Mantle
             error: error_kind,
             thinking: last_thinking,
             iterations: iteration,
-            raw_response: last_response
+            raw_response: last_response,
+            error_message: ex.message
           )
         end
 
