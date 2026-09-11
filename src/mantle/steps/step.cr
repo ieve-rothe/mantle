@@ -89,7 +89,13 @@ module Mantle
         rescue ex
           @on_status.try &.call(:idle)
           err_msg = (ex.message || "").downcase
-          error_kind = (err_msg.includes?("rate limit") || err_msg.includes?("429")) ? StepError::RateLimited : StepError::ClientFailure
+          error_kind = if err_msg.includes?("rate limit") || err_msg.includes?("429")
+            StepError::RateLimited
+          elsif ex.is_a?(JSON::ParseException) || err_msg.includes?("json") || err_msg.includes?("malformed")
+            StepError::MalformedOutput
+          else
+            StepError::ClientFailure
+          end
           return StepResult(String, StepError).new(
             error: error_kind,
             thinking: last_thinking,
