@@ -30,6 +30,15 @@ module Mantle
     # Optional fallback callback for executing custom tools.
     property tool_callback : Proc(String, Hash(String, JSON::Any), String)?
 
+    # Optional per-iteration projection hook. Invoked immediately before each
+    # inference call with the current working buffer and the previous iteration's
+    # response (nil on the first iteration). Returns the buffer to send.
+    #
+    # Note: Mantle::Message is a struct. Mutating properties in-place on elements
+    # of working_messages mutates a copy. Use a #map rebuild or indexed write-back
+    # (working_messages[i] = ...). On rebuild, pass `tool_call_id:` by keyword.
+    property on_iteration : Proc(Array(Mantle::Message), Mantle::Clients::Response?, Array(Mantle::Message))?
+
     # Creates a step pipeline configured once with client, tools, limit, and status hook.
     def initialize(
       @client : Mantle::Clients::Client,
@@ -37,6 +46,7 @@ module Mantle
       @max_iterations : Int32 = 10,
       @on_status : Proc(Symbol, Nil)? = nil,
       @tool_callback : Proc(String, Hash(String, JSON::Any), String)? = nil,
+      @on_iteration : Proc(Array(Mantle::Message), Mantle::Clients::Response?, Array(Mantle::Message))? = nil,
     )
     end
 
@@ -65,6 +75,10 @@ module Mantle
             iterations: iteration - 1,
             raw_response: last_response
           )
+        end
+
+        if hook = @on_iteration
+          working_messages = hook.call(working_messages, last_response)
         end
 
         @on_status.try &.call(:thinking)

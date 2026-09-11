@@ -401,4 +401,177 @@ describe Mantle::Step do
       result.error.not_nil!.retryable?.should be_true
     end
   end
+
+  describe "on_iteration hook (TKT-008)" do
+    it "is inert when nil (default)" do
+      client = StepMockClient.new([
+        Mantle::Clients::Response.new(content: "Done", tool_calls: nil),
+      ])
+      step = Mantle::Step.new(client)
+      step.on_iteration.should be_nil
+
+      result = step.run([Mantle::Message.new("user", "Hello")])
+      result.ok?.should be_true
+      client.call_count.should eq(1)
+      client.recorded_messages.size.should eq(1)
+      client.recorded_messages.first.first.content.should eq("Hello")
+    end
+
+    it "invokes the hook before each inference call with working buffer and last_response" do
+      client = StepMockClient.new([
+        Mantle::Clients::Response.new(
+          content: nil,
+          tool_calls: [
+            Mantle::Clients::ToolCall.new(
+              id: "call_1",
+              type: "function",
+              function: Mantle::Clients::ToolCallFunction.new(name: "tool_a", arguments: %({}))
+            ),
+          ],
+          prompt_eval_count: 42
+        ),
+        Mantle::Clients::Response.new(content: "Final answer", tool_calls: nil, prompt_eval_count: 85),
+      ])
+
+      tool = Mantle::Tools::Tool.new(
+        function: Mantle::Tools::FunctionDefinition.new(
+          name: "tool_a",
+          description: "desc",
+          parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition)
+        )
+      ) { |_| "tool result payload" }
+
+      hook_calls = [] of Tuple(Int32, Mantle::Clients::Response?)
+
+      step = Mantle::Step.new(client, [tool])
+      step.on_iteration = ->(msgs : Array(Mantle::Message), last_resp : Mantle::Clients::Response?) {
+        hook_calls << {msgs.size, last_resp}
+        msgs
+      }
+
+      caller_msgs = [Mantle::Message.new("user", "Start")]
+      result = step.run(caller_msgs)
+
+      result.ok?.should be_true
+      result.value.should eq("Final answer")
+
+      # Invoked exactly 2 times (pre-flight for iteration 1 and iteration 2, never post-response)
+      hook_calls.size.should eq(2)
+
+      # Iteration 1: last_response is nil, 1 message in working buffer (user)
+      hook_calls[0][0].should eq(1)
+      hook_calls[0][1].should be_nil
+
+      # Iteration 2: last_response is iteration 1 response with prompt_eval_count 42, 3 messages (user, assistant, tool)
+      hook_calls[1][0].should eq(3)
+      hook_calls[1][1].not_nil!.prompt_eval_count.should eq(42)
+
+      # Caller input unchanged
+      caller_msgs.size.should eq(1)
+      caller_msgs.first.content.should eq("Start")
+    end
+
+    it "uses the hook return value authoritatively for the next inference call" do
+      client = StepMockClient.new([
+        Mantle::Clients::Response.new(
+          content: nil,
+          tool_calls: [
+            Mantle::Clients::ToolCall.new(
+              id: "call_1",
+              type: "function",
+              function: Mantle::Clients::ToolCallFunction.new(name: "tool_a", arguments: %({}))
+            ),
+          ]
+        ),
+        Mantle::Clients::Response.new(content: "Answer", tool_calls: nil),
+      ])
+
+      tool = Mantle::Tools::Tool.new(
+        function: Mantle::Tools::FunctionDefinition.new(
+          name: "tool_a",
+          description: "desc",
+          parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition)
+        )
+      ) { |_| "huge verbose output that should be shed" }
+
+      step = Mantle::Step.new(client, [tool])
+      step.on_iteration = ->(msgs : Array(Mantle::Message), last_resp : Mantle::Clients::Response?) {
+        # Rebuild using #map and keyword tool_call_id:
+        msgs.map do |m|
+          if m.role == "tool"
+            Mantle::Message.new("tool", "[truncated 10 bytes]", tool_call_id: m.tool_call_id)
+          else
+            m
+          end
+        end
+      }
+
+      result = step.run([Mantle::Message.new("user", "Go")])
+      result.ok?.should be_true
+
+      # The second execute call received the truncated message
+      client.recorded_messages.size.should eq(2)
+      second_call_msgs = client.recorded_messages[1]
+      tool_msg = second_call_msgs.find { |m| m.role == "tool" }
+      tool_msg.should_not be_nil
+      tool_msg.not_nil!.content.should eq("[truncated 10 bytes]")
+      tool_msg.not_nil!.tool_call_id.should eq("call_1")
+    end
+
+    it "supports index write-back inside on_iteration" do
+      client = StepMockClient.new([
+        Mantle::Clients::Response.new(
+          content: nil,
+          tool_calls: [
+            Mantle::Clients::ToolCall.new(
+              id: "call_1",
+              type: "function",
+              function: Mantle::Clients::ToolCallFunction.new(name: "tool_a", arguments: %({}))
+            ),
+          ]
+        ),
+        Mantle::Clients::Response.new(content: "Done", tool_calls: nil),
+      ])
+
+      tool = Mantle::Tools::Tool.new(
+        function: Mantle::Tools::FunctionDefinition.new(
+          name: "tool_a",
+          description: "desc",
+          parameters: Mantle::Tools::ParametersSchema.new(properties: {} of String => Mantle::Tools::PropertyDefinition)
+        )
+      ) { |_| "original tool result" }
+
+      step = Mantle::Step.new(client, [tool])
+      step.on_iteration = ->(msgs : Array(Mantle::Message), _last_resp : Mantle::Clients::Response?) {
+        msgs.each_with_index do |m, i|
+          if m.role == "tool"
+            # Explicit index write-back
+            msgs[i] = Mantle::Message.new("tool", "rewritten via write-back", tool_call_id: m.tool_call_id)
+          end
+        end
+        msgs
+      }
+
+      result = step.run([Mantle::Message.new("user", "Go")])
+      result.ok?.should be_true
+
+      tool_msg = client.recorded_messages[1].find { |m| m.role == "tool" }.not_nil!
+      tool_msg.content.should eq("rewritten via write-back")
+    end
+
+    it "propagates exceptions raised in the hook immediately" do
+      client = StepMockClient.new([
+        Mantle::Clients::Response.new(content: "Never reached", tool_calls: nil),
+      ])
+
+      step = Mantle::Step.new(client)
+      step.on_iteration = ->(_msgs : Array(Mantle::Message), _last_resp : Mantle::Clients::Response?) {
+        raise ArgumentError.new("Cooperative interrupt requested")
+      }
+
+      expect_raises(ArgumentError, "Cooperative interrupt requested") do
+        step.run([Mantle::Message.new("user", "Hello")])
+      end
+    end
+  end
 end
