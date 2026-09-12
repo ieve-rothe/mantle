@@ -14,10 +14,12 @@ module Mantle::Subagents
     end
 
     def execute(args : Hash(String, JSON::Any), call_id : String? = nil) : String
+      if @runner.current_depth >= @runner.max_depth
+        return "Error: Subagent depth limit reached (#{@runner.current_depth} >= #{@runner.max_depth}). Spawning subagents is not allowed at this depth."
+      end
+
       profile = args["profile"]?.try(&.as_s)
       query = args["query"]?.try(&.as_s)
-      # Extract depth if provided, default to 0 (assume main agent if not provided)
-      depth = args["depth"]?.try(&.as_i) || 0
 
       unless profile && query
         return "Error: Missing required arguments 'profile' and 'query'"
@@ -34,8 +36,8 @@ module Mantle::Subagents
                        "#{parent_context}\n#{custom_context}"
                      end
 
-      # Delegate execution to the runner, passing the new depth + 1
-      @runner.spawn(profile, query, full_context, depth + 1, call_id)
+      # Delegate execution to the runner
+      @runner.spawn(profile, query, full_context, call_id: call_id)
     end
 
     def to_mantle_tool : Mantle::Tools::Tool
@@ -59,10 +61,6 @@ module Mantle::Subagents
               "context" => Mantle::Tools::PropertyDefinition.new(
                 type: "string",
                 description: "Optional background information or code snippet for context."
-              ),
-              "depth" => Mantle::Tools::PropertyDefinition.new(
-                type: "integer",
-                description: "Current execution depth. Must be provided."
               ),
             },
             required: ["profile", "query"]

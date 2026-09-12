@@ -11,6 +11,9 @@ module Mantle::Subagents
     # Reference to LLM client
     property client : Mantle::Clients::Client?
 
+    # Current runner depth in execution tree
+    property current_depth : Int32
+
     # Maximum allowed subagent depth
     property max_depth : Int32
 
@@ -20,22 +23,35 @@ module Mantle::Subagents
     def initialize(
       @profiles : Hash(String, Profile) = {} of String => Profile,
       @client : Mantle::Clients::Client? = nil,
+      @current_depth : Int32 = 0,
       @max_depth : Int32 = 1,
       @max_token_budget : Int32 = 100000,
     )
     end
 
+    # Creates a child runner with incremented depth
+    def child_runner : Runner
+      Runner.new(
+        profiles: @profiles,
+        client: @client,
+        current_depth: @current_depth + 1,
+        max_depth: @max_depth,
+        max_token_budget: @max_token_budget
+      )
+    end
+
     # Spawns a subagent in single-turn mode.
-    # Enforces max_depth by raising an error if depth > @max_depth.
+    # Enforces max_depth by raising an error if target depth > @max_depth.
     def spawn(
       profile_id : String,
       query : String,
       context : String = "",
-      depth : Int32 = 1,
+      depth : Int32? = nil,
       call_id : String? = nil,
     ) : String
-      if depth > @max_depth
-        raise "Subagent depth limit exceeded: #{depth} > #{@max_depth}"
+      target_depth = depth || (@current_depth + 1)
+      if target_depth > @max_depth
+        raise "Subagent depth limit exceeded: #{target_depth} > #{@max_depth}"
       end
 
       profile = @profiles[profile_id]?
@@ -54,11 +70,19 @@ module Mantle::Subagents
       begin
         orig_max_tokens = get_max_tokens(client)
         orig_temp = client.temperature
+        orig_model = get_model_name(client)
+        orig_url = get_api_url(client)
 
         if orig_max_tokens
           set_max_tokens(client, profile.max_tokens)
         end
         client.temperature = profile.temperature
+        if (m = profile.model_override) && orig_model
+          set_model_name(client, m)
+        end
+        if (u = profile.api_url_override) && orig_url
+          set_api_url(client, u)
+        end
 
         messages = [Mantle::Message.new(role: "user", content: full_prompt)]
         response = client.execute(messages)
@@ -86,6 +110,12 @@ module Mantle::Subagents
             set_max_tokens(client, orig_max_tokens)
           end
           client.temperature = orig_temp if orig_temp
+          if orig_model
+            set_model_name(client, orig_model)
+          end
+          if orig_url
+            set_api_url(client, orig_url)
+          end
         end
       end
     end
@@ -97,12 +127,13 @@ module Mantle::Subagents
       profile_id : String,
       initial_query : String,
       context : String = "",
-      depth : Int32 = 1,
+      depth : Int32? = nil,
       max_turns : Int32 = 10,
       &on_message : String -> Nil
     ) : Fiber
-      if depth > @max_depth
-        raise "Subagent depth limit exceeded: #{depth} > #{@max_depth}"
+      target_depth = depth || (@current_depth + 1)
+      if target_depth > @max_depth
+        raise "Subagent depth limit exceeded: #{target_depth} > #{@max_depth}"
       end
 
       profile = @profiles[profile_id]?
@@ -124,11 +155,19 @@ module Mantle::Subagents
           begin
             orig_max_tokens = get_max_tokens(client)
             orig_temp = client.temperature
+            orig_model = get_model_name(client)
+            orig_url = get_api_url(client)
 
             if orig_max_tokens
               set_max_tokens(client, profile.max_tokens)
             end
             client.temperature = profile.temperature
+            if (m = profile.model_override) && orig_model
+              set_model_name(client, m)
+            end
+            if (u = profile.api_url_override) && orig_url
+              set_api_url(client, u)
+            end
 
             messages = [Mantle::Message.new(role: "user", content: full_prompt)]
 
@@ -168,6 +207,12 @@ module Mantle::Subagents
                 set_max_tokens(client, orig_max_tokens)
               end
               client.temperature = orig_temp if orig_temp
+              if orig_model
+                set_model_name(client, orig_model)
+              end
+              if orig_url
+                set_api_url(client, orig_url)
+              end
             end
           end
         end
@@ -189,6 +234,42 @@ module Mantle::Subagents
         client.as(Mantle::Clients::OllamaClient).max_tokens = value
       elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient))
         client.as(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient)).client.max_tokens = value
+      end
+    end
+
+    private def get_model_name(client : Mantle::Clients::Client) : String?
+      if client.is_a?(Mantle::Clients::OllamaClient)
+        client.as(Mantle::Clients::OllamaClient).model_name
+      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient))
+        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient)).client.model_name
+      else
+        nil
+      end
+    end
+
+    private def set_model_name(client : Mantle::Clients::Client, value : String)
+      if client.is_a?(Mantle::Clients::OllamaClient)
+        client.as(Mantle::Clients::OllamaClient).model_name = value
+      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient))
+        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient)).client.model_name = value
+      end
+    end
+
+    private def get_api_url(client : Mantle::Clients::Client) : String?
+      if client.is_a?(Mantle::Clients::OllamaClient)
+        client.as(Mantle::Clients::OllamaClient).api_url
+      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient))
+        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient)).client.api_url
+      else
+        nil
+      end
+    end
+
+    private def set_api_url(client : Mantle::Clients::Client, value : String)
+      if client.is_a?(Mantle::Clients::OllamaClient)
+        client.as(Mantle::Clients::OllamaClient).api_url = value
+      elsif client.is_a?(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient))
+        client.as(Mantle::Clients::LoggingClient(Mantle::Clients::OllamaClient)).client.api_url = value
       end
     end
 

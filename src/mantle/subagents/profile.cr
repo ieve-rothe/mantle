@@ -23,6 +23,18 @@ module Mantle::Subagents
     # Temperature for generation (lower = more deterministic)
     property temperature : Float64
 
+    # Optional model override for this subagent
+    property model_override : String? = nil
+
+    # Optional API URL override for this subagent
+    property api_url_override : String? = nil
+
+    # Optional list of tool names allowed for this subagent
+    property allowed_tools : Array(String)? = nil
+
+    # Optional max iterations limit for multi-turn execution
+    property max_iterations : Int32? = nil
+
     def initialize(
       @id : String,
       @name : String,
@@ -30,6 +42,10 @@ module Mantle::Subagents
       @system_prompt : String,
       @max_tokens : Int32 = 1000,
       @temperature : Float64 = 0.7,
+      @model_override : String? = nil,
+      @api_url_override : String? = nil,
+      @allowed_tools : Array(String)? = nil,
+      @max_iterations : Int32? = nil,
     )
     end
 
