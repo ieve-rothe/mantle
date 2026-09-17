@@ -154,7 +154,8 @@ module Mantle
                   error: StepError::ToolExecutionFailure,
                   thinking: last_thinking,
                   iterations: iteration,
-                  raw_response: response
+                  raw_response: response,
+                  error_message: ex.message
                 )
               rescue ex : JSON::ParseException
                 @on_status.try &.call(:idle)
@@ -162,7 +163,8 @@ module Mantle
                   error: StepError::MalformedOutput,
                   thinking: last_thinking,
                   iterations: iteration,
-                  raw_response: response
+                  raw_response: response,
+                  error_message: ex.message
                 )
               rescue ex : NilAssertionError | TypeCastError | IndexError
                 @on_status.try &.call(:idle)
@@ -173,7 +175,8 @@ module Mantle
                   error: StepError::ToolExecutionFailure,
                   thinking: last_thinking,
                   iterations: iteration,
-                  raw_response: response
+                  raw_response: response,
+                  error_message: ex.message
                 )
               end
 
