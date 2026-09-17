@@ -46,7 +46,8 @@ Mantle is a framework to abstract details of communication to LLMs away, to help
 - **Step**: `Mantle::Step` is a pure inference pipeline decoupled from storage persistence. It consumes messages and returns a strongly typed `Mantle::StepResult(String, Mantle::StepError)`.
 - **StepResult**: Encapsulates outcome state: `.ok?`, `.err?`, `.unwrap`, `.thinking`, `.iterations`, and `.raw_response`.
 - **Domain Errors**: Standardized in `Mantle::StepError` (`MalformedOutput`, `MaxIterationsReached`, `ClientFailure`, `ToolExecutionFailure`).
-- **Tool Calling**: `Mantle::Tools::Tool` supports inline executable blocks or handlers. `Step` coordinates bounded tool loops up to `max_iterations`, safely handling tool outputs or returning typed errors without throwing unexpected exceptions.
+- **Tool Calling & Middleware**: `Mantle::Tools::Tool` supports inline executable blocks or handlers. `Mantle::Tools::Middleware` provides composable execution pipelines (e.g., `ToolMiddleware::ExceptionTrapping` to trap operational errors while letting system bugs bubble up). `Step` coordinates bounded tool loops up to `max_iterations`, safely handling tool outputs or returning typed errors without throwing unexpected exceptions.
+- **Typed API Errors**: `Mantle::Clients::APIError` captures HTTP status and raw body from upstream providers, exposing `#context_overflow?` to reliably detect context window exhaustion (e.g. 400 rejections) without string scraping.
 
 4. Advanced Features for Cognitive Architectures
 > See `ARCHITECTURE.md` for detailed documentation

@@ -164,6 +164,9 @@ module Mantle
                   iterations: iteration,
                   raw_response: response
                 )
+              rescue ex : NilAssertionError | TypeCastError | IndexError
+                @on_status.try &.call(:idle)
+                raise ex
               rescue ex
                 @on_status.try &.call(:idle)
                 return StepResult(String, StepError).new(

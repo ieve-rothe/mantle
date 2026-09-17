@@ -10,6 +10,25 @@ require "../tools/tools"
 require "../support/text"
 
 module Mantle::Clients
+  # Represents an HTTP API error returned from an LLM inference endpoint.
+  class APIError < Exception
+    getter status_code : Int32
+    getter response_body : String
+
+    def initialize(@status_code : Int32, @response_body : String)
+      super("API error #{@status_code}: #{@response_body}")
+    end
+
+    def context_overflow? : Bool
+      return false unless @status_code == 400
+      body_down = @response_body.downcase
+      body_down.includes?("context_length_exceeded") ||
+        body_down.includes?("maximum context length") ||
+        body_down.includes?("context window") ||
+        body_down.includes?("too many tokens")
+    end
+  end
+
   # Represents the configuration options for an LLM client.
   #
   # Holds configuration fields such as *model_name*, *stream*, *temperature*, *top_p*, *max_tokens*, *api_url*, and *keep_alive*.
@@ -324,7 +343,7 @@ module Mantle::Clients
           raw_response: raw_response_builder.to_s
         )
       else
-        raise Exception.new("Error #{status_code}: #{error_body}")
+        raise APIError.new(status_code, error_body)
       end
     end
 
@@ -352,7 +371,7 @@ module Mantle::Clients
 
         resp
       else
-        raise Exception.new("Error #{response.status_code}: #{response.body}")
+        raise APIError.new(response.status_code, response.body)
       end
     end
 
