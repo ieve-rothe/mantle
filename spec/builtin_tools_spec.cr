@@ -81,6 +81,27 @@ describe "Mantle Built-in Tools" do
       end
     end
 
+    it "returns FunctionDefinition for WebSearch" do
+      defn = Mantle::Tools::Builtin::WebSearch.definition
+      defn.name.should eq("web_search")
+      defn.description.should_not be_empty
+      params = defn.parameters
+      params.type.should eq("object")
+      params.properties.has_key?("query").should be_true
+      params.properties["query"].type.should eq("string")
+      params.properties.has_key?("search_depth").should be_true
+      params.properties["search_depth"].type.should eq("string")
+      params.properties.has_key?("max_results").should be_true
+      params.properties["max_results"].type.should eq("integer")
+      required = params.required
+      required.should_not be_nil
+      if required
+        required.should contain("query")
+        required.should_not contain("search_depth")
+        required.should_not contain("max_results")
+      end
+    end
+
     it "serializes tool definitions to valid JSON" do
       sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: "/tmp")
       tool = Mantle::Tools::Builtin::ReadFile.create(sandbox)
@@ -96,7 +117,7 @@ describe "Mantle Built-in Tools" do
         tools = Mantle::Tools::Builtin.all(sandbox)
 
         tools.should be_a(Array(Mantle::Tools::Tool))
-        tools.size.should eq(5)
+        tools.size.should eq(6)
         tools.all? { |t| !t.handler.nil? }.should be_true
         tool_names = tools.map { |t| t.function.name }
         tool_names.should contain("read_file")
@@ -104,6 +125,7 @@ describe "Mantle Built-in Tools" do
         tool_names.should contain("notify_send")
         tool_names.should contain("write_file")
         tool_names.should contain("search_files")
+        tool_names.should contain("web_search")
       end
     end
   end
@@ -831,6 +853,53 @@ describe "Mantle Built-in Tools" do
         result["success"].as_bool.should be_false
         result["error"].as_s.should contain("Security violation")
         result["message"].as_s.should eq("-u critical")
+      end
+    end
+
+    describe "web_search" do
+      it "returns missing query error" do
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
+
+        result_str = executor.execute(
+          "web_search",
+          {} of String => JSON::Any
+        )
+
+        result = JSON.parse(result_str)
+        result["success"].as_bool.should be_false
+        result["error"].as_s.should contain("Missing required parameter: query")
+      end
+
+      it "returns missing API key error when TAVILY_API_KEY is not set" do
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
+
+        old_key = ENV["TAVILY_API_KEY"]?
+        ENV.delete("TAVILY_API_KEY")
+        begin
+          result_str = executor.execute(
+            "web_search",
+            {"query" => JSON::Any.new("crystal programming language")}
+          )
+
+          result = JSON.parse(result_str)
+          result["success"].as_bool.should be_false
+          result["error"].as_s.should contain("TAVILY_API_KEY")
+        ensure
+          ENV["TAVILY_API_KEY"] = old_key if old_key
+        end
+      end
+
+      it "can be created without a sandbox" do
+        tool = Mantle::Tools::Builtin::WebSearch.create
+        tool.function.name.should eq("web_search")
+        tool.handler.should_not be_nil
+      end
+
+      it "resolves key from custom key string or proc" do
+        Mantle::Tools::Builtin::WebSearch.resolve_api_key("custom-123").should eq("custom-123")
+        Mantle::Tools::Builtin::WebSearch.resolve_api_key(->{ "proc-456" }).should eq("proc-456")
       end
     end
 

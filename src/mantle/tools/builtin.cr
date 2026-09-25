@@ -17,6 +17,7 @@ module Mantle::Tools::Builtin
       ListDirectory.create(sandbox),
       SearchFiles.create(sandbox),
       NotifySend.create(bot_name: bot_name, icon: notify_icon),
+      WebSearch.create,
     ]
   end
 end
