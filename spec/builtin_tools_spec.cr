@@ -2,169 +2,102 @@ require "./spec_helper"
 require "file_utils"
 
 describe "Mantle Built-in Tools" do
-  describe "BuiltinTool enum" do
-    it "contains ReadFile" do
-      Mantle::Tools::BuiltinTool::ReadFile.should_not be_nil
+  describe "Builtin Tool Definitions" do
+    it "returns FunctionDefinition for ReadFile" do
+      defn = Mantle::Tools::Builtin::ReadFile.definition
+      defn.name.should eq("read_file")
+      defn.description.should_not be_empty
+      params = defn.parameters
+      params.type.should eq("object")
+      params.properties.has_key?("file_path").should be_true
+      params.properties["file_path"].type.should eq("string")
+      params.required.should eq(["file_path"])
     end
 
-    it "contains ListDirectory" do
-      Mantle::Tools::BuiltinTool::ListDirectory.should_not be_nil
-    end
-
-    it "contains WriteFile" do
-      Mantle::Tools::BuiltinTool::WriteFile.should_not be_nil
-    end
-  end
-
-  describe "BuiltinToolRegistry" do
-    describe "definition_for" do
-      it "returns Tool definition for ReadFile" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::ReadFile)
-
-        tool.should be_a(Mantle::Tools::Tool)
-        tool.type.should eq("function")
-        tool.function.name.should eq("read_file")
-        tool.function.description.should_not be_empty
-      end
-
-      it "ReadFile has correct parameters" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::ReadFile)
-
-        params = tool.function.parameters
-        params.type.should eq("object")
-        params.properties.has_key?("file_path").should be_true
-        params.properties["file_path"].type.should eq("string")
-        params.required.should eq(["file_path"])
-      end
-
-      it "returns Tool definition for ListDirectory" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::ListDirectory)
-
-        tool.should be_a(Mantle::Tools::Tool)
-        tool.type.should eq("function")
-        tool.function.name.should eq("list_directory")
-        tool.function.description.should_not be_empty
-      end
-
-      it "returns Tool definition for WriteFile" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::WriteFile)
-
-        tool.should be_a(Mantle::Tools::Tool)
-        tool.type.should eq("function")
-        tool.function.name.should eq("write_file")
-        tool.function.description.should_not be_empty
-      end
-
-      it "WriteFile has correct parameters" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::WriteFile)
-
-        params = tool.function.parameters
-        params.type.should eq("object")
-        params.properties.has_key?("file_path").should be_true
-        params.properties["file_path"].type.should eq("string")
-        params.properties.has_key?("content").should be_true
-        params.properties["content"].type.should eq("string")
-
-        required = params.required
-        required.should_not be_nil
-        if required
-          required.should contain("file_path")
-          required.should contain("content")
-        end
-      end
-
-      it "ListDirectory has correct parameters" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::ListDirectory)
-
-        params = tool.function.parameters
-        params.type.should eq("object")
-        params.properties.has_key?("directory_path").should be_true
-        params.properties["directory_path"].type.should eq("string")
-        # directory_path is optional, so required should be nil or not include it
-        if params.required
-          params.required.not_nil!.should_not contain("directory_path")
-        end
-      end
-
-      it "returns Tool definition for NotifySend" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::NotifySend)
-
-        tool.should be_a(Mantle::Tools::Tool)
-        tool.type.should eq("function")
-        tool.function.name.should eq("notify_send")
-        tool.function.description.should_not be_empty
-      end
-
-      it "NotifySend has correct parameters" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::NotifySend)
-
-        params = tool.function.parameters
-        params.type.should eq("object")
-        params.properties.has_key?("message").should be_true
-        params.properties["message"].type.should eq("string")
-
-        required = params.required
-        required.should_not be_nil
-        if required
-          required.should contain("message")
-        end
-      end
-
-      it "returns Tool definition for SearchFiles" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::SearchFiles)
-
-        tool.should be_a(Mantle::Tools::Tool)
-        tool.type.should eq("function")
-        tool.function.name.should eq("search_files")
-        tool.function.description.should_not be_empty
-      end
-
-      it "SearchFiles has correct parameters" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::SearchFiles)
-
-        params = tool.function.parameters
-        params.type.should eq("object")
-        params.properties.has_key?("query").should be_true
-        params.properties["query"].type.should eq("string")
-        params.properties.has_key?("directory_path").should be_true
-        params.properties["directory_path"].type.should eq("string")
-        params.properties.has_key?("file_pattern").should be_true
-        params.properties["file_pattern"].type.should eq("string")
-
-        required = params.required
-        required.should_not be_nil
-        if required
-          required.should contain("query")
-          required.should_not contain("directory_path")
-          required.should_not contain("file_pattern")
-        end
-      end
-
-      it "raises error for unknown builtin tool" do
-        expect_raises(Exception, "Unknown builtin tool") do
-          # Create an invalid enum value by casting an integer that doesn't correspond to any tool
-          invalid_tool = Mantle::Tools::BuiltinTool.new(99)
-          Mantle::Tools::BuiltinToolRegistry.definition_for(invalid_tool)
-        end
-      end
-
-      it "tool definitions serialize to valid JSON" do
-        tool = Mantle::Tools::BuiltinToolRegistry.definition_for(Mantle::Tools::BuiltinTool::ReadFile)
-        json = tool.to_json
-
-        # Should be valid JSON
-        parsed = JSON.parse(json)
-        parsed["type"].should eq("function")
-        parsed["function"]["name"].should eq("read_file")
+    it "returns FunctionDefinition for ListDirectory" do
+      defn = Mantle::Tools::Builtin::ListDirectory.definition
+      defn.name.should eq("list_directory")
+      defn.description.should_not be_empty
+      params = defn.parameters
+      params.type.should eq("object")
+      params.properties.has_key?("directory_path").should be_true
+      params.properties["directory_path"].type.should eq("string")
+      if params.required
+        params.required.not_nil!.should_not contain("directory_path")
       end
     end
 
-    describe "all_definitions" do
-      it "returns array of all built-in tool definitions" do
-        tools = Mantle::Tools::BuiltinToolRegistry.all_definitions
+    it "returns FunctionDefinition for WriteFile" do
+      defn = Mantle::Tools::Builtin::WriteFile.definition
+      defn.name.should eq("write_file")
+      defn.description.should_not be_empty
+      params = defn.parameters
+      params.type.should eq("object")
+      params.properties.has_key?("file_path").should be_true
+      params.properties["file_path"].type.should eq("string")
+      params.properties.has_key?("content").should be_true
+      params.properties["content"].type.should eq("string")
+      required = params.required
+      required.should_not be_nil
+      if required
+        required.should contain("file_path")
+        required.should contain("content")
+      end
+    end
+
+    it "returns FunctionDefinition for NotifySend" do
+      defn = Mantle::Tools::Builtin::NotifySend.definition
+      defn.name.should eq("notify_send")
+      defn.description.should_not be_empty
+      params = defn.parameters
+      params.type.should eq("object")
+      params.properties.has_key?("message").should be_true
+      params.properties["message"].type.should eq("string")
+      required = params.required
+      required.should_not be_nil
+      if required
+        required.should contain("message")
+      end
+    end
+
+    it "returns FunctionDefinition for SearchFiles" do
+      defn = Mantle::Tools::Builtin::SearchFiles.definition
+      defn.name.should eq("search_files")
+      defn.description.should_not be_empty
+      params = defn.parameters
+      params.type.should eq("object")
+      params.properties.has_key?("query").should be_true
+      params.properties["query"].type.should eq("string")
+      params.properties.has_key?("directory_path").should be_true
+      params.properties["directory_path"].type.should eq("string")
+      params.properties.has_key?("file_pattern").should be_true
+      params.properties["file_pattern"].type.should eq("string")
+      required = params.required
+      required.should_not be_nil
+      if required
+        required.should contain("query")
+        required.should_not contain("directory_path")
+        required.should_not contain("file_pattern")
+      end
+    end
+
+    it "serializes tool definitions to valid JSON" do
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: "/tmp")
+      tool = Mantle::Tools::Builtin::ReadFile.create(sandbox)
+      json = tool.to_json
+      parsed = JSON.parse(json)
+      parsed["type"].should eq("function")
+      parsed["function"]["name"].should eq("read_file")
+    end
+
+    describe "Builtin.all" do
+      it "returns array of all built-in tools with attached handlers" do
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: "/tmp")
+        tools = Mantle::Tools::Builtin.all(sandbox)
 
         tools.should be_a(Array(Mantle::Tools::Tool))
         tools.size.should eq(5)
+        tools.all? { |t| !t.handler.nil? }.should be_true
         tool_names = tools.map { |t| t.function.name }
         tool_names.should contain("read_file")
         tool_names.should contain("list_directory")
@@ -173,74 +106,47 @@ describe "Mantle Built-in Tools" do
         tool_names.should contain("search_files")
       end
     end
-
-    describe "definitions_for" do
-      it "returns definitions for multiple built-in tools" do
-        tools = Mantle::Tools::BuiltinToolRegistry.definitions_for([
-          Mantle::Tools::BuiltinTool::ReadFile,
-          Mantle::Tools::BuiltinTool::ListDirectory,
-          Mantle::Tools::BuiltinTool::NotifySend,
-        ])
-
-        tools.size.should eq(3)
-        tool_names = tools.map { |t| t.function.name }
-        tool_names.should contain("read_file")
-        tool_names.should contain("list_directory")
-        tool_names.should contain("notify_send")
-      end
-
-      it "returns empty array for empty input" do
-        tools = Mantle::Tools::BuiltinToolRegistry.definitions_for([] of Mantle::Tools::BuiltinTool)
-        tools.should be_empty
-      end
-
-      it "handles single tool in array" do
-        tools = Mantle::Tools::BuiltinToolRegistry.definitions_for([Mantle::Tools::BuiltinTool::ReadFile])
-        tools.size.should eq(1)
-        tools[0].function.name.should eq("read_file")
-      end
-    end
   end
 
-  describe "BuiltinToolConfig" do
+  describe "FileSystemSandbox" do
     it "can be created with working directory" do
-      config = Mantle::Tools::BuiltinToolConfig.new(
+      sandbox = Mantle::Tools::FileSystemSandbox.new(
         working_directory: "/tmp"
       )
 
-      config.working_directory.should eq("/tmp")
-      config.allowed_paths.should be_nil
-      config.autonomous_zone_paths.should be_nil
-      config.file_backup_count.should eq(3)
+      sandbox.working_directory.should eq("/tmp")
+      sandbox.allowed_paths.should be_nil
+      sandbox.autonomous_zone_paths.should be_nil
+      sandbox.file_backup_count.should eq(3)
     end
 
     it "can be created with allowed paths" do
-      config = Mantle::Tools::BuiltinToolConfig.new(
+      sandbox = Mantle::Tools::FileSystemSandbox.new(
         working_directory: "/tmp",
         allowed_paths: ["/tmp", "/home/user"]
       )
 
-      config.allowed_paths.should eq(["/tmp", "/home/user"])
+      sandbox.allowed_paths.should eq(["/tmp", "/home/user"])
     end
 
     it "defaults allowed_paths to nil (working directory only)" do
-      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: "/tmp")
-      config.allowed_paths.should be_nil
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: "/tmp")
+      sandbox.allowed_paths.should be_nil
     end
 
     it "can be created with autonomous_zone_paths and file_backup_count" do
-      config = Mantle::Tools::BuiltinToolConfig.new(
+      sandbox = Mantle::Tools::FileSystemSandbox.new(
         working_directory: "/tmp",
         autonomous_zone_paths: ["/tmp/auto"],
         file_backup_count: 5
       )
 
-      config.autonomous_zone_paths.should eq(["/tmp/auto"])
-      config.file_backup_count.should eq(5)
+      sandbox.autonomous_zone_paths.should eq(["/tmp/auto"])
+      sandbox.file_backup_count.should eq(5)
     end
   end
 
-  describe "BuiltinToolExecutor" do
+  describe "Builtin tool execution via ToolExecutor" do
     # Setup test files
     temp_dir = "/tmp/mantle_test_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}"
     outside_dir = "/tmp/mantle_test_outside_#{Time.utc.to_unix_ms}_#{Random.rand(10000)}"
@@ -260,8 +166,8 @@ describe "Mantle Built-in Tools" do
 
     describe "read_file" do
       it "reads file in working directory with default config" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "read_file",
@@ -276,8 +182,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "reads file with absolute path in working directory" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "read_file",
@@ -292,8 +198,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "rejects file outside working directory with default config" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "read_file",
@@ -307,11 +213,11 @@ describe "Mantle Built-in Tools" do
       end
 
       it "allows file in explicitly allowed paths" do
-        config = Mantle::Tools::BuiltinToolConfig.new(
+        sandbox = Mantle::Tools::FileSystemSandbox.new(
           working_directory: temp_dir,
           allowed_paths: [temp_dir, outside_dir]
         )
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "read_file",
@@ -326,8 +232,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "returns error for non-existent file" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "read_file",
@@ -343,8 +249,8 @@ describe "Mantle Built-in Tools" do
 
     describe "write_file" do
       it "rejects file writing if autonomous_zone_paths is nil" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "write_file",
@@ -361,11 +267,11 @@ describe "Mantle Built-in Tools" do
       end
 
       it "rejects file writing outside autonomous zone" do
-        config = Mantle::Tools::BuiltinToolConfig.new(
+        sandbox = Mantle::Tools::FileSystemSandbox.new(
           working_directory: temp_dir,
           autonomous_zone_paths: [temp_dir]
         )
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "write_file",
@@ -382,11 +288,11 @@ describe "Mantle Built-in Tools" do
       end
 
       it "writes file inside autonomous zone" do
-        config = Mantle::Tools::BuiltinToolConfig.new(
+        sandbox = Mantle::Tools::FileSystemSandbox.new(
           working_directory: temp_dir,
           autonomous_zone_paths: [temp_dir]
         )
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         target_path = "#{temp_dir}/new_file.txt"
 
@@ -409,11 +315,11 @@ describe "Mantle Built-in Tools" do
       end
 
       it "creates a backup when modifying an existing file" do
-        config = Mantle::Tools::BuiltinToolConfig.new(
+        sandbox = Mantle::Tools::FileSystemSandbox.new(
           working_directory: temp_dir,
           autonomous_zone_paths: [temp_dir]
         )
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         target_path = "#{temp_dir}/existing_file.txt"
         File.write(target_path, "original content")
@@ -441,12 +347,12 @@ describe "Mantle Built-in Tools" do
       end
 
       it "rotates backups when limit is exceeded" do
-        config = Mantle::Tools::BuiltinToolConfig.new(
+        sandbox = Mantle::Tools::FileSystemSandbox.new(
           working_directory: temp_dir,
           autonomous_zone_paths: [temp_dir],
           file_backup_count: 2
         )
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         target_path = "#{temp_dir}/rotated_file.txt"
         File.write(target_path, "base")
@@ -482,11 +388,11 @@ describe "Mantle Built-in Tools" do
       end
 
       it "returns error for missing required parameter" do
-        config = Mantle::Tools::BuiltinToolConfig.new(
+        sandbox = Mantle::Tools::FileSystemSandbox.new(
           working_directory: temp_dir,
           autonomous_zone_paths: [temp_dir]
         )
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "write_file",
@@ -502,8 +408,8 @@ describe "Mantle Built-in Tools" do
 
     describe "list_directory" do
       it "lists working directory when no path provided" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "list_directory",
@@ -520,8 +426,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "lists working directory when path is '.'" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "list_directory",
@@ -535,8 +441,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "lists directory with absolute path in working directory" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "list_directory",
@@ -552,8 +458,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "rejects directory outside working directory" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "list_directory",
@@ -567,11 +473,11 @@ describe "Mantle Built-in Tools" do
       end
 
       it "allows directory in explicitly allowed paths" do
-        config = Mantle::Tools::BuiltinToolConfig.new(
+        sandbox = Mantle::Tools::FileSystemSandbox.new(
           working_directory: temp_dir,
           allowed_paths: [temp_dir, outside_dir]
         )
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "list_directory",
@@ -585,8 +491,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "returns error for non-existent directory" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "list_directory",
@@ -602,8 +508,8 @@ describe "Mantle Built-in Tools" do
 
     describe "search_files" do
       it "rejects queries with invalid characters" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "search_files",
@@ -626,8 +532,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "returns missing query error" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "search_files",
@@ -640,8 +546,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "returns zero matches as empty array" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         File.write("#{temp_dir}/zero_matches.txt", "nothing here")
 
@@ -659,8 +565,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "is case-sensitive by default" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         File.write("#{temp_dir}/case_sensitive.txt", "here is UpperCase and lowercase")
 
@@ -675,8 +581,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "handles regex with special characters correctly" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         File.write("#{temp_dir}/regex.txt", "abc123xyz")
 
@@ -694,8 +600,8 @@ describe "Mantle Built-in Tools" do
         empty_dir = File.join(temp_dir, "empty_search_dir2")
         Dir.mkdir_p(empty_dir)
 
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: empty_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: empty_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         Dir.mkdir_p("#{empty_dir}/.hidden_dir")
         File.write("#{empty_dir}/.hidden_dir/file.txt", "HIDDEN_MATCH")
@@ -711,8 +617,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "skips binary files gracefully" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         # Write null bytes to make it binary
         File.write("#{temp_dir}/binary.bin", "binary_match\0\0\0")
@@ -731,8 +637,8 @@ describe "Mantle Built-in Tools" do
         empty_dir = File.join(temp_dir, "empty_search_dir3")
         Dir.mkdir_p(empty_dir)
 
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: empty_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: empty_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         File.write("#{empty_dir}/test.cr", "FILTER_MATCH")
         File.write("#{empty_dir}/test.md", "FILTER_MATCH")
@@ -754,8 +660,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "returns helpful error for malformed regex" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "search_files",
@@ -768,8 +674,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "returns error if directory does not exist" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "search_files",
@@ -786,8 +692,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "rejects file_pattern starting with hyphen" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "search_files",
@@ -804,8 +710,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "rejects file_pattern containing malicious control characters" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "search_files",
@@ -822,8 +728,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "rejects query starting with hyphen" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "search_files",
@@ -840,8 +746,8 @@ describe "Mantle Built-in Tools" do
         empty_dir = File.join(temp_dir, "empty_search_dir4")
         Dir.mkdir_p(empty_dir)
 
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: empty_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: empty_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         content = String.build do |io|
           11.times { |i| io.puts "Line #{i} has EXACT11MATCH" }
@@ -860,8 +766,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "searches inside working directory successfully" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         # Write test files
         File.write("#{temp_dir}/search_target.txt", "line1\nline2 has UNIQUEMATCH\nline3")
@@ -877,8 +783,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "rejects search in unauthorized directory" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "search_files",
@@ -897,8 +803,8 @@ describe "Mantle Built-in Tools" do
 
     describe "notify_send" do
       it "returns missing message error" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "notify_send",
@@ -911,8 +817,8 @@ describe "Mantle Built-in Tools" do
       end
 
       it "prevents argument injection" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "notify_send",
@@ -930,8 +836,8 @@ describe "Mantle Built-in Tools" do
 
     describe "unknown tools" do
       it "returns error for unknown tool" do
-        config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
-        executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+        sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
+        executor = Mantle::Tools::ToolExecutor.new(tools: Mantle::Tools::Builtin.all(sandbox))
 
         result_str = executor.execute(
           "unknown_tool",

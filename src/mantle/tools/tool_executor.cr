@@ -3,7 +3,8 @@
 # Licensed under the AGPL-3.0. See LICENSE for details.
 
 require "../clients/client"
-require "./builtin_tools"
+require "./tools"
+require "./builtin"
 require "json"
 
 module Mantle::Tools
@@ -25,12 +26,13 @@ module Mantle::Tools
     end
   end
 
-  # Coordinates tool execution, routing requests to built-in or custom handlers.
-  #
-  # Handles both built-in tools (via `BuiltinToolExecutor`) and custom tools (via callback).
+  # Coordinates tool execution, routing requests to registered `Tool` instances or fallback callback.
   class ToolExecutor
-    # Represents the list of built-in tool names used for routing.
-    BUILTIN_TOOL_NAMES = ["read_file", "list_directory", "notify_send", "write_file", "search_files"]
+    # Registered tool definitions carrying execution handlers.
+    property tools : Array(Mantle::Tools::Tool)
+
+    # Optional fallback callback for dynamically dispatched or custom tools.
+    property custom_callback : Proc(String, Hash(String, JSON::Any), String)?
 
     # Callback triggered before executing a tool call.
     property on_tool_call : Proc(String, Hash(String, JSON::Any), String, Nil)?
@@ -41,32 +43,35 @@ module Mantle::Tools
     # The list of all available tool definitions (for generic recovery)
     property all_tools : Array(Mantle::Tools::Tool)? = nil
 
-    # :nodoc:
-    @builtin_executor : BuiltinToolExecutor?
-    # :nodoc:
-    @custom_callback : Proc(String, Hash(String, JSON::Any), String)?
-
     @client : Mantle::Clients::Client?
     @context_manager : Mantle::Storage::ContextManager?
     @recovery_config : RecoveryConfig?
 
-    # Creates a tool executor with the specified *builtin_config*, *custom_callback*, and *bot_name*.
+    # Creates a tool executor configured with tool definitions and optional callback/recovery.
     def initialize(
-      builtin_config : BuiltinToolConfig?,
-      @custom_callback : Proc(String, Hash(String, JSON::Any), String)?,
-      bot_name : String = "Assistant",
+      @tools : Array(Mantle::Tools::Tool) = [] of Mantle::Tools::Tool,
+      @custom_callback : Proc(String, Hash(String, JSON::Any), String)? = nil,
       @on_tool_call : Proc(String, Hash(String, JSON::Any), String, Nil)? = nil,
       @on_tool_result : Proc(String, Hash(String, JSON::Any), String, String, Nil)? = nil,
       @client : Mantle::Clients::Client? = nil,
       @context_manager : Mantle::Storage::ContextManager? = nil,
       @recovery_config : RecoveryConfig? = nil,
     )
-      @builtin_executor = builtin_config ? BuiltinToolExecutor.new(builtin_config, bot_name) : nil
+    end
+
+    # Registers a `Tool` into the executor.
+    def register(tool : Mantle::Tools::Tool)
+      @tools << tool
+    end
+
+    # Executes a single tool by *name* and *arguments*.
+    def execute(name : String, arguments : Hash(String, JSON::Any)) : String
+      execute_tool(name, arguments, nil)
     end
 
     # Executes all *tool_calls* and returns their results.
     #
-    # Routes each call to either the built-in executor or the custom callback.
+    # Routes each call to the matching tool handler or the custom callback.
     # Optionally uses *available_tool_names* to format helpful error messages.
     def execute_all(
       tool_calls : Array(Mantle::Clients::ToolCall),
@@ -118,11 +123,7 @@ module Mantle::Tools
 
       # Route to appropriate executor
       begin
-        result_json = if is_builtin_tool?(function_name)
-                        execute_builtin(function_name, arguments)
-                      else
-                        execute_custom(function_name, arguments, available_tool_names)
-                      end
+        result_json = execute_tool(function_name, arguments, available_tool_names)
 
         if failed_result?(result_json) && actual_retries > 0
           if recovered = attempt_recovery(tool_call, result_json, actual_retries, available_tool_names)
@@ -170,6 +171,32 @@ module Mantle::Tools
       end
     end
 
+    private def execute_tool(
+      name : String,
+      arguments : Hash(String, JSON::Any),
+      available_tool_names : Array(String)?,
+    ) : String
+      if matched_tool = @tools.find { |t| t.function.name == name }
+        matched_tool.execute(arguments)
+      elsif callback = @custom_callback
+        begin
+          callback.call(name, arguments)
+        rescue ex : TerminalToolInterrupt | TerminalToolError
+          raise ex
+        rescue ex
+          {error: "Custom tool #{name} failed: #{ex.message}"}.to_json
+        end
+      else
+        error_msg = "Unknown tool '#{name}'."
+        if available_tool_names && !available_tool_names.empty?
+          error_msg += " Available tools: #{available_tool_names.join(", ")}"
+        else
+          error_msg += " No tools are currently available."
+        end
+        {error: error_msg}.to_json
+      end
+    end
+
     private def attempt_recovery(
       tool_call : Mantle::Clients::ToolCall,
       error_msg : String,
@@ -179,7 +206,7 @@ module Mantle::Tools
       client = @client
       context_manager = @context_manager
       recovery_config = @recovery_config
-      all_tools = @all_tools
+      all_tools = @all_tools || @tools
 
       return nil unless client && context_manager && recovery_config && retries > 0
 
@@ -284,41 +311,6 @@ module Mantle::Tools
       end
       trimmed = result.strip
       trimmed.downcase.starts_with?("error")
-    end
-
-    # Check if a tool name is a built-in tool
-    private def is_builtin_tool?(name : String) : Bool
-      BUILTIN_TOOL_NAMES.includes?(name)
-    end
-
-    # Execute a built-in tool
-    private def execute_builtin(name : String, arguments : Hash(String, JSON::Any)) : String
-      if executor = @builtin_executor
-        executor.execute(name, arguments)
-      else
-        {error: "Built-in tool #{name} requested but no builtin_config provided"}.to_json
-      end
-    end
-
-    # Execute a custom tool via callback
-    private def execute_custom(name : String, arguments : Hash(String, JSON::Any), available_tool_names : Array(String)?) : String
-      if callback = @custom_callback
-        begin
-          callback.call(name, arguments)
-        rescue ex : TerminalToolInterrupt | TerminalToolError
-          raise ex
-        rescue ex
-          {error: "Custom tool #{name} failed: #{ex.message}"}.to_json
-        end
-      else
-        error_msg = "Unknown tool '#{name}'."
-        if available_tool_names && !available_tool_names.empty?
-          error_msg += " Available tools: #{available_tool_names.join(", ")}"
-        else
-          error_msg += " No tools are currently available."
-        end
-        {error: error_msg}.to_json
-      end
     end
   end
 end

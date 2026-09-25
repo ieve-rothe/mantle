@@ -18,13 +18,12 @@ describe "Mantle Built-in Tools Security" do
   end
 
   it "does not allow access to a directory starting with the same prefix but not a subpath" do
-    config = Mantle::Tools::BuiltinToolConfig.new(working_directory: allowed_dir)
-    executor = Mantle::Tools::BuiltinToolExecutor.new(config)
+    sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: allowed_dir)
+    read_tool = Mantle::Tools::Builtin::ReadFile.create(sandbox)
 
     # This should fail because secret_dir is NOT in allowed_dir,
     # even though secret_dir's path starts with allowed_dir's path.
-    result = executor.execute(
-      "read_file",
+    result = read_tool.execute(
       {"file_path" => JSON::Any.new("#{secret_dir}/private.txt")}
     )
 

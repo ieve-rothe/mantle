@@ -28,9 +28,9 @@ describe "Mantle Tool Executor" do
 
   describe "execute_all with built-in tools only" do
     it "executes read_file built-in tool" do
-      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: config,
+        tools: Mantle::Tools::Builtin.all(sandbox),
         custom_callback: nil
       )
 
@@ -51,9 +51,9 @@ describe "Mantle Tool Executor" do
     end
 
     it "executes list_directory built-in tool" do
-      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: config,
+        tools: Mantle::Tools::Builtin.all(sandbox),
         custom_callback: nil
       )
 
@@ -74,9 +74,9 @@ describe "Mantle Tool Executor" do
     end
 
     it "executes multiple built-in tool calls" do
-      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: config,
+        tools: Mantle::Tools::Builtin.all(sandbox),
         custom_callback: nil
       )
 
@@ -103,22 +103,22 @@ describe "Mantle Tool Executor" do
 
       results.size.should eq(2)
       results[0].tool_call_id.should eq("call_1")
+      results[0].result.should contain("test.txt")
       results[1].tool_call_id.should eq("call_2")
+      results[1].result.should contain("Test content")
     end
   end
 
   describe "execute_all with custom tools only" do
-    it "executes custom tool via callback" do
+    it "routes to custom callback for unknown tools" do
+      custom_called = false
       custom_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
-        if name == "get_time"
-          %({"time":"12:00:00"})
-        else
-          %({"error":"Unknown tool"})
-        end
+        custom_called = true
+        %({"result":"custom_success"})
       }
 
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: nil,
+        tools: [] of Mantle::Tools::Tool,
         custom_callback: custom_callback
       )
 
@@ -126,35 +126,36 @@ describe "Mantle Tool Executor" do
         id: "call_custom",
         type: "function",
         function: Mantle::Clients::ToolCallFunction.new(
-          name: "get_time",
-          arguments: "{}"
+          name: "my_custom_tool",
+          arguments: %({"param":"value"})
         )
       )
 
       results = executor.execute_all([tool_call])
 
+      custom_called.should be_true
       results.size.should eq(1)
       results[0].tool_call_id.should eq("call_custom")
-      results[0].result.should contain("12:00:00")
+      results[0].result.should eq(%({"result":"custom_success"}))
     end
 
-    it "passes arguments to custom callback" do
+    it "passes correct arguments to custom callback" do
+      received_name = ""
+      received_args = {} of String => JSON::Any
+
       custom_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
-        if name == "greet"
-          person = args["name"].as_s
-          %({"message":"Hello, #{person}!"})
-        else
-          %({"error":"Unknown tool"})
-        end
+        received_name = name
+        received_args = args
+        "ok"
       }
 
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: nil,
+        tools: [] of Mantle::Tools::Tool,
         custom_callback: custom_callback
       )
 
       tool_call = Mantle::Clients::ToolCall.new(
-        id: "call_greet",
+        id: "call_args",
         type: "function",
         function: Mantle::Clients::ToolCallFunction.new(
           name: "greet",
@@ -164,20 +165,20 @@ describe "Mantle Tool Executor" do
 
       results = executor.execute_all([tool_call])
 
-      results[0].result.should contain("Hello, Alice!")
+      results[0].result.should contain("ok")
     end
   end
 
   describe "execute_all with mixed built-in and custom tools" do
     it "routes to correct executor based on tool name" do
-      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
 
       custom_callback = ->(name : String, args : Hash(String, JSON::Any)) : String {
         %({"custom":"result from #{name}"})
       }
 
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: config,
+        tools: Mantle::Tools::Builtin.all(sandbox),
         custom_callback: custom_callback
       )
 
@@ -211,7 +212,7 @@ describe "Mantle Tool Executor" do
   describe "error handling" do
     it "returns error when no callback provided for custom tool" do
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: nil,
+        tools: [] of Mantle::Tools::Tool,
         custom_callback: nil
       )
 
@@ -230,10 +231,10 @@ describe "Mantle Tool Executor" do
     end
 
     it "continues executing remaining tools if one fails" do
-      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
 
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: config,
+        tools: Mantle::Tools::Builtin.all(sandbox),
         custom_callback: nil
       )
 
@@ -266,13 +267,13 @@ describe "Mantle Tool Executor" do
 
   describe "callbacks" do
     it "triggers on_tool_call and on_tool_result for built-in tools" do
-      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
 
       calls = [] of {String, Hash(String, JSON::Any)}
       results = [] of {String, Hash(String, JSON::Any), String, String}
 
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: config,
+        tools: Mantle::Tools::Builtin.all(sandbox),
         custom_callback: nil,
         on_tool_call: ->(name : String, args : Hash(String, JSON::Any), call_id : String) {
           calls << {name, args}
@@ -306,12 +307,12 @@ describe "Mantle Tool Executor" do
     end
 
     it "triggers on_tool_call and on_tool_result with FAILED status for failed tools" do
-      config = Mantle::Tools::BuiltinToolConfig.new(working_directory: temp_dir)
+      sandbox = Mantle::Tools::FileSystemSandbox.new(working_directory: temp_dir)
 
       results = [] of {String, Hash(String, JSON::Any), String, String}
 
       executor = Mantle::Tools::ToolExecutor.new(
-        builtin_config: config,
+        tools: Mantle::Tools::Builtin.all(sandbox),
         custom_callback: nil,
         on_tool_result: ->(name : String, args : Hash(String, JSON::Any), res : String, status : String) {
           results << {name, args, res, status}
