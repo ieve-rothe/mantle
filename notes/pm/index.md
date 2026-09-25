@@ -7,6 +7,7 @@ This file tracks the status and priority of all tickets for the `mantle` framewo
 | Ticket ID | Title | Theme | Status | Priority | Last Updated |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | [TKT-008](file:///home/cam/repos/adjutant/mantle/notes/pm/open/TKT-008-step-on-iteration-hook.md) | Step Per-Iteration Hook for Caller-Owned Working Buffer Projection | Architecture / Steps | Open | High | 2026-09-11 |
+| [TKT-010](file:///home/cam/repos/adjutant/mantle/notes/pm/open/TKT-010-cyclic-read-circuit-breaker-middleware.md) | Cyclic Read Loop Circuit Breaker Middleware | Architecture / Tools | Open | High | 2026-09-25 |
 
 ## Closed Tickets
 

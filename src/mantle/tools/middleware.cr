@@ -79,3 +79,5 @@ module Mantle::Tools
 end
 
 alias ToolMiddleware = Mantle::Tools::Middleware
+
+require "./middleware/cyclic_read_breaker"
